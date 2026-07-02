@@ -1,0 +1,11 @@
+{
+  "name": "skyrimvr-spellbook",
+  "version-string": "1.0.0",
+  "dependencies": [
+    "rapidjson",
+    "spdlog",
+    "directxtk",
+    "rapidcsv",
+    "xbyak"
+  ]
+}
