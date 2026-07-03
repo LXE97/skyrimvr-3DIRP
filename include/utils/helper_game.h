@@ -19,6 +19,7 @@ namespace helper
 		((_DrawWeapon)(vtbl[0xA8]))(actor, draw);
 	}
 	void StopControllers(RE::NiAVObject* a_obj);
+	void SetControllerTime(RE::NiAVObject* a_obj, float a_time);
 
 	RE::TESForm* LookupByName(RE::FormType a_typeEnum, const char* a_name);
 	RE::FormID   GetFullFormID(uint8_t a_modindex, RE::FormID a_localID);
@@ -88,6 +89,24 @@ namespace helper
 	void        PrintPlayerShaderEffects();
 	inline void PrintVec(RE::NiPoint3& v) { SKSE::log::trace("{} {} {}", v.x, v.y, v.z); }
 #define VECTOR(X) X.x, X.y, X.z
+
+	inline void PrintTransform(const RE::NiTransform& a_transform)
+	{
+		const auto& t = a_transform.translate;
+		const auto& r = a_transform.rotate;
+
+		SKSE::log::trace("Scale: {}", a_transform.scale);
+
+		SKSE::log::trace("Translate: [{:.6f}, {:.6f}, {:.6f}]", t.x, t.y, t.z);
+
+		SKSE::log::trace(
+			"Rotate:\n"
+			"  [{:.6f}, {:.6f}, {:.6f}]\n"
+			"  [{:.6f}, {:.6f}, {:.6f}]\n"
+			"  [{:.6f}, {:.6f}, {:.6f}]",
+			r.entry[0][0], r.entry[0][1], r.entry[0][2], r.entry[1][0], r.entry[1][1],
+			r.entry[1][2], r.entry[2][0], r.entry[2][1], r.entry[2][2]);
+	}
 
 	bool InitializeSound(RE::BSSoundHandle& a_handle, std::string a_editorID);
 	bool PlaySound(RE::BSSoundHandle& a_handle, float a_volume, RE::NiPoint3& a_position,

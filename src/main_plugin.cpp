@@ -4,23 +4,34 @@
 #include "menu_checker.h"
 #include "mod_event_sink.hpp"
 #include "settings.h"
+#include "spellbook.h"
 #include "vr_gui.h"
 #include "vrinput.h"
 
 namespace spellbookvr
 {
+	using namespace RE;
+	using namespace art_addon;
+	using namespace vr_gui;
+
 	static void RegisterVRInputCallback();
 	static void PlayerUpdate();
 	static bool OnDebugButton(const vrinput::ModInputEvent& e);
 	static bool OnSecondaryDebugButton(const vrinput::ModInputEvent& e);
 	static bool OnDpad(const vrinput::ModInputEvent& e);
 
-	uint32_t g_esp_index{};
+	uint32_t      g_esp_index{};
 	PapyrusVRAPI* g_papyrusvr{};
 
 	bool g_debug_print = true;
 	bool g_left_hand_mode = false;
 	bool g_use_firstperson = false;
+
+	PlayerCharacter* pc{};
+
+	std::vector<std::string> books;
+	int                      selector{};
+	ArtAddonPtr              book;
 
 	void Init()
 	{
@@ -50,52 +61,29 @@ namespace spellbookvr
 
 	void PreLoadGame() { vr_gui::Controller::GetSingleton()->Cleanup(); }
 
-	void OnGameLoad() { vr_gui::Controller::GetSingleton()->Init(); }
-
-	std::vector<RE::NiTimeController*> ctrs;
-
-	void GetAllControllers(RE::NiAVObject* a_obj)
+	void OnGameLoad()
 	{
-		if (!a_obj) { return; }
-
-		for (auto* controller = a_obj->GetControllers(); controller;
-			controller = controller->next.get())
-		{
-			ctrs.push_back(controller);
-		}
-
-		if (auto* node = a_obj->AsNode())
-		{
-			for (auto& child : node->children) { GetAllControllers(child.get()); }
-		}
+		vr_gui::Controller::GetSingleton()->Init();
+		pc = PlayerCharacter::GetSingleton();
 	}
 
-	void SetCtrFlags(RE::NiAVObject* a_obj)
-	{
-		if (!a_obj) { return; }
-
-		for (auto* controller = a_obj->GetControllers(); controller;
-			controller = controller->next.get())
-		{
-			controller->flags.set(false, RE::NiTimeController::Flag::kCycleType_Clamp);
-			controller->flags.set(true, RE::NiTimeController::Flag::kCycleType_Loop);
-			controller->flags.set(true, RE::NiTimeController::Flag::kForceUpdate);
-			controller->flags.set(true, RE::NiTimeController::Flag::kActive);
-			controller->flags.set(false, RE::NiTimeController::Flag::kAnimType_AppTime);
-			controller->flags.set(false, RE::NiTimeController::Flag::kComputeScaledTime);
-		}
-
-		if (auto* node = a_obj->AsNode())
-		{
-			for (auto& child : node->children) { SetCtrFlags(child.get()); }
-		}
-	}
+	spellbook::Spellbook* spbk;
 
 	static bool OnDebugButton(const vrinput::ModInputEvent& e)
 	{
 		static bool toggle = true;
 
-		if (e.button_state == vrinput::ButtonState::kButtonDown) { toggle ^= 1; }
+		if (e.button_state == vrinput::ButtonState::kButtonDown)
+		{
+			if (!spbk) { spbk = spellbook::Summon(true); }
+			else
+			{
+				spellbook::Dismiss(spbk);
+				spbk = nullptr;
+			}
+
+			toggle ^= 1;
+		}
 
 		return false;
 	}
@@ -104,7 +92,11 @@ namespace spellbookvr
 	{
 		static bool toggle = true;
 
-		if (e.button_state == vrinput::ButtonState::kButtonDown) { toggle ^= 1; }
+		if (e.button_state == vrinput::ButtonState::kButtonDown)
+		{
+			if (spbk) { spbk->ShowHitboxes(toggle); }
+			toggle ^= 1;
+		}
 
 		return false;
 	}
