@@ -102,6 +102,8 @@ namespace spellbook
 		NiAVObject* follow_target{};
 		NiPoint3    offset;
 		NiTransform parent_store{};
+
+		ModeHandle hand_mode;
 	};
 
 	class BasicHitbox : public Widget
@@ -126,22 +128,25 @@ namespace spellbook
 	public:
 		HandPointing(Widget* a_parent, bool isLeft) : Behavior(a_parent), isLeft(isLeft) {}
 
-		~HandPointing() { Controller::GetSingleton()->GetHand(isLeft)->RestoreMode(); }
-
 		void OnHover(bool a_activate, Hand& a_hand) override
 		{
 			if (a_hand.IsLeft() == isLeft)
 			{
-				if (a_activate) { a_hand.SetMode(); }
+				if (a_activate)
+				{
+					hand_mode =
+						a_hand.RequestMode(Hand::Mode::kPointing, Hand::ModePriority::kPassive);
+				}
 				else
 				{
-					a_hand.RestoreMode();
+					hand_mode.Release();
 				}
 			}
 		}
 
 	private:
-		bool isLeft;
+		bool       isLeft;
+		ModeHandle hand_mode;
 	};
 
 	class HoverExitVelocityTracker : public Behavior

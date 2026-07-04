@@ -56,7 +56,7 @@ namespace spellbookvr
 			vrinput::ActionType::kPress);
 		vrinput::AddCallback(OnDpad, vr::EVRButtonId::k_EButton_DPad_Right, vrinput::Hand::kRight,
 			vrinput::ActionType::kPress);
-		vrinput::StartBlockingAll();
+		//vrinput::StartBlockingAll();
 	}
 
 	static void PlayerUpdate()
@@ -98,7 +98,7 @@ namespace spellbookvr
 	{
 		static bool toggle = true;
 
-		spbk->ShowHitboxes(toggle);
+		if (spbk)spbk->ShowHitboxes(toggle);
 
 		toggle^=1;
 		return false;

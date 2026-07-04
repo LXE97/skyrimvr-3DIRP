@@ -36,53 +36,7 @@ namespace vr_gui
 	static const char* kHelperModelPath = "HelperSphere.nif";
 	static const char* kDebugModelPath = "DebugSphere.nif";
 
-	const NiTransform Hand::GetTransform() const
-	{
-		if (transform) { return *transform * offset; }
-		else
-		{
-			return offset;
-		}
-	}
-
-	bool Hand::Init()
-	{
-		if (initialized) { return true; }
-		// check player 3d loaded
-		if (auto pc = RE::PlayerCharacter::GetSingleton()->Get3D(false); pc)
-		{
-			// link transforms
-			if (auto hand_node = pc->GetObjectByName(vrinput::kControllerNodeName[isLeft]);
-				hand_node)
-			{
-				node = hand_node;
-				transform = &node->world;
-				initialized = true;
-				SetMode(Mode::kNormal);
-				return true;
-			}
-		}
-		node = nullptr;
-		transform = nullptr;
-		initialized = false;
-		return false;
-	}
-
-	bool Hand::Update()
-	{
-		if (Init())
-		{
-			//query HIGGS state
-			if (g_higgsInterface->IsHandInGrabbableState(isLeft)) { state = State::kReady; }
-			else if (g_higgsInterface->GetGrabbedObject(isLeft)) { state = State::kGrabbing; }
-			else
-			{
-				state = State::kWeapon;
-			}
-			return true;
-		}
-		return false;
-	}
+	
 
 	void Controller::Cleanup()
 	{
@@ -813,7 +767,7 @@ namespace vr_gui
 	}
 
 	NiTransform Widget::GetLocalToRoot() const
-	{ return GetWindow()->GetWorld().Invert() * GetWorld(); }
+	{ return GetWindow()->GetRootNode()->world.Invert() * GetWorld(); }
 
 	void Widget::UpdateModelTransform()
 	{

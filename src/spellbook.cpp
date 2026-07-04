@@ -34,7 +34,7 @@ namespace spellbook
 
 	Spellbook::Spellbook(bool a_isLeft, NiTransform a_transform) :
 		AttachedWindow(kDefaultWindowRadius, RE::PlayerCharacter::GetSingleton(),
-			vrinput::GetHandNode(vrinput::Hand::kLeft, false)->AsNode(), a_transform),
+			vrinput::GetHandNode(vrinput::Hand(a_isLeft), false)->AsNode(), a_transform),
 		isLeft(a_isLeft)
 	{
 		const std::string kModelPath = "SpellBookVR/custom.nif";
@@ -149,11 +149,16 @@ namespace spellbook
 			isGrabbed = a_activate;
 			if (a_activate)
 			{
+                hand_mode = a_hand.RequestMode(Hand::Mode::kFist, Hand::ModePriority::kGrab);
 				auto other_hand = vrinput::GetHandNode((vrinput::Hand) false, false)->world;
 				parent_store = other_hand.Invert() * parent->GetWorld();
 			}
 
-			if (!a_activate) { helper::PrintTransform(parent->GetLocal()); }
+			if (!a_activate)
+			{  
+                hand_mode.Release();
+                //helper::PrintTransform(parent->GetLocal());
+			}
 		}
 	}
 
@@ -168,7 +173,15 @@ namespace spellbook
 
 	void GrabNode::OnHover(bool a_activate, Hand& a_hand)
 	{
-		if (!a_activate) { isGrabbed = false; }
+		if (a_activate)
+		{
+			hand_mode = a_hand.RequestMode(Hand::Mode::kOpen, Hand::ModePriority::kGrab);
+		}
+		if (!a_activate)
+		{
+			isGrabbed = false;
+			hand_mode.Release();
+		}
 	}
 
 	bool BasicHitbox::TestOverlap(Hand& a_hand) const
@@ -188,7 +201,6 @@ namespace spellbook
 
 	void BasicHitbox::OnClick(bool a_activate, Hand& a_hand, MenuAction a_action)
 	{
-        SKSE::log::trace("click on interaction volume");
 		if (a_activate && a_action == MenuAction::kScrollLeft)
 		{
 			dynamic_cast<Spellbook*>(parent)->TurnPage(true);

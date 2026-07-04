@@ -5,6 +5,7 @@
 #include "higgsinterface001.h"
 #include "vrikinterface001.h"
 #include "vrinput.h"
+#include "vr_gui_hand.h"
 
 #include <unordered_set>
 
@@ -41,82 +42,7 @@ namespace vr_gui
 	};
 
 	// observes and caches input device state
-	class Hand
-	{
-	public:
-		enum class State
-		{
-			kReady,
-			kGrabbing,
-			kWeapon,
-			kInvalid
-		};
-
-		enum class Mode
-		{
-			kNormal,
-			kPointing
-		};
-
-		Hand(bool a_left) : isLeft(a_left) {}
-
-		// intializes device state, returns true if success
-		bool Init();
-		// fetch higgs state
-		bool Update();
-
-		void SetMode()
-		{
-			if (++request_count) SetMode(Mode::kPointing);
-		}
-		void RestoreMode()
-		{
-			if (--request_count <= 0)
-			{
-				SetMode(Mode::kNormal);
-				request_count = 0;
-			}
-		}
-
-		const NiTransform GetTransform() const;
-		const State       GetState() const { return state; }
-		const float       GetRadius() const { return radius; }
-		const NiPoint3*   GetExtents() const { return &extents; }
-		const bool        IsLeft() const { return isLeft; }
-
-	public:
-		bool         isLeft = false;
-		NiAVObject*  node{};
-		NiTransform* transform{};
-		float        radius = 6.f;
-		State        state = State::kReady;
-		NiPoint3     extents = { 3, 1, 5 };
-		NiTransform  offset;
-		bool         initialized = false;
-
-		void SetMode(Mode a_new)
-		{
-			if (a_new == Mode::kNormal)
-			{
-				radius = 6.f;
-				extents = { 3, 1, 5 };
-				offset.rotate = NiMatrix3();
-				offset.translate = isLeft ? NiPoint3{ 0, 0.5, 5 } : NiPoint3{ 0, -0.5, 5 };
-				g_vrikInterface->restoreFingers(isLeft);
-			}
-			else if (a_new == Mode::kPointing)
-			{
-				radius = 6.f;
-				extents = { 0.7, 0.7, 3.5 };
-				offset.translate = isLeft ? NiPoint3{ -2.5, -1.6, 12 } : NiPoint3{ 2.5, -1.6, 12 };
-				offset.rotate.SetEulerAnglesXYZ(-0.3141593, isLeft ? 0.1396263 : -0.1396263, 0);
-				g_vrikInterface->setFingerRange(
-					isLeft, 0.1, 0.1, 1, 1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1);
-			}
-		}
-
-		int request_count = 0;
-	};
+	
 
 	class Behavior
 	{
