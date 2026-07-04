@@ -125,9 +125,9 @@ namespace vr_gui
 
 		virtual ~Behavior() = default;
 
-		virtual void Update(float delta);
+		virtual void Update(float delta) {};
 
-		virtual void OnHover(bool activate, Hand& hand);
+		virtual void OnHover(bool activate, Hand& hand) {};
 
 		virtual void OnDetach() {};
 

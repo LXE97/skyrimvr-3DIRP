@@ -158,6 +158,14 @@ namespace vr_gui
 			vrinput::Hand::kLeft, vrinput::ActionType::kPress);
 		vrinput::AddCallback(InputEventHandlerStatic, vr::EVRButtonId::k_EButton_DPad_Down,
 			vrinput::Hand::kLeft, vrinput::ActionType::kPress);
+		vrinput::AddCallback(InputEventHandlerStatic, vr::EVRButtonId::k_EButton_DPad_Left,
+			vrinput::Hand::kLeft, vrinput::ActionType::kPress);
+		vrinput::AddCallback(InputEventHandlerStatic, vr::EVRButtonId::k_EButton_DPad_Right,
+			vrinput::Hand::kLeft, vrinput::ActionType::kPress);
+		vrinput::AddCallback(InputEventHandlerStatic, vr::EVRButtonId::k_EButton_DPad_Left,
+			vrinput::Hand::kRight, vrinput::ActionType::kPress);
+		vrinput::AddCallback(InputEventHandlerStatic, vr::EVRButtonId::k_EButton_DPad_Right,
+			vrinput::Hand::kRight, vrinput::ActionType::kPress);
 	}
 
 	void Controller::Update()
@@ -200,11 +208,18 @@ namespace vr_gui
 		ButtonEvent temp;
 		temp.down = (bool)e.button_state;
 		temp.isLeft = (bool)e.device;
-		if (e.button_ID == settings.primary) temp.button = MenuAction::kPrimary;
-		if (e.button_ID == settings.secondary) temp.button = MenuAction::kSecondary;
-		if (e.button_ID == vr::EVRButtonId::k_EButton_DPad_Up) temp.button = MenuAction::kScrollUp;
-		if (e.button_ID == vr::EVRButtonId::k_EButton_DPad_Down)
+		if (e.button_ID == settings.primary)
+			temp.button = MenuAction::kPrimary;
+		else if (e.button_ID == settings.secondary)
+			temp.button = MenuAction::kSecondary;
+		else if (e.button_ID == vr::EVRButtonId::k_EButton_DPad_Up)
+			temp.button = MenuAction::kScrollUp;
+		else if (e.button_ID == vr::EVRButtonId::k_EButton_DPad_Down)
 			temp.button = MenuAction::kScrollDown;
+		else if (e.button_ID == vr::EVRButtonId::k_EButton_DPad_Left)
+			temp.button = MenuAction::kScrollLeft;
+		else
+			temp.button = MenuAction::kScrollRight;
 
 		button_queue.push_back(temp);
 
@@ -656,16 +671,16 @@ namespace vr_gui
 		}
 	}
 
-	bool Widget::TestOverlap(Hand& a_Hand) const
+	bool Widget::TestOverlap(Hand& a_hand) const
 	{
 		// TODO: rewrite to use a downward pass instead of GetWorld every time
-		auto t = a_Hand.GetTransform();
+		auto t = a_hand.GetTransform();
 		auto w = GetWorld();
 		// broad phase
 		if (helper::IntersectSphereSphere(
-				t.translate, a_Hand.GetRadius(), w.translate, w.scale * radius))
+				t.translate, a_hand.GetRadius() * t.scale, w.translate, w.scale * radius))
 		{  // narrow phase
-			return helper::IntersectOBBOBB(t, *a_Hand.GetExtents() * t.scale, w, extents * w.scale);
+			return helper::IntersectOBBOBB(t, *a_hand.GetExtents() * t.scale, w, extents * w.scale);
 		}
 
 		return false;
@@ -1047,6 +1062,4 @@ namespace vr_gui
 		}
 	}
 
-	void Behavior::Update(float delta) {}
-	void Behavior::OnHover(bool activate, Hand& hand) {}
 }

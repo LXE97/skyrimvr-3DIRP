@@ -96,44 +96,17 @@ namespace spellbookvr
 
 	static bool OnSecondaryDebugButton(const vrinput::ModInputEvent& e)
 	{
-		static bool                  toggle = true;
-		static constexpr const char* fonts[4] = { "SpellbookVR/char_bold.nif",
-			"SpellbookVR/char_feather.nif", "SpellbookVR/char_2048.nif",
-			"SpellbookVR/char_2048_feather.nif" };
-		static int                   i = 0;
+		static bool toggle = true;
 
-		if (e.button_state == vrinput::ButtonState::kButtonDown)
-		{
-			static float offset = 0.005;
+		spbk->ShowHitboxes(toggle);
 
-			if (spbk)
-			{
-				spbk->DisplaySpellInfo("SpellbookVR/char_2048.nif");
-				offset += 0.001;
-				SKSE::log::trace("offset {}", offset);
-			}
-			toggle ^= 1;
-		}
-
+		toggle^=1;
 		return false;
 	}
 
 	static bool OnDpad(const vrinput::ModInputEvent& e)
 	{
 		static bool toggle = true;
-		if (spbk)
-		{
-			if (e.button_state == vrinput::ButtonState::kButtonDown &&
-				e.button_ID == vr::EVRButtonId::k_EButton_DPad_Left)
-			{
-				spbk->TurnPage(true);
-			}
-			else if (e.button_state == vrinput::ButtonState::kButtonDown &&
-				e.button_ID == vr::EVRButtonId::k_EButton_DPad_Right)
-			{
-				spbk->TurnPage(false);
-			}
-		}
 
 		if (e.button_state == vrinput::ButtonState::kButtonDown) { toggle ^= 1; }
 		return false;

@@ -25,30 +25,43 @@ namespace spellbook
 		if (a_spbk) { a_spbk->Close(); }
 	}
 
+	void Spellbook::Close()
+	{
+		if (animator.HasQueued()) { animator.ClearQueue(); }
+		animator.Queue(close, animation_speed * 1.5,
+			[this]() { Controller::GetSingleton()->MarkForDelete(this); });
+	}
+
 	Spellbook::Spellbook(bool a_isLeft, NiTransform a_transform) :
 		AttachedWindow(kDefaultWindowRadius, RE::PlayerCharacter::GetSingleton(),
-			vrinput::GetHandNode(vrinput::Hand::kLeft, false)->AsNode(), a_transform)
+			vrinput::GetHandNode(vrinput::Hand::kLeft, false)->AsNode(), a_transform),
+		isLeft(a_isLeft)
 	{
 		const std::string kModelPath = "SpellBookVR/custom.nif";
 
-		AddModel(kModelPath, false, [windowscale = local.scale](ArtAddon* m) {
+		AddModel(kModelPath, false, [this, windowscale = local.scale](ArtAddon* m) {
 			if (auto node = m->Get3D())
 			{
 				ni_animator::SetControllerFlags(node, true, false, false, false, true);
 				node->local.scale = windowscale / node->parent->world.scale;
+				this->DisplaySpellInfo("SpellbookVR/char_2048.nif");
 			}
 		});
 
+		AttachButtons();
+		SetupGrid(Category::kAll);
+
 		NiTransform t;
-		t.translate.z = -20;
+		t.translate = { 0, -10, -20 };
 		grab_node = AddChild<GrabNode>(isLeft, NiPoint3(0, 0, -10));
 		grab_node->MoveTo({ 0, 0, -10 });
 
-		AddBehavior<HandPointing>(!isLeft);
-		animator.PlayImmediately(open,2);
+		t.translate = { 0, 0, 5 };
+		interaction_volume = AddChild<BasicHitbox>(t, NiPoint3(20, 10, 10), 20);
 
-		AttachButtons();
-		SetupGrid(Category::kAll);
+		interaction_volume->AddBehavior<HandPointing>(!isLeft);
+
+		animator.PlayImmediately(open, animation_speed);
 	}
 
 	void Spellbook::Update(float a_delta)
@@ -57,28 +70,16 @@ namespace spellbook
 		animator.Update(Get3D(), a_delta);
 	}
 
-	bool Spellbook::HandStateFilter(Hand& a_hand) const
-	{
-		if (a_hand.isLeft != isLeft) { return true; }
-		return false;
-	}
-
-	void Spellbook::OnClick(bool a_activate, Hand& a_hand, MenuAction a_action)
-	{
-		if (a_activate && a_action == MenuAction::kScrollLeft) { TurnPage(true); }
-		else if (a_activate && a_action == MenuAction::kScrollRight) { TurnPage(false); }
-	}
-
 	void Spellbook::AttachButtons() {}
 
 	void Spellbook::SetupGrid(Category a_category) {}
 
 	void Spellbook::TurnPage(bool a_direction_left)
 	{
-		if (a_direction_left) { animator.Queue(flip_left,2); }
+		if (a_direction_left) { animator.Queue(flip_left, animation_speed); }
 		else
 		{
-			animator.Queue(flip_right,2);
+			animator.Queue(flip_right, animation_speed);
 		}
 	}
 
@@ -168,5 +169,33 @@ namespace spellbook
 	void GrabNode::OnHover(bool a_activate, Hand& a_hand)
 	{
 		if (!a_activate) { isGrabbed = false; }
+	}
+
+	bool BasicHitbox::TestOverlap(Hand& a_hand) const
+	{
+		// only use hand sphere
+		auto t = a_hand.GetTransform();
+		auto w = GetWorld();
+		// broad phase
+		if (helper::IntersectSphereSphere(
+				t.translate, a_hand.GetRadius() * t.scale, w.translate, w.scale * radius))
+		{  // narrow phase
+			return helper::IntersectSphereOBB(
+				t.translate, a_hand.GetRadius() * t.scale, w, extents * w.scale);
+		}
+		return false;
+	}
+
+	void BasicHitbox::OnClick(bool a_activate, Hand& a_hand, MenuAction a_action)
+	{
+        SKSE::log::trace("click on interaction volume");
+		if (a_activate && a_action == MenuAction::kScrollLeft)
+		{
+			dynamic_cast<Spellbook*>(parent)->TurnPage(true);
+		}
+		else if (a_activate && a_action == MenuAction::kScrollRight)
+		{
+			dynamic_cast<Spellbook*>(parent)->TurnPage(false);
+		}
 	}
 }
