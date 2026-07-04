@@ -10,6 +10,7 @@
 namespace art_addon
 {
 	static constexpr const char* kEmptyNif = "effects/fxemptyobject.nif";
+	static constexpr const char* kFontAtlas = "SpellbookVR/char.nif";
 
 	class ArtAddon;
 	using ArtAddonPtr = std::shared_ptr<ArtAddon>;
@@ -80,6 +81,11 @@ namespace art_addon
 			return &singleton;
 		}
 
+		RE::BGSArtObject* GetBaseObject() { return base_artobject; }
+
+		bool IsTempArtObject(RE::BGSArtObject* a_artobject) const
+		{ return temp_artobjects.contains(a_artobject); }
+
 	private:
 		ArtAddonManager();
 		~ArtAddonManager() = default;
@@ -89,13 +95,14 @@ namespace art_addon
 		ArtAddonManager& operator=(ArtAddonManager&&) = delete;
 
 		RE::BGSArtObject* GetArtForm(std::string_view a_modelPath);
-		int               GetNextId();
+		float             GetNextId();
 
-		std::unordered_map<int, std::weak_ptr<ArtAddon>>   new_objects;
+		std::unordered_map<float, std::weak_ptr<ArtAddon>> new_objects;
 		std::mutex                                         objects_lock;
 		std::unordered_map<std::string, RE::BGSArtObject*> artobject_cache;
 		RE::BGSArtObject*                                  base_artobject;
-		int                                                next_id = -2;
+		int                                                next_id = 1;
+		std::unordered_set<RE::BGSArtObject*>              temp_artobjects;
 	};
 
 	struct NifChar
@@ -104,7 +111,7 @@ namespace art_addon
 		static constexpr float       kUVOffset_x = 0.0625f;
 		static constexpr float       kUVOffset_y = 0.125f;
 		static constexpr float       kCharacterWidth = 0.5f;
-		static constexpr const char* kFontModelPath = "char.nif";
+		static constexpr const char* kFontModelPath = kFontAtlas;
 		static constexpr const char* kNodeName = "char";
 
 		static inline RE::NiPoint2 AsciiToXY(char a_ascii)
@@ -119,8 +126,9 @@ namespace art_addon
 	class AddonTextBox
 	{
 	public:
+		static constexpr float kLineSpacing = 1.1f;
 		AddonTextBox(std::string_view a_string, const float a_spacing, RE::NiAVObject* a_attach_to,
-			RE::NiTransform& a_world);
+			RE::NiTransform& a_local, std::string font_path);
 
 	private:
 		struct LifetimeToken
@@ -128,7 +136,7 @@ namespace art_addon
 			bool alive = true;
 		};
 
-		void MakeString();
+		void MakeString(std::string font_path);
 
 		std::shared_ptr<LifetimeToken> token = std::make_shared<LifetimeToken>();
 
@@ -136,30 +144,7 @@ namespace art_addon
 		std::vector<ArtAddonPtr> characters;
 		std::string              string;
 		const float              spacing;
-		RE::NiTransform          world;
+		std::string              font;
 	};
-
-	void DebugCreateSkeletonNodesAttached(std::vector<std::string>& a_nodenames,
-		std::vector<ArtAddonPtr> a_art, bool a_first_person, int a_color_hex);
-
-	void DebugCreateSkeletonNodesFloating(std::vector<std::string>& a_nodenames,
-		std::vector<ArtAddonPtr> a_art, bool a_first_person, int a_color_hex);
-
-	void DebugUpdateSkeletonNodes(
-		std::vector<std::string>& a_nodenames, std::vector<ArtAddonPtr> a_art, bool a_first_person);
-
-	void DebugGetVRNodes(std::vector<RE::NiPointer<RE::NiNode>>* out);
-
-	void DebugDrawVRNodes(
-		std::vector<RE::NiPointer<RE::NiNode>>& nodes, std::vector<ArtAddonPtr>* draw);
-
-	void DebugUpdateVRNodes(
-		std::vector<RE::NiPointer<RE::NiNode>>& nodes, std::vector<ArtAddonPtr>& draw);
-
-	void DebugGetVRNodeStrings(std::vector<std::string>* out);
-
-	void DebugShowVRNodeNames(std::vector<RE::NiPointer<RE::NiNode>>&              nodes,
-		std::vector<std::string>&                                                  names,
-		std::unordered_map<std::string, std::unique_ptr<art_addon::AddonTextBox>>& text);
 
 }

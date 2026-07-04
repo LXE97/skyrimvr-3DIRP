@@ -7,6 +7,7 @@
 #include "spellbook.h"
 #include "vr_gui.h"
 #include "vrinput.h"
+#include "hooks.h"
 
 namespace spellbookvr
 {
@@ -33,9 +34,12 @@ namespace spellbookvr
 	int                      selector{};
 	ArtAddonPtr              book;
 
+	
 	void Init()
 	{
 		helper::InstallPlayerUpdateHook(PlayerUpdate);
+
+		hooks::ModelReferenceEffect_SaveGameHook::Install();
 
 		menuchecker::begin();
 
@@ -50,7 +54,7 @@ namespace spellbookvr
 		vrinput::AddCallback(OnDpad, vr::EVRButtonId::k_EButton_DPad_Down, vrinput::Hand::kRight,
 			vrinput::ActionType::kPress);
 
-		vrinput::StartBlockingAll();
+		//vrinput::StartBlockingAll();
 	}
 
 	static void PlayerUpdate()
@@ -90,11 +94,22 @@ namespace spellbookvr
 
 	static bool OnSecondaryDebugButton(const vrinput::ModInputEvent& e)
 	{
-		static bool toggle = true;
+		static bool                  toggle = true;
+		static constexpr const char* fonts[4] = { "SpellbookVR/char_bold.nif",
+			"SpellbookVR/char_feather.nif", "SpellbookVR/char_2048.nif",
+			"SpellbookVR/char_2048_feather.nif" };
+		static int                   i = 0;
 
 		if (e.button_state == vrinput::ButtonState::kButtonDown)
 		{
-			if (spbk) { spbk->ShowHitboxes(toggle); }
+			static float offset = 0.005;
+
+			if (spbk)
+			{
+				spbk->DisplaySpellInfo("SpellbookVR/char_2048.nif");
+				offset += 0.001;
+				SKSE::log::trace("offset {}", offset);
+			}
 			toggle ^= 1;
 		}
 
@@ -105,7 +120,11 @@ namespace spellbookvr
 	{
 		static bool toggle = true;
 
-		if (e.button_state == vrinput::ButtonState::kButtonDown) { toggle ^= 1; }
+		if (e.button_state == vrinput::ButtonState::kButtonDown)
+		{
+			toggle ^= 1;
+			helper::PrintActorModelEffects(RE::PlayerCharacter::GetSingleton());
+		}
 		return false;
 	}
 

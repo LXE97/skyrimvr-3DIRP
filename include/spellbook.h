@@ -23,9 +23,10 @@ namespace spellbook
 			float steady;
 		};
 
-		enum class Categories
+		enum class Category
 		{
 			kAll,
+			kFavorites,
 			kConjuration,
 			kIllusion,
 			kAlteration,
@@ -40,8 +41,8 @@ namespace spellbook
 
 		static constexpr Anim open{ 0.0f, 0.95f, 0.95f };
 		static constexpr Anim close{ 2.97f, 3.971f, 0.0f };
-		static constexpr Anim flip_left{ 0.95f, 1.96f, 1.96f };
-		static constexpr Anim flip_right{ 1.96f, 2.97f, 2.97f };
+		static constexpr Anim flip_left{ 0.95f, 1.96f, 0.95f };
+		static constexpr Anim flip_right{ 1.96f, 2.97f, 0.95f };
 
 		bool HandStateFilter(Hand& a_hand) const override;
 
@@ -49,23 +50,39 @@ namespace spellbook
 
 		void VirtualParent(NiAVObject* a_new, NiTransform& a_offset);
 
+		void DisplaySpellInfo(std::string font, float z_offset = -0.03f);
+
+		void TurnPage(bool a_direction_left);
+
 	private:
-		static constexpr float kDefaultWindowRadius = 15.f;
+		struct Layout
+		{
+			int   items_per_row = 5;
+			float padding = 1;
+			float page_width = 15;
+			float page_height = 20;
 
-		bool                                       isLeft;
-		std::unordered_map<Categories, SpellItem*> spell_pages;
+			bool use_dividers;
+		};
 
-		GridContainer* spell_icon_container;
-		GrabNode*      grab_node;
+		static constexpr float       kDefaultWindowRadius = 15.f;
+		static constexpr const char* kLeftPageNodeName = "Book CoverPage Turn04";
+		static constexpr const char* kRightPageNodeName = "Book TurnPage2";
+
+		void AttachButtons();
+		void SetupGrid(Category a_category);
 
 		std::unique_ptr<art_addon::AddonTextBox> description;
 		std::unique_ptr<art_addon::AddonTextBox> spell_cost;
 		std::unique_ptr<art_addon::AddonTextBox> spell_magnitude;
 		std::unique_ptr<art_addon::AddonTextBox> spell_duration;
+		GridContainer*                           spell_icon_container;
+		GrabNode*                                grab_node;
 
-		void BuildPages();
-		void AttachButtons();
-		void SetupGrid();
+		bool     isLeft;
+		int      page_index = 0;
+		Category selected;
+		Layout   layout;
 	};
 
 	class GrabNode : public Widget
@@ -97,11 +114,10 @@ namespace spellbook
 	{
 	public:
 		BookAnimator(Widget* a_parent, const Spellbook::Anim& a_keyframes, float a_speed = 1.f) :
-
 			Behavior(a_parent),
 			keyframes(a_keyframes),
 			accumulate(a_keyframes.start),
-            speed(a_speed)
+			speed(a_speed)
 		{}
 
 		void Update(float delta) override;
@@ -110,7 +126,7 @@ namespace spellbook
 	private:
 		const Spellbook::Anim& keyframes;
 		float                  accumulate{};
-        float speed{};
+		float                  speed{};
 	};
 
 	class HandPointing : public Behavior
@@ -122,10 +138,13 @@ namespace spellbook
 
 		void OnHover(bool a_activate, Hand& a_hand) override
 		{
-			if (a_activate) { a_hand.SetMode(); }
-			else
+			if (a_hand.IsLeft() == isLeft)
 			{
-				a_hand.RestoreMode();
+				if (a_activate) { a_hand.SetMode(); }
+				else
+				{
+					a_hand.RestoreMode();
+				}
 			}
 		}
 
