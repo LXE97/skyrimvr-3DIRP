@@ -2,30 +2,6 @@
 
 namespace spellbook
 {
-	namespace
-	{
-		void SetControllerFlags(NiAVObject* a_obj)
-		{
-			if (!a_obj) { return; }
-
-			for (auto* controller = a_obj->GetControllers(); controller;
-				controller = controller->next.get())
-			{
-				controller->flags.set(false, RE::NiTimeController::Flag::kCycleType_Clamp);
-				controller->flags.set(true, RE::NiTimeController::Flag::kCycleType_Loop);
-				controller->flags.set(true, RE::NiTimeController::Flag::kForceUpdate);
-				controller->flags.set(true, RE::NiTimeController::Flag::kActive);
-				controller->flags.set(false, RE::NiTimeController::Flag::kAnimType_AppTime);
-				controller->flags.set(false, RE::NiTimeController::Flag::kComputeScaledTime);
-			}
-
-			if (auto* node = a_obj->AsNode())
-			{
-				for (auto& child : node->children) { SetControllerFlags(child.get()); }
-			}
-		}
-	}
-
 	using namespace art_addon;
 
 	Spellbook* Summon(bool isLeft)
@@ -46,7 +22,7 @@ namespace spellbook
 
 	void Dismiss(Spellbook* a_spbk)
 	{
-		if (a_spbk) { a_spbk->AddBehavior<BookAnimator>(Spellbook::close, 2.f); }
+		if (a_spbk) { a_spbk->Close(); }
 	}
 
 	Spellbook::Spellbook(bool a_isLeft, NiTransform a_transform) :
@@ -58,7 +34,7 @@ namespace spellbook
 		AddModel(kModelPath, false, [windowscale = local.scale](ArtAddon* m) {
 			if (auto node = m->Get3D())
 			{
-				SetControllerFlags(node);
+				ni_animator::SetControllerFlags(node, true, false, false, false, true);
 				node->local.scale = windowscale / node->parent->world.scale;
 			}
 		});
@@ -69,10 +45,16 @@ namespace spellbook
 		grab_node->MoveTo({ 0, 0, -10 });
 
 		AddBehavior<HandPointing>(!isLeft);
-		AddBehavior<BookAnimator>(open);
+		animator.PlayImmediately(open,2);
 
 		AttachButtons();
 		SetupGrid(Category::kAll);
+	}
+
+	void Spellbook::Update(float a_delta)
+	{
+		AttachedWindow::Update(a_delta);
+		animator.Update(Get3D(), a_delta);
 	}
 
 	bool Spellbook::HandStateFilter(Hand& a_hand) const
@@ -91,7 +73,14 @@ namespace spellbook
 
 	void Spellbook::SetupGrid(Category a_category) {}
 
-	void Spellbook::TurnPage(bool a_direction_left) { AddBehavior<BookAnimator>(open); }
+	void Spellbook::TurnPage(bool a_direction_left)
+	{
+		if (a_direction_left) { animator.Queue(flip_left,2); }
+		else
+		{
+			animator.Queue(flip_right,2);
+		}
+	}
 
 	void Spellbook::VirtualParent(NiAVObject* a_new, NiTransform& a_offset)
 	{
@@ -179,26 +168,5 @@ namespace spellbook
 	void GrabNode::OnHover(bool a_activate, Hand& a_hand)
 	{
 		if (!a_activate) { isGrabbed = false; }
-	}
-
-	void BookAnimator::Update(float delta)
-	{
-		if (auto node = parent->Get3D())
-		{
-			NiUpdateData ctx{};
-			accumulate += delta * speed;
-			if (accumulate > keyframes.end)
-			{
-				accumulate = keyframes.steady;
-				Remove();
-			}
-			helper::SetControllerTime(node, accumulate);
-			node->Update(ctx);
-		}
-	}
-
-	void BookAnimator::OnDetach()
-	{
-		if (&keyframes == &Spellbook::close) { Controller::GetSingleton()->MarkForDelete(parent); }
 	}
 }

@@ -216,7 +216,7 @@ namespace vr_gui
 		}
 
 		virtual NiTransform GetWorld(int depth = 0) const;
-		inline NiTransform  GetLocal()const{return local;} 
+		inline NiTransform  GetLocal() const { return local; }
 
 		int GetPriority() const { return priority; };
 

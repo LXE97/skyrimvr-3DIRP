@@ -21,21 +21,7 @@ namespace helper
 		RE::write_vfunc<RE::PlayerCharacter, 0xAF, PlayerCharacter_Update>();
 	}
 
-	void SetControllerTime(NiAVObject* a_obj, float a_time)
-	{
-		if (!a_obj) { return; }
 
-		for (auto* controller = a_obj->GetControllers(); controller;
-			controller = controller->next.get())
-		{
-			controller->scaledTime = a_time;
-		}
-
-		if (auto* node = a_obj->AsNode())
-		{
-			for (auto& child : node->children) { SetControllerTime(child.get(), a_time); }
-		}
-	}
 
 	TESForm* LookupByName(FormType a_typeEnum, const char* a_name)
 	{
