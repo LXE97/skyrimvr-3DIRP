@@ -1,3 +1,4 @@
+#include "ni_animator.h"
 #include "vr_gui.h"
 
 namespace spellbook
@@ -16,13 +17,6 @@ namespace spellbook
 	class Spellbook : public AttachedWindow
 	{
 	public:
-		struct Anim
-		{
-			float start;
-			float end;
-			float steady;
-		};
-
 		enum class Category
 		{
 			kAll,
@@ -39,10 +33,12 @@ namespace spellbook
 
 		Spellbook(bool a_isLeft, NiTransform a_transform);
 
-		static constexpr Anim open{ 0.0f, 0.95f, 0.95f };
-		static constexpr Anim close{ 2.97f, 3.971f, 0.0f };
-		static constexpr Anim flip_left{ 0.95f, 1.96f, 0.95f };
-		static constexpr Anim flip_right{ 1.96f, 2.97f, 0.95f };
+		static constexpr ni_animator::AnimationRange open{ 0.0f, 0.95f, 0.95f };
+		static constexpr ni_animator::AnimationRange close{ 2.97f, 3.971f, 0.0f };
+		static constexpr ni_animator::AnimationRange flip_left{ 0.95f, 1.96f, 0.95f };
+		static constexpr ni_animator::AnimationRange flip_right{ 1.96f, 2.97f, 0.95f };
+
+void Update(float a_delta) override;
 
 		bool HandStateFilter(Hand& a_hand) const override;
 
@@ -53,6 +49,11 @@ namespace spellbook
 		void DisplaySpellInfo(std::string font, float z_offset = -0.03f);
 
 		void TurnPage(bool a_direction_left);
+		void Close()
+		{
+			animator.Queue(
+				close, 2.f, [this]() { Controller::GetSingleton()->MarkForDelete(this); });
+		}
 
 	private:
 		struct Layout
@@ -78,6 +79,8 @@ namespace spellbook
 		std::unique_ptr<art_addon::AddonTextBox> spell_duration;
 		GridContainer*                           spell_icon_container;
 		GrabNode*                                grab_node;
+
+		ni_animator::NiAnimator animator{};
 
 		bool     isLeft;
 		int      page_index = 0;
@@ -109,25 +112,6 @@ namespace spellbook
 
 	class CategoryTab : public Widget
 	{};
-
-	class BookAnimator : public Behavior
-	{
-	public:
-		BookAnimator(Widget* a_parent, const Spellbook::Anim& a_keyframes, float a_speed = 1.f) :
-			Behavior(a_parent),
-			keyframes(a_keyframes),
-			accumulate(a_keyframes.start),
-			speed(a_speed)
-		{}
-
-		void Update(float delta) override;
-		void OnDetach() override;
-
-	private:
-		const Spellbook::Anim& keyframes;
-		float                  accumulate{};
-		float                  speed{};
-	};
 
 	class HandPointing : public Behavior
 	{

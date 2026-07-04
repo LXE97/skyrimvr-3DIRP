@@ -18,8 +18,6 @@ namespace helper
 		uint64_t*  vtbl = *((uint64_t**)actor);
 		((_DrawWeapon)(vtbl[0xA8]))(actor, draw);
 	}
-	void StopControllers(RE::NiAVObject* a_obj);
-	void SetControllerTime(RE::NiAVObject* a_obj, float a_time);
 
 	RE::TESForm* LookupByName(RE::FormType a_typeEnum, const char* a_name);
 	RE::FormID   GetFullFormID(uint8_t a_modindex, RE::FormID a_localID);

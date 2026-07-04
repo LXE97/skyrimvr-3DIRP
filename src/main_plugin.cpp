@@ -1,13 +1,13 @@
 #include "main_plugin.h"
 
 #include "helper_math.h"
+#include "hooks.h"
 #include "menu_checker.h"
 #include "mod_event_sink.hpp"
 #include "settings.h"
 #include "spellbook.h"
 #include "vr_gui.h"
 #include "vrinput.h"
-#include "hooks.h"
 
 namespace spellbookvr
 {
@@ -34,7 +34,6 @@ namespace spellbookvr
 	int                      selector{};
 	ArtAddonPtr              book;
 
-	
 	void Init()
 	{
 		helper::InstallPlayerUpdateHook(PlayerUpdate);
@@ -53,8 +52,11 @@ namespace spellbookvr
 			vrinput::ActionType::kPress);
 		vrinput::AddCallback(OnDpad, vr::EVRButtonId::k_EButton_DPad_Down, vrinput::Hand::kRight,
 			vrinput::ActionType::kPress);
-
-		//vrinput::StartBlockingAll();
+		vrinput::AddCallback(OnDpad, vr::EVRButtonId::k_EButton_DPad_Left, vrinput::Hand::kRight,
+			vrinput::ActionType::kPress);
+		vrinput::AddCallback(OnDpad, vr::EVRButtonId::k_EButton_DPad_Right, vrinput::Hand::kRight,
+			vrinput::ActionType::kPress);
+		vrinput::StartBlockingAll();
 	}
 
 	static void PlayerUpdate()
@@ -119,12 +121,21 @@ namespace spellbookvr
 	static bool OnDpad(const vrinput::ModInputEvent& e)
 	{
 		static bool toggle = true;
-
-		if (e.button_state == vrinput::ButtonState::kButtonDown)
+		if (spbk)
 		{
-			toggle ^= 1;
-			helper::PrintActorModelEffects(RE::PlayerCharacter::GetSingleton());
+			if (e.button_state == vrinput::ButtonState::kButtonDown &&
+				e.button_ID == vr::EVRButtonId::k_EButton_DPad_Left)
+			{
+				spbk->TurnPage(true);
+			}
+			else if (e.button_state == vrinput::ButtonState::kButtonDown &&
+				e.button_ID == vr::EVRButtonId::k_EButton_DPad_Right)
+			{
+				spbk->TurnPage(false);
+			}
 		}
+
+		if (e.button_state == vrinput::ButtonState::kButtonDown) { toggle ^= 1; }
 		return false;
 	}
 
