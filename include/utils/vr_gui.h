@@ -166,7 +166,7 @@ namespace vr_gui
 
 		virtual bool TestOverlap(Hand& a_hand) const;
 
-		virtual bool HandStateFilter() const { return true; }
+		virtual bool HandStateFilter(Hand& a_hand) const { return true; }
 
 		virtual void OnClick(bool a_activate, Hand& a_hand, MenuAction a_action);
 		virtual void OnHover(bool a_activate, Hand& a_hand);
@@ -176,7 +176,7 @@ namespace vr_gui
 		virtual void Show();
 		bool         IsHidden() const { return hide; }
 
-		void MoveTo(NiPoint3 a_translate_local);
+		void         MoveTo(NiPoint3 a_translate_local);
 		virtual void Resize(float a_scale);
 
 		bool IsHovered(bool a_isLeft) const { return hover_state[a_isLeft]; };
@@ -216,6 +216,7 @@ namespace vr_gui
 		}
 
 		virtual NiTransform GetWorld(int depth = 0) const;
+		inline NiTransform  GetLocal()const{return local;} 
 
 		int GetPriority() const { return priority; };
 
@@ -312,7 +313,7 @@ namespace vr_gui
 	class Window : public Widget
 	{
 	public:
-		explicit Window(float a_radius, RE::TESObjectREFR* a_rootobj, RE::NiNode* a_parent_node,
+		Window(float a_radius, RE::TESObjectREFR* a_rootobj, RE::NiNode* a_parent_node,
 			std::optional<RE::NiTransform> a_local = std::nullopt) :
 			Widget(nullptr, a_local.value_or(RE::NiTransform{}), RE::NiPoint3{}, a_radius),
 			rootobj(a_rootobj),
@@ -346,8 +347,8 @@ namespace vr_gui
 	class AttachedWindow : public Window
 	{
 	public:
-		explicit AttachedWindow(float a_radius, RE::TESObjectREFR* a_rootobj,
-			RE::NiNode* a_parent_node, std::optional<RE::NiTransform> a_local = std::nullopt);
+		AttachedWindow(float a_radius, RE::TESObjectREFR* a_rootobj, RE::NiNode* a_parent_node,
+			std::optional<RE::NiTransform> a_local = std::nullopt);
 		virtual ~AttachedWindow() = default;
 	};
 
@@ -357,8 +358,7 @@ namespace vr_gui
 	class FloatingWindow : public Window
 	{
 	public:
-		explicit FloatingWindow(float a_radius, RE::TESObjectREFR* a_rootobj,
-			RE::NiTransform                      a_world,
+		FloatingWindow(float a_radius, RE::TESObjectREFR* a_rootobj, RE::NiTransform a_world,
 			std::function<void(FloatingWindow*)> a_3DInitializedCallback = nullptr);
 		virtual ~FloatingWindow() = default;
 
@@ -481,9 +481,14 @@ namespace vr_gui
 		Window* AddWindow(std::unique_ptr<Window> a_new)
 		{
 			windows.emplace_back(std::move(a_new));
+#ifdef HUD_OVERRIDES
 			SKSE::GetTaskInterface()->AddTask([this]() {
-				activator_obj->MoveTo(RE::PlayerCharacter::GetSingleton()->AsReference());
+				if (activator_obj)
+				{
+					activator_obj->MoveTo(RE::PlayerCharacter::GetSingleton()->AsReference());
+				}
 			});
+#endif
 			return windows.back().get();
 		}
 
@@ -568,5 +573,12 @@ namespace vr_gui
 	};
 
 	inline void PostWandUpdate() { Controller::GetSingleton()->HandleHUDOverrides(); }
+
+	inline RE::NiNode* GetControllerNode(bool isLeft)
+	{
+		return isLeft ?
+			RE::PlayerCharacter::GetSingleton()->GetVRNodeData()->LeftWandNode->AsNode() :
+			RE::PlayerCharacter::GetSingleton()->GetVRNodeData()->RightWandNode->AsNode();
+	}
 
 }

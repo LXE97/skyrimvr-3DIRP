@@ -12,20 +12,21 @@ namespace art_addon
 {
 	using namespace RE;
 
+	static constexpr int kMaxPerFrame = 20;
+
 	std::shared_ptr<ArtAddon> ArtAddon::Make(std::string_view a_model_path, TESObjectREFR* a_target,
 		NiAVObject* a_attach_node, NiTransform& a_local, std::function<void(ArtAddon*)> a_callback)
 	{
 		auto manager = ArtAddonManager::GetSingleton();
 		auto art_object = manager->GetArtForm(a_model_path);
 		if (!art_object) { SKSE::log::error("Art addon failed: invalid model path"); }
-		int id = manager->GetNextId();
+		float id = manager->GetNextId();
 
-		/** Using the duration parameter of the BSTempEffect as an ID because anything < 0 has the
-		 * same effect. */
+		/** Using the duration parameter of the BSTempEffect as an ID */
 		if (a_target && a_target->IsHandleValid() && a_attach_node)
 		{
 			SKSE::GetTaskInterface()->AddTask(
-				[a_target, art_object, id]() { a_target->ApplyArtObject(art_object, (float)id); });
+				[a_target, art_object, id]() { a_target->ApplyArtObject(art_object, id); });
 
 			auto new_obj = std::shared_ptr<ArtAddon>(new ArtAddon);
 			new_obj->art_object = art_object;
@@ -70,51 +71,61 @@ namespace art_addon
 			std::scoped_lock lock(objects_lock);
 			if (const auto processLists = ProcessLists::GetSingleton())
 			{
-				processLists->ForEachModelEffect([this](ModelReferenceEffect* a_modelEffect) {
-					if (a_modelEffect->Get3D() && a_modelEffect->lifetime < -1.0f)
-					{
-						int id = a_modelEffect->lifetime;
-						if (new_objects.contains(id))
+				processLists->ForEachModelEffect(
+					[count = 0, this](ModelReferenceEffect* a_modelEffect) mutable {
+						if (a_modelEffect->Get3D())
 						{
-							if (auto addon = new_objects[id].lock())
+							float id = a_modelEffect->lifetime;
+							if (new_objects.contains(id))
 							{
-								// the id is not unique to this mod but the ArtObject is
-								if (addon->art_object == a_modelEffect->artObject)
+								if (auto addon = new_objects[id].lock())
 								{
-									addon->root3D = static_cast<RE::NiAVObject*>(
-										a_modelEffect->Get3D()->Clone());
-									addon->attach_node->AsNode()->AttachChild(addon->root3D);
-									a_modelEffect->lifetime = 0;
-									addon->root3D->local = std::move(addon->local);
+									// the id is not unique to this mod but the ArtObject is
+									if (addon->art_object == a_modelEffect->artObject)
+									{
+										addon->root3D = static_cast<RE::NiAVObject*>(
+											a_modelEffect->Get3D()->Clone());
+										addon->attach_node->AsNode()->AttachChild(addon->root3D);
+										a_modelEffect->lifetime = 0;
+										addon->root3D->local = std::move(addon->local);
 
-									// .nifs with collision will not be drawn when they're attached to an actor
-									RemoveCollisionNodes(addon->root3D);
-									//helper::StopControllers(addon->root3D);
-									if (addon->callback) { addon->callback(addon.get()); }
+										// .nifs with collision will not be drawn when they're attached to an actor
+										RemoveCollisionNodes(addon->root3D);
+										//helper::StopControllers(addon->root3D);
+										if (addon->callback) { addon->callback(addon.get()); }
 
-									NiUpdateData ctx;
-									addon->target->Get3D()->Update(ctx);
+										//TODO: push targets to a vector, update each target once per update call
+										//NiUpdateData ctx;
+										//addon->target->Get3D()->Update(ctx);
+									}
+								}
+								else
+								{  // check if it's one of our ArtObjects
+									auto it = std::find_if(artobject_cache.begin(),
+										artobject_cache.end(), [&a_modelEffect](const auto& pair) {
+											return pair.second == a_modelEffect->artObject;
+										});
+									if (it != artobject_cache.end())
+									{  // the artAddon was deleted before initialization finished
+										a_modelEffect->lifetime = 0;
+										SKSE::log::trace("deleting MRE {} (orphaned)", id);
+									}
+								}
+								// finished with this ArtAddon, no longer need to track it
+								new_objects.erase(id);
+
+								if (count++ > kMaxPerFrame)
+								{
+									return BSContainer::ForEachResult::kStop;
 								}
 							}
-							else
-							{  // check if it's one of our ArtObjects
-								auto it = std::find_if(artobject_cache.begin(),
-									artobject_cache.end(), [&a_modelEffect](const auto& pair) {
-										return pair.second == a_modelEffect->artObject;
-									});
-								if (it != artobject_cache.end())
-								{  // the artAddon was deleted before initialization finished
-									a_modelEffect->lifetime = 0;
-									SKSE::log::trace("deleting MRE {} (orphaned)", id);
-								}
-							}
-							// finished with this ArtAddon, no longer need to track it
-							new_objects.erase(id);
 						}
-					}
-					return BSContainer::ForEachResult::kContinue;
-				});
+						return BSContainer::ForEachResult::kContinue;
+					});
 			}
+			// TODO: temporary measure to update target only once per frame
+			NiUpdateData ctx;
+			RE::PlayerCharacter::GetSingleton()->Get3D()->Update(ctx);
 		}
 	}
 
@@ -168,6 +179,7 @@ namespace art_addon
 		}
 
 		auto [it, inserted] = artobject_cache.emplace(std::move(key), temp);
+		temp_artobjects.insert(temp);
 
 		// use the cached std::string storage
 		temp->SetModel(it->first.c_str());
@@ -175,7 +187,12 @@ namespace art_addon
 		return temp;
 	}
 
-	int ArtAddonManager::GetNextId() { return next_id--; }
+	float ArtAddonManager::GetNextId()
+	{
+		static constexpr float kStep = 1.0f / 1024.0f;
+		if (next_id > 1000) { next_id = 0; }
+		return 1.0f + static_cast<float>(next_id++) * kStep;
+	}
 
 	ArtAddonManager::ArtAddonManager()
 	{
@@ -191,242 +208,56 @@ namespace art_addon
 	}
 
 	AddonTextBox::AddonTextBox(std::string_view a_string, const float a_spacing,
-		RE::NiAVObject* a_attach_to, RE::NiTransform& a_world) :
+		RE::NiAVObject* a_attach_to, RE::NiTransform& a_local, std::string font_path) :
 		string(a_string),
 		spacing(a_spacing),
-		world(a_world)
+		font(font_path)
 	{
-		RE::NiTransform t;
-
 		std::weak_ptr<LifetimeToken> weak_token = token;
 
 		root = ArtAddon::Make(kEmptyNif, PlayerCharacter::GetSingleton(),
-			(a_attach_to ? a_attach_to : PlayerCharacter::GetSingleton()->Get3D()), t,
+			(a_attach_to ? a_attach_to : PlayerCharacter::GetSingleton()->Get3D()), a_local,
 			[weak_token, this](ArtAddon* a) {
-				if (auto token = weak_token.lock(); token && token->alive) { MakeString(); }
+				if (auto token = weak_token.lock(); token && token->alive) { MakeString(font); }
 			});
 	}
 
-	void AddonTextBox::MakeString()
+	void AddonTextBox::MakeString(std::string font_path)
 	{
-		SKSE::log::trace("making string");
+		SKSE::log::trace("making string with font {}", font_path);
 		if (auto root_node = root ? root->Get3D() : nullptr)
 		{
 			NiTransform t;
 			for (int i = 0; string[i] != '\0'; i++)
 			{
-				characters.push_back(ArtAddon::Make(NifChar::kFontModelPath,
-					PlayerCharacter::GetSingleton(), root_node, t, [c = string[i]](ArtAddon* m) {
-						if (auto shader = helper::GetShaderProperty(m->Get3D(), NifChar::kNodeName))
-						{
-							auto oldmat = shader->material;
-							auto newmat = oldmat->Create();
-							newmat->CopyMembers(oldmat);
-							shader->material = newmat;
-							//newmat->IncRef();
-							//oldmat->DecRef();
-
-							auto temp = NifChar::AsciiToXY(c);
-
-							newmat->texCoordOffset[0].x = temp.x;
-							newmat->texCoordOffset[0].y = temp.y;
-							newmat->texCoordOffset[1].x = temp.x;
-							newmat->texCoordOffset[1].y = temp.y;
-						}
-					}));
-
-				t.translate.x -= NifChar::kCharacterWidth + spacing;
-			}
-		}
-	}
-
-	void DebugCreateSkeletonNodesAttached(std::vector<std::string>& a_nodenames,
-		std::vector<ArtAddonPtr> a_art, bool a_first_person, int a_color_hex)
-	{
-		RE::NiTransform temp;
-		auto            pc = RE::PlayerCharacter::GetSingleton();
-		for (auto str : a_nodenames)
-		{
-			if (auto pnode = pc->Get3D(a_first_person)->GetObjectByName(str))
-			{
-				a_art.push_back(ArtAddon::Make("wearable/HelperSphere.nif", pc->AsReference(),
-					pnode, temp, [a_color_hex](ArtAddon* a) {
-						helper::SetGlowColor(a->Get3D(), a_color_hex);
-						SKSE::log::trace("artaddon created on {}", a->GetParent()->name.c_str());
-					}));
-			}
-		}
-	}
-
-	void DebugCreateSkeletonNodesFloating(std::vector<std::string>& a_nodenames,
-		std::vector<ArtAddonPtr> a_art, bool a_first_person, int a_color_hex)
-	{
-		RE::NiTransform temp;
-		auto            pc = RE::PlayerCharacter::GetSingleton();
-		for (auto str : a_nodenames)
-		{
-			a_art.push_back(ArtAddon::Make("wearable/HelperSphere.nif", pc->AsReference(),
-				pc->Get3D(a_first_person), temp, [a_color_hex](ArtAddon* a) {
-					helper::SetGlowColor(a->Get3D(), a_color_hex);
-					SKSE::log::trace("artaddon created on {}", a->GetParent()->name.c_str());
-				}));
-		}
-	}
-
-	void DebugUpdateSkeletonNodes(
-		std::vector<std::string>& a_nodenames, std::vector<ArtAddonPtr> a_art, bool a_first_person)
-	{
-		if (a_nodenames.size() == a_art.size())
-		{
-			if (auto p3d = RE::PlayerCharacter::GetSingleton()->Get3D(a_first_person))
-			{
-				for (int i = 0; i < a_art.size(); i++)
+				if (string[i] == 0x0A)
 				{
-					if (auto pnode = p3d->GetObjectByName(a_nodenames[i]))
-					{
-						helper::SetWorldPosition(
-							a_art[i]->Get3D(), a_art[i]->GetParent(), pnode->world.translate);
-					}
+					t.translate.y += kLineSpacing;
+					t.translate.x = 0.f;
 				}
-			}
-		}
-	}
-
-	void DebugGetVRNodes(std::vector<NiPointer<NiNode>>* out)
-	{
-		if (auto pc = PlayerCharacter::GetSingleton())
-		{
-#define vr(X) out->push_back(pc->X);
-			vr(RightWandNode)     /* 4F8 */
-				vr(ArrowSnapNode) /* 5D8 */
-		}
-	}
-
-	void DebugGetVRNodeStrings(std::vector<std::string>* out)
-	{
-		if (auto pc = PlayerCharacter::GetSingleton())
-		{
-#define vr(X) out->push_back("#X");
-
-			vr(FollowNode)                        /* 3F8 */
-				vr(FollowOffset)                  /* 400 */
-				vr(HeightOffsetNode)              /* 408 */
-				vr(SnapWalkOffsetNode)            /* 410 */
-				vr(RoomNode)                      /* 418 */
-				vr(BlackSphere)                   /* 420 */
-				vr(uiNode)                        /* 428 */
-				vr(UIPointerNode)                 /* 438 */
-				vr(DialogueUINode)                /* 448 */
-				vr(TeleportDestinationPreview)    /* 450 */
-				vr(TeleportDestinationFail)       /* 458 */
-				vr(TeleportSprintPreview)         /* 460 */
-				vr(SpellOrigin)                   /* 468 */
-				vr(SpellDestination)              /* 470 */
-				vr(ArrowOrigin)                   /* 478 */
-				vr(ArrowDestination)              /* 480 */
-				vr(QuestMarker)                   /* 488 */
-				vr(LeftWandNode)                  /* 490 */
-				vr(LeftValveIndexControllerNode)  /* 4A0 */
-				vr(unkNode4A8)                    /* 4A8 */
-				vr(LeftWeaponOffsetNode)          /* 4B0 */
-				vr(LeftCrossbowOffsetNode)        /* 4B8 */
-				vr(LeftMeleeWeaponOffsetNode)     /* 4C0 */
-				vr(LeftStaffWeaponOffsetNode)     /* 4C8 */
-				vr(LeftShieldOffsetNode)          /* 4D0 */
-				vr(RightShieldOffsetNode)         /* 4D8 */
-				vr(SecondaryMagicOffsetNode)      /* 4E0 */
-				vr(SecondaryMagicAimNode)         /* 4E8 */
-				vr(SecondaryStaffMagicOffsetNode) /* 4F0 */
-				vr(RightWandNode)                 /* 4F8 */
-				vr(RightWandShakeNode)            /* 500 */
-				vr(RightValveIndexControllerNode) /* 508 */
-				vr(unkNode510)                    /* 510 */
-				vr(RightWeaponOffsetNode)         /* 518 */
-				vr(RightCrossbowOffsetNode)       /* 520 */
-				vr(RightMeleeWeaponOffsetNode)    /* 528 */
-				vr(RightStaffWeaponOffsetNode)    /* 530 */
-				vr(PrimaryMagicOffsetNode)        /* 538 */
-				vr(PrimaryMagicAimNode)           /* 540 */
-				vr(PrimaryStaffMagicOffsetNode)   /* 548 */
-				vr(LastSyncPos)                   /* 578 */
-				vr(UprightHmdNode)                /* 580 */
-				vr(NPCLHnd)                       /* 590 */
-				vr(NPCRHnd)                       /* 598 */
-				vr(NPCLClv)                       /* 5A0 */
-				vr(NPCRClv)                       /* 5A8 */
-				vr(BowAimNode)                    /* 5C8 */
-				vr(BowRotationNode)               /* 5D0 */
-				vr(ArrowSnapNode)                 /* 5D8 */
-				vr(ArrowHoldOffsetNode)           /* 5F8 */
-				vr(ArrowHoldNode)                 /* 600 */
-		}
-	}
-
-	void DebugDrawVRNodes(std::vector<NiPointer<NiNode>>& nodes, std::vector<ArtAddonPtr>* draw)
-	{
-		if (auto pc = RE::PlayerCharacter::GetSingleton()->Get3D(false))
-		{
-			RE::NiTransform temp;
-			for (auto n : nodes)
-			{
-				draw->push_back(ArtAddon::Make("wearable/HelperSphere.nif",
-					RE::PlayerCharacter::GetSingleton()->AsReference(), pc, temp));
-			}
-		}
-		else
-		{
-			SKSE::log::trace("DebugDrawVRNodes failed no player 3d");
-		}
-	}
-
-	void DebugUpdateVRNodes(std::vector<NiPointer<NiNode>>& nodes, std::vector<ArtAddonPtr>& draw)
-	{
-		if (auto pc =
-				RE::PlayerCharacter::GetSingleton()->Get3D(false) && nodes.size() == draw.size())
-		{
-			RE::NiTransform temp;
-			for (int i = 0; i < nodes.size(); i++)
-			{
-				helper::SetWorldPosition(
-					draw[i]->Get3D(), draw[i]->GetParent(), nodes[i]->world.translate);
-			}
-		}
-	}
-
-	void DebugShowVRNodeNames(std::vector<NiPointer<NiNode>>&                      nodes,
-		std::vector<std::string>&                                                  names,
-		std::unordered_map<std::string, std::unique_ptr<art_addon::AddonTextBox>>& text)
-	{
-		RE::PlayerCamera* camera = RE::PlayerCamera::GetSingleton();
-
-		/*
-		if (camera->cameraRoot->children.size() == 0) return;
-		for (auto& entry : camera->cameraRoot->children)
-		{
-			auto asCamera = skyrim_cast<RE::NiCamera*>(entry.get());
-			if (asCamera) camnode = NiPointer<RE::NiCamera>(asCamera);
-		}*/
-		if (RE::PlayerCharacter::GetSingleton()->Get3D(false))
-		{
-			if (auto camnode = camera->cameraRoot.get())
-			{
-				if (nodes.size() == names.size())
+				else
 				{
-					for (size_t i = 0; i < nodes.size(); i++)
-					{
-						auto dist = camnode->world.translate - nodes[i]->world.translate;
-						if (dist.Length() < 8.f && !text[names[i]])
-						{
-							NiTransform t = nodes[i]->world;
-							text[names[i]] = std::make_unique<AddonTextBox>(names[i].c_str(), 0.f,
-								RE::PlayerCharacter::GetSingleton()->Get3D(false), t);
-							SKSE::log::trace("create text box!");
-						}
-						else
-						{
-							if (text[names[i]]) { text[names[i]].reset(); }
-						}
-					}
+					characters.push_back(ArtAddon::Make(font_path, PlayerCharacter::GetSingleton(),
+						root_node, t, [c = string[i]](ArtAddon* m) {
+							if (auto shader =
+									helper::GetShaderProperty(m->Get3D(), NifChar::kNodeName))
+							{
+								auto oldmat = shader->material;
+								auto newmat = oldmat->Create();
+								newmat->CopyMembers(oldmat);
+								shader->material = newmat;
+								//newmat->IncRef();
+								oldmat->DecRef();
+
+								auto temp = NifChar::AsciiToXY(c);
+
+								newmat->texCoordOffset[0].x = temp.x;
+								newmat->texCoordOffset[0].y = temp.y;
+								newmat->texCoordOffset[1].x = temp.x;
+								newmat->texCoordOffset[1].y = temp.y;
+							}
+						}));
+					t.translate.x -= NifChar::kCharacterWidth + spacing;
 				}
 			}
 		}

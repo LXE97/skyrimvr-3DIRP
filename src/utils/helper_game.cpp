@@ -21,6 +21,22 @@ namespace helper
 		RE::write_vfunc<RE::PlayerCharacter, 0xAF, PlayerCharacter_Update>();
 	}
 
+	void SetControllerTime(NiAVObject* a_obj, float a_time)
+	{
+		if (!a_obj) { return; }
+
+		for (auto* controller = a_obj->GetControllers(); controller;
+			controller = controller->next.get())
+		{
+			controller->scaledTime = a_time;
+		}
+
+		if (auto* node = a_obj->AsNode())
+		{
+			for (auto& child : node->children) { SetControllerTime(child.get(), a_time); }
+		}
+	}
+
 	TESForm* LookupByName(FormType a_typeEnum, const char* a_name)
 	{
 		auto* data = TESDataHandler::GetSingleton();
@@ -189,21 +205,20 @@ namespace helper
 			int player = 0;
 			int dangling = 0;
 			processLists->ForEachModelEffect([&](RE::ModelReferenceEffect* a_modelEffect) {
-				if (a_actor == nullptr || a_modelEffect->target.get()->AsReference() == a_actor)
-				{
+
 					if (a_modelEffect->artObject)
 					{
-						SKSE::log::debug("MRE:{}  AO:{:x}", (void*)&a_modelEffect,
-							a_modelEffect->artObject->GetFormID());
+						SKSE::log::debug("MRE:{}  AO:{:x} lifetime:{}", (void*)&a_modelEffect,
+							a_modelEffect->artObject->GetFormID(), a_modelEffect->lifetime);
 						player++;
 					}
 					else
 					{
-						SKSE::log::debug("MRE:{}  AO:{}", (void*)&a_modelEffect,
-							(void*)(a_modelEffect->artObject));
+						SKSE::log::debug("MRE:{}  AO:{}  lifetime:{}", (void*)&a_modelEffect,
+							(void*)(a_modelEffect->artObject), a_modelEffect->lifetime);
 						dangling++;
 					}
-				}
+				
 				return RE::BSContainer::ForEachResult::kContinue;
 			});
 			SKSE::log::debug("{} effects and {} dangling MRE", player, dangling);

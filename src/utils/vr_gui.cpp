@@ -33,6 +33,9 @@ namespace vr_gui
 		}
 	}
 
+	static const char* kHelperModelPath = "HelperSphere.nif";
+	static const char* kDebugModelPath = "DebugSphere.nif";
+
 	const NiTransform Hand::GetTransform() const
 	{
 		if (transform) { return *transform * offset; }
@@ -285,13 +288,14 @@ namespace vr_gui
 			windows.erase(it);
 			for (auto& hand : hands) { hovered_map[&hand].erase(a_del); }
 		}
-
+#ifdef HUD_OVERRIDES
 		if (windows.empty())
 		{
 			SKSE::GetTaskInterface()->AddTask([this]() {
 				if (activator_obj) { activator_obj->MoveTo(modspacemarker_obj); }
 			});
 		}
+#endif
 	}
 
 	void Controller::HandleHUDOverrides()
@@ -414,7 +418,7 @@ namespace vr_gui
 		for (auto& child : a_parent.GetChildren())
 		{
 			// All conditions for determining whether a widget is active are here
-			if (child->IsEnabled() && child->HandStateFilter() && child->TestOverlap(a_hand))
+			if (child->IsEnabled() && child->HandStateFilter(a_hand) && child->TestOverlap(a_hand))
 			{
 				if (!child->IsHovered(a_hand.IsLeft())) { child->OnHoverImpl(true, a_hand); }
 				a_hover_list.push_back(child.get());
@@ -722,6 +726,7 @@ namespace vr_gui
 		{
 			RE::NiUpdateData ctx;
 			auto             model_local = node->parent->world.Invert() * GetWorld();
+
 			node->local.translate = model_local.translate;
 			node->Update(ctx);
 		}
@@ -837,7 +842,7 @@ namespace vr_gui
 	void Window::AddModel(const std::string& a_path, bool a_tempeffect,
 		std::function<void(art_addon::ArtAddon*)> a_3DInitializedCallback)
 	{
-		RE::NiTransform t{};
+		RE::NiTransform t = local;
 
 		if (a_tempeffect)
 		{
