@@ -8,6 +8,7 @@ namespace spellbook
 
 	class Spellbook;
 	class GrabNode;
+	class BasicHitbox;
 
 	Spellbook* Summon(bool isLeft);
 	void       Dismiss(Spellbook* a_spbk);
@@ -38,22 +39,15 @@ namespace spellbook
 		static constexpr ni_animator::AnimationRange flip_left{ 0.95f, 1.96f, 0.95f };
 		static constexpr ni_animator::AnimationRange flip_right{ 1.96f, 2.97f, 0.95f };
 
-void Update(float a_delta) override;
-
-		bool HandStateFilter(Hand& a_hand) const override;
-
-		void OnClick(bool a_activate, Hand& a_hand, MenuAction a_action) override;
+		void Update(float a_delta) override;
 
 		void VirtualParent(NiAVObject* a_new, NiTransform& a_offset);
 
 		void DisplaySpellInfo(std::string font, float z_offset = -0.03f);
 
 		void TurnPage(bool a_direction_left);
-		void Close()
-		{
-			animator.Queue(
-				close, 2.f, [this]() { Controller::GetSingleton()->MarkForDelete(this); });
-		}
+
+		void Close();
 
 	private:
 		struct Layout
@@ -79,6 +73,7 @@ void Update(float a_delta) override;
 		std::unique_ptr<art_addon::AddonTextBox> spell_duration;
 		GridContainer*                           spell_icon_container;
 		GrabNode*                                grab_node;
+		BasicHitbox*                             interaction_volume;
 
 		ni_animator::NiAnimator animator{};
 
@@ -86,6 +81,8 @@ void Update(float a_delta) override;
 		int      page_index = 0;
 		Category selected;
 		Layout   layout;
+
+		float animation_speed = 3;
 	};
 
 	class GrabNode : public Widget
@@ -105,6 +102,19 @@ void Update(float a_delta) override;
 		NiAVObject* follow_target{};
 		NiPoint3    offset;
 		NiTransform parent_store{};
+
+		ModeHandle hand_mode;
+	};
+
+	class BasicHitbox : public Widget
+	{
+	public:
+		BasicHitbox(Widget* a_parent, NiTransform a_local, NiPoint3 a_extents, float a_radius) :
+			Widget(a_parent, a_local, a_extents, a_radius) {};
+
+		void OnClick(bool a_activate, Hand& a_hand, MenuAction a_action) override;
+
+		virtual bool TestOverlap(Hand& a_hand) const override;
 	};
 
 	class SpellIcon : public Widget
@@ -118,22 +128,25 @@ void Update(float a_delta) override;
 	public:
 		HandPointing(Widget* a_parent, bool isLeft) : Behavior(a_parent), isLeft(isLeft) {}
 
-		~HandPointing() { Controller::GetSingleton()->GetHand(isLeft)->RestoreMode(); }
-
 		void OnHover(bool a_activate, Hand& a_hand) override
 		{
 			if (a_hand.IsLeft() == isLeft)
 			{
-				if (a_activate) { a_hand.SetMode(); }
+				if (a_activate)
+				{
+					hand_mode =
+						a_hand.RequestMode(Hand::Mode::kPointing, Hand::ModePriority::kPassive);
+				}
 				else
 				{
-					a_hand.RestoreMode();
+					hand_mode.Release();
 				}
 			}
 		}
 
 	private:
-		bool isLeft;
+		bool       isLeft;
+		ModeHandle hand_mode;
 	};
 
 	class HoverExitVelocityTracker : public Behavior
