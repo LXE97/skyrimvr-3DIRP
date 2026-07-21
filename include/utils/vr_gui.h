@@ -41,9 +41,6 @@ namespace vr_gui
 		std::string         text;
 	};
 
-	// observes and caches input device state
-	
-
 	class Behavior
 	{
 	public:
@@ -231,6 +228,35 @@ namespace vr_gui
 		static constexpr int MAX_DEPTH = 20;
 
 		friend class Controller;
+	};
+
+	/* Widget whose model is attached to a specific scene node and provides the authoritative
+	 * world transform. The Widget's local transform is the model's offset from that node. */
+	class ModelDrivenWidget : public Widget
+	{
+	public:
+		ModelDrivenWidget(Widget* a_parent, NiAVObject* a_modelParent, NiTransform a_local,
+			NiPoint3 a_halfExtents, float a_radius) :
+			Widget(a_parent, std::move(a_local), a_halfExtents, a_radius),
+			model_parent(a_modelParent)
+		{
+			base_extents = extents;
+			base_radius = radius;
+		}
+
+		ModelDrivenWidget(Widget* a_parent, NiAVObject* a_modelParent, NiTransform a_local,
+			NiPoint3 a_halfExtents) :
+			ModelDrivenWidget(a_parent, a_modelParent, std::move(a_local), a_halfExtents,
+				helper::ComputeRadius(a_halfExtents))
+		{}
+
+		NiTransform GetWorld(int depth = 0) const override;
+
+		void AddModel(const std::string& a_path, bool a_tempeffect = false,
+			std::function<void(art_addon::ArtAddon*)> a_3DInitializedCallback = nullptr) override;
+
+	private:
+		NiAVObject* model_parent{};
 	};
 
 	/* Root of all Widget trees, has an ObjectReference for attaching models.

@@ -49,16 +49,28 @@ namespace vr3dui
 			{
 				ni_animator::SetControllerFlags(node, true, false, false, false, true);
 				node->local.scale = windowscale / node->parent->world.scale;
+
+				//test categories
+				if (auto tabparent = node->GetObjectByName(kTabParentNodeName))
+				{
+					SKSE::log::trace("adding catageory tab");
+					NiTransform t;
+					t.translate = kTabOffset;
+					auto tab = this->AddChild<ModelDrivenWidget>(tabparent, t, NiPoint3(2, 1.5, 1));
+					tab->AddModel(kChapterTabModel, false, [](ArtAddon* m){
+						SKSE::log::trace("tab created");
+					});
+				}
 			}
 		});
 
 		NiTransform t;
+
 		t.translate = { 10, -18, -4 };
 		grab_node = AddChild<GrabNode>(isLeft, t);
 
 		t.translate = { -10, 0, 5 };
 		auto interaction_volume = AddChild<BasicHitbox>(isLeft, t, NiPoint3(26, 17, 8));
-
 		interaction_volume->AddBehavior<HandPointing>(!isLeft);
 
 		animator.PlayImmediately(open, animation_speed);
@@ -125,7 +137,7 @@ namespace vr3dui
 				grabHand = nullptr;
 				isGrabbed = false;
 				follow_target = nullptr;
-				
+
 				if (!IsHovered(a_hand.IsLeft())) { hand_mode.Release(); }
 				else
 				{

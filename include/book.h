@@ -50,6 +50,10 @@ namespace vr3dui
 
 		static constexpr const char* kLeftPageNodeName = "Book CoverPage Turn04";
 		static constexpr const char* kRightPageNodeName = "Book TurnPage2";
+		static constexpr const char* kTabParentNodeName = "Book Pages Nub";
+		static constexpr const char* kChapterTabModel = "ChapterTab.nif";
+
+		const NiPoint3 kTabOffset = { -1.0f, 10.269f, -0.076599f };
 
 		GrabNode* grab_node;
 
