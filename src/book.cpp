@@ -49,18 +49,7 @@ namespace vr3dui
 			{
 				ni_animator::SetControllerFlags(node, true, false, false, false, true);
 				node->local.scale = windowscale / node->parent->world.scale;
-
-				//test categories
-				if (auto tabparent = node->GetObjectByName(kTabParentNodeName))
-				{
-					SKSE::log::trace("adding catageory tab");
-					NiTransform t;
-					t.translate = kTabOffset;
-					auto tab = this->AddChild<ModelDrivenWidget>(tabparent, t, NiPoint3(2, 1.5, 1));
-					tab->AddModel(kChapterTabModel, false, [](ArtAddon* m){
-						SKSE::log::trace("tab created");
-					});
-				}
+				tab_parent = node->GetObjectByName(kTabParentNodeName);
 			}
 		});
 
@@ -76,21 +65,124 @@ namespace vr3dui
 		animator.PlayImmediately(open, animation_speed);
 	}
 
+	void Book::TurnPageLeft()
+	{
+		if (animator.QueuedCount() >= 2) { return; }
+
+		if (chapters.empty() || chapter_index >= chapters.size()) { return; }
+
+		auto& chapter = *chapters[chapter_index];
+
+		if (page_index + 1 < chapter.pages.size()) { ++page_index; }
+		else if (chapter_index + 1 < chapters.size())
+		{
+			chapters[chapter_index]->OnSelected(false);
+			++chapter_index;
+			chapters[chapter_index]->OnSelected(true);
+			page_index = 0;
+		}
+		else
+		{
+			return;
+		}
+		DrawCurrentPage();
+		animator.Queue(flip_left, animation_speed);
+	}
+
+	void Book::TurnPageRight()
+	{
+		if (animator.QueuedCount() >= 2) { return; }
+
+		if (chapters.empty() || chapter_index >= chapters.size()) { return; }
+
+		auto& chapter = *chapters[chapter_index];
+
+		if (page_index > 0) { --page_index; }
+		else if (chapter_index > 0)
+		{
+			chapters[chapter_index]->OnSelected(false);
+			--chapter_index;
+			chapters[chapter_index]->OnSelected(true);
+			page_index = chapters[chapter_index]->pages.size() - 1;
+		}
+		else
+		{
+			return;
+		}
+
+		animator.Queue(flip_right, animation_speed, [this] { DrawCurrentPage(); });
+	}
+
+	void Book::TurnToChapter(std::size_t a_index)
+	{
+		if (animator.QueuedCount() >= 2) { return; }
+		if (a_index >= chapters.size() || a_index == chapter_index) { return; }
+
+		const auto& animation = a_index < chapter_index ? flip_right : flip_left;
+
+		chapters[chapter_index]->OnSelected(false);
+		chapter_index = a_index;
+		chapters[chapter_index]->OnSelected(true);
+		page_index = 0;
+
+		animator.Queue(animation, animation_speed, [this] { DrawCurrentPage(); });
+	}
+
+	void Book::AddChapter(std::string a_model_path)
+	{
+		chapters.emplace_back(std::make_unique<Chapter>());
+		AddChapterTab(chapters.size() - 1, a_model_path);
+		chapters[0]->OnSelected(true);
+	}
+
+	void Book::AddChapterTab(std::size_t a_index, std::string a_model_path)
+	{
+		if (!tab_parent || a_index >= chapters.size() || !chapters[a_index] ||
+			chapters[a_index]->tab)
+		{
+			return;
+		}
+
+		NiTransform transform;
+		transform.translate = layout.kTabOffset;
+		transform.translate.y -= static_cast<float>(a_index) * layout.tab_spacing;
+
+		auto* tab = AddChild<ChapterTab>(tab_parent, transform, NiPoint3(1, 1, 1), a_index);
+		tab->AddModel(a_model_path);
+		chapters[a_index]->tab = tab;
+	}
+
+	void ChapterTab::OnClick(bool a_activate, Hand&, MenuAction a_action)
+	{
+		if (a_activate && a_action == MenuAction::kPrimary)
+		{
+			if (auto* book = dynamic_cast<Book*>(parent)) { book->TurnToChapter(chapter_index); }
+		}
+	}
+
+	void Book::DrawCurrentPage()
+	{
+		if (chapter_index >= chapters.size() || !chapters[chapter_index]) { return; }
+
+		auto& pages = chapters[chapter_index]->pages;
+		if (page_index >= pages.size() || !pages[page_index]) { return; }
+
+		pages[page_index]->Draw();
+		std::string page_str = std::to_string(page_index + 1);
+		page_str.append(" / ").append(std::to_string(pages.size()));
+		NiTransform t;
+		t.translate = layout.kRightPageOrigin;
+		t.translate += { layout.kPageWidth - 0.5, 0.5 - layout.kPageHeight, 0 };
+		page_numbers = std::make_unique<AddonTextBox>(page_str, -0.6f,
+			model->Get3D()->GetObjectByName(kRightPageNodeName), t, "SpellbookVR/char_2048.nif");
+	}
+
+	void Book::Page::Draw() {}
+
 	void Book::Update(float a_delta)
 	{
 		Widget::Update(a_delta);
 		animator.Update(Get3D(), a_delta);
-	}
-
-	void Book::TurnPage(bool a_direction_left)
-	{
-		if (animator.QueuedCount() >= 2) { return; }
-
-		if (a_direction_left) { animator.Queue(flip_left, animation_speed); }
-		else
-		{
-			animator.Queue(flip_right, animation_speed);
-		}
 	}
 
 	void Book::VirtualParent(NiAVObject* a_new, NiTransform& a_offset)
@@ -207,13 +299,41 @@ namespace vr3dui
 	{
 		if (a_activate && a_action == MenuAction::kScrollLeft)
 		{
-			dynamic_cast<Book*>(parent)->TurnPage(true);
+			dynamic_cast<Book*>(parent)->TurnPageLeft();
 		}
 		else if (a_activate && a_action == MenuAction::kScrollRight)
 		{
-			dynamic_cast<Book*>(parent)->TurnPage(false);
+			dynamic_cast<Book*>(parent)->TurnPageRight();
+		}
+		else if (a_activate && a_action == MenuAction::kScrollUp)
+		{
+			auto book = dynamic_cast<Book*>(parent);
+			book->TurnToChapter(book->GetChapterIndex() - 1);
+		}
+		else if (a_activate && a_action == MenuAction::kScrollDown)
+		{
+			auto book = dynamic_cast<Book*>(parent);
+			book->TurnToChapter(book->GetChapterIndex() + 1);
 		}
 	}
 
 	void Book::DrawExtents(bool show) {}
+
+	void ChapterTab::OnHover(bool a_activate, Hand& a_hand) { UpdateSelectionVisual(); }
+
+	void ChapterTab::OnSelected(bool a_selected)
+	{
+		selected = a_selected;
+		UpdateSelectionVisual();
+	}
+
+	void ChapterTab::UpdateSelectionVisual()
+	{
+		if (auto* node = Get3D())
+		{
+			const bool highlighted = selected || IsHovered(false) || IsHovered(true);
+
+			helper::SetGlowMult(node, highlighted ? 0.9f : 0.0f);
+		}
+	}
 }

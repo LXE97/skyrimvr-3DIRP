@@ -7,6 +7,7 @@ namespace vr3dui
 	using namespace vr_gui;
 
 	class Book;
+	class ChapterTab;
 	class GrabNode;
 	class BasicHitob;
 
@@ -15,37 +16,99 @@ namespace vr3dui
 
 	void DismissBook(Window* a_book_window);
 
+	class ChapterTab : public ModelDrivenWidget
+	{
+	public:
+		ChapterTab(Widget* a_parent, NiAVObject* a_modelParent, NiTransform a_local,
+			NiPoint3 a_halfExtents, std::size_t a_chapterIndex) :
+			ModelDrivenWidget(a_parent, a_modelParent, std::move(a_local), a_halfExtents),
+			chapter_index(a_chapterIndex)
+		{ priority = 2; }
+
+		void OnClick(bool a_activate, Hand& a_hand, MenuAction a_action) override;
+
+		void OnHover(bool a_activate, Hand& a_hand) override;
+
+		void OnSelected(bool a_selected);
+
+		virtual void UpdateSelectionVisual();
+
+		bool HandStateFilter(Hand& a_hand) const override
+		{ return parent && parent->HandStateFilter(a_hand); }
+
+	private:
+		std::size_t chapter_index{};
+		bool        selected{ false };
+	};
+
 	class Book : public Widget
 	{
 	public:
 		Book(Widget* a_parent, std::string a_model_path, bool a_isLeft, NiTransform a_transform);
 
-		bool HandStateFilter(Hand& a_hand) const override { return a_hand.IsLeft() != isLeft; }
-
 		static constexpr float kDefaultWindowRadius = 40.f;
 
-		static constexpr ni_animator::AnimationRange open{ 0.0f, 1.f, 1.f };
-		static constexpr ni_animator::AnimationRange close{ 3.f, 3.97f, 0.0f };
-		static constexpr ni_animator::AnimationRange flip_left{ 1.f, 2.f, 1.f };
-		static constexpr ni_animator::AnimationRange flip_right{ 2.f, 3.f, 1.f };
+		struct Page
+		{
+			virtual ~Page() = default;
+			virtual void Draw();
+		};
+
+		class Chapter
+		{
+		public:
+			Chapter() { MakePages(); }
+			virtual ~Chapter() = default;
+
+			virtual void MakePages()
+			{
+				pages.emplace_back(std::make_unique<Page>());
+				pages.emplace_back(std::make_unique<Page>());
+			};
+
+			virtual void OnSelected(bool a_selected)
+			{
+				if (tab) { tab->OnSelected(a_selected); }
+			}
+
+			std::vector<std::unique_ptr<Page>> pages;
+			ChapterTab*                        tab{};
+		};
+
+		void AddChapter(std::string a_model_path = kChapterTabModel);
+
+		// Advance through pages
+		void TurnPageLeft();
+		// Reverse through pages
+		void TurnPageRight();
+
+		void TurnToChapter(std::size_t a_index);
+
+		std::size_t GetChapterIndex() const { return chapter_index; }
+		std::size_t GetPageIndex() const { return page_index; }
+
+		void Close();
 
 		void Update(float a_delta) override;
 
 		void VirtualParent(NiAVObject* a_new, NiTransform& a_offset);
 
-		void TurnPage(bool a_direction_left);
-
-		void Close();
-
 		void DrawExtents(bool show);
+
+		bool HandStateFilter(Hand& a_hand) const override { return a_hand.IsLeft() != isLeft; }
 
 	protected:
 		struct Layout
 		{
-			int   items_per_row = 5;
-			float padding = 1;
-			float page_width = 15;
-			float page_height = 20;
+			const NiPoint3 kLeftPageOrigin = { 3, 10.4, 0.01 };
+			const NiPoint3 kRightPageOrigin = { 0, 10.4, 0.01 };
+
+			static constexpr float kPageWidth = 15;
+			static constexpr float kPageHeight = 10.4 * 2;
+
+			const NiPoint3 kTabOffset = { 0.0f, 9.5f, -0.077f };
+
+			float tab_spacing = 1.8f;
 		};
 
 		static constexpr const char* kLeftPageNodeName = "Book CoverPage Turn04";
@@ -53,14 +116,24 @@ namespace vr3dui
 		static constexpr const char* kTabParentNodeName = "Book Pages Nub";
 		static constexpr const char* kChapterTabModel = "ChapterTab.nif";
 
-		const NiPoint3 kTabOffset = { -1.0f, 10.269f, -0.076599f };
+		static constexpr ni_animator::AnimationRange open{ 0.0f, 1.f, 1.f };
+		static constexpr ni_animator::AnimationRange close{ 3.f, 3.97f, 0.0f };
+		static constexpr ni_animator::AnimationRange flip_left{ 1.f, 2.f, 1.f };
+		static constexpr ni_animator::AnimationRange flip_right{ 2.f, 3.f, 1.f };
 
+		std::vector<std::unique_ptr<Chapter>>    chapters;
+		std::size_t                              chapter_index{};
+		std::size_t                              page_index{};
+		NiAVObject*                              tab_parent{};
+		std::unique_ptr<art_addon::AddonTextBox> page_numbers;
+
+		void      AddChapterTab(std::size_t a_index, std::string a_model_path);
+		void      DrawCurrentPage();
 		GrabNode* grab_node;
 
 		ni_animator::NiAnimator animator{};
 
 		bool   isLeft;
-		int    page_index = 0;
 		Layout layout;
 
 		float animation_speed = 3;
@@ -76,10 +149,11 @@ namespace vr3dui
 			if (a_hand.IsLeft() != isLeft)
 			{
 				// only grab when palm is facing along this Y axis
-				const NiPoint3 local_y{ 0.0f, 1.0f, 0.0f };
-				const auto     hand_normal = a_hand.GetTransform().rotate * local_y;
-				const auto     grab_normal = GetWorld().rotate * local_y;
-				if (hand_normal.Dot(grab_normal) < 0.0f) { return true; }
+				const NiPoint3  local_y{ 0.0f, 1.0f, 0.0f };
+				const auto      hand_normal = a_hand.GetTransform().rotate * local_y;
+				const auto      grab_normal = GetWorld().rotate * local_y;
+				constexpr float kCos45Degrees = 0.70710678f;
+				if (hand_normal.Dot(grab_normal) < -kCos45Degrees) { return true; }
 			}
 			return false;
 		}
@@ -139,7 +213,8 @@ namespace vr3dui
 			isLeft(a_isLeft)
 		{ priority = 5; }
 
-		bool HandStateFilter(Hand& a_hand) const override { return a_hand.IsLeft() != isLeft; }
+		bool HandStateFilter(Hand& a_hand) const override
+		{ return parent && parent->HandStateFilter(a_hand); }
 
 		void OnClick(bool a_activate, Hand& a_hand, MenuAction a_action) override;
 

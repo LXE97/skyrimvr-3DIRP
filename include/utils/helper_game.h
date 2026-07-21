@@ -35,7 +35,7 @@ namespace helper
 	float GetAmmoPercent(RE::Actor* a_a, float a_ammoCountMult);
 	float GetShoutCooldownPercent(RE::Actor* a_a, float a_MaxCDTime);
 
-	void SetGlowMult();
+	void SetGlowMult(RE::NiAVObject* a_target, float a_glow_mult);
 	void SetGlowColor(RE::NiAVObject* a_target, int a_color_hex);
 	void SetSpecularMult();
 	void SetSpecularColor();
