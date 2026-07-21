@@ -117,5 +117,7 @@ namespace ni_animator
 
 	bool NiAnimator::HasQueued() const { return !queue.empty(); }
 
+	std::size_t NiAnimator::QueuedCount() const { return queue.size(); }
+
 	bool NiAnimator::IsBusy() const { return IsPlaying() || HasQueued(); }
 }

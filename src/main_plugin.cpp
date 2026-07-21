@@ -5,11 +5,12 @@
 #include "menu_checker.h"
 #include "mod_event_sink.hpp"
 #include "settings.h"
-#include "spellbook.h"
 #include "vr_gui.h"
 #include "vrinput.h"
 
-namespace spellbookvr
+#include "book.h"
+
+namespace vr3dui
 {
 	using namespace RE;
 	using namespace art_addon;
@@ -73,7 +74,7 @@ namespace spellbookvr
 		pc = PlayerCharacter::GetSingleton();
 	}
 
-	spellbook::Spellbook* spbk;
+	Window* book_window;
 
 	static bool OnDebugButton(const vrinput::ModInputEvent& e)
 	{
@@ -81,11 +82,11 @@ namespace spellbookvr
 
 		if (e.button_state == vrinput::ButtonState::kButtonDown)
 		{
-			if (!spbk) { spbk = spellbook::Summon(true); }
+			if (!book_window) { book_window = SummonAttachedBook(true); }
 			else
 			{
-				spellbook::Dismiss(spbk);
-				spbk = nullptr;
+				DismissBook(book_window);
+				book_window = nullptr;
 			}
 
 			toggle ^= 1;
@@ -98,7 +99,7 @@ namespace spellbookvr
 	{
 		static bool toggle = true;
 
-		if (spbk)spbk->ShowHitboxes(toggle);
+		if (book_window)book_window->ShowHitboxes(toggle);
 
 		toggle^=1;
 		return false;

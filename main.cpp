@@ -65,24 +65,27 @@ void MessageListener(SKSE::MessagingInterface::Message* message)
 		break;
 
 	case SKSE::MessagingInterface::kDataLoaded:
+		if (false)
 		{
 			if (auto file =
-					RE::TESDataHandler::GetSingleton()->LookupModByName(spellbookvr::kPluginName))
+					RE::TESDataHandler::GetSingleton()->LookupModByName(vr3dui::kPluginName))
 			{
-				spellbookvr::g_esp_index = file->GetPartialIndex();
-				info("kDataLoaded: esp ID = {}", spellbookvr::g_esp_index);
-				if (!spellbookvr::g_esp_index)
+				vr3dui::g_esp_index = file->GetPartialIndex();
+				info("kDataLoaded: esp ID = {}", vr3dui::g_esp_index);
+				if (!vr3dui::g_esp_index)
 				{
 					g_plugin_error = true;
 					critical("Plugin disabled, no esp");
 				}
 			}
-
-			if (!g_plugin_error) { spellbookvr::Init(); }
 		}
 
+		if (!g_plugin_error) { vr3dui::Init(); }
+
+		break;
+
 	case SKSE::MessagingInterface::kPostLoadGame:
-		if (!g_plugin_error) { spellbookvr::OnGameLoad(); }
+		if (!g_plugin_error) { vr3dui::OnGameLoad(); }
 	default:
 		break;
 	}
@@ -96,7 +99,7 @@ void OnPapyrusVRMessage(SKSE::MessagingInterface::Message* message)
 	{
 		if (message->type == kPapyrusVR_Message_Init && message->data)
 		{
-			spellbookvr::g_papyrusvr = (PapyrusVRAPI*)message->data;
+			vr3dui::g_papyrusvr = (PapyrusVRAPI*)message->data;
 		}
 	}
 }

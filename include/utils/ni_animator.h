@@ -39,6 +39,7 @@ namespace ni_animator
 
 		[[nodiscard]] bool IsPlaying() const;
 		[[nodiscard]] bool HasQueued() const;
+		[[nodiscard]] std::size_t QueuedCount() const;
 		[[nodiscard]] bool IsBusy() const;
 
 	private:

@@ -122,7 +122,7 @@ namespace vr_gui
 			break;
 
 		case Mode::kPointing:
-			radius = 8.f;
+			radius = 7.f;
 			extents = { 0.7, 0.7, 3.5 };
 			offset.translate = isLeft ? NiPoint3{ -2.5, -1.6, 12 } : NiPoint3{ 2.5, -1.6, 12 };
 			offset.rotate.SetEulerAnglesXYZ(-0.3141593, isLeft ? 0.1396263 : -0.1396263, 0);

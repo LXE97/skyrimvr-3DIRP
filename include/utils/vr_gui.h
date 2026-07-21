@@ -496,6 +496,8 @@ namespace vr_gui
 		RE::NiPoint3    rollover_default_hand_pos;
 		RE::NiMatrix3   rollover_default_hand_rot;
 		float           factivatepicklength_default;
+
+		bool initialized = false;
 	};
 
 	inline void PostWandUpdate() { Controller::GetSingleton()->HandleHUDOverrides(); }

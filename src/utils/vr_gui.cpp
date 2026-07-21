@@ -31,12 +31,11 @@ namespace vr_gui
 						}
 			}
 		}
+
 	}
 
 	static const char* kHelperModelPath = "HelperSphere.nif";
 	static const char* kDebugModelPath = "DebugSphere.nif";
-
-	
 
 	void Controller::Cleanup()
 	{
@@ -55,11 +54,9 @@ namespace vr_gui
 		widgets_to_delete.clear();
 		hovered_map.clear();
 
-		auto* setting = RE::GetINISetting("fActivatePickLength:Interface");
-		if (setting) factivatepicklength_default = setting->data.f;
-
-		g_higgsInterface->GetSettingDouble("FarCastDistance", FarCastDistance);
-		g_higgsInterface->GetSettingDouble("NearCastDistance", NearCastDistance);
+		ReleaseInputBlock(true);
+		// create right (0) and left hands
+		hands = { Hand(false), Hand(true) };
 
 		if (auto form = TESForm::LookupByID(0x7))
 		{
@@ -90,36 +87,43 @@ namespace vr_gui
 			}
 		}
 
-		ReleaseInputBlock(true);
+		if (!initialized)
+		{
+			auto* setting = RE::GetINISetting("fActivatePickLength:Interface");
+			if (setting) factivatepicklength_default = setting->data.f;
 
-		// create right (0) and left hands
-		hands = { Hand(false), Hand(true) };
+			g_higgsInterface->GetSettingDouble("FarCastDistance", FarCastDistance);
+			g_higgsInterface->GetSettingDouble("NearCastDistance", NearCastDistance);
 
-		// register for input events
-		vrinput::AddCallback(InputEventHandlerStatic, settings.primary, vrinput::Hand::kRight,
-			vrinput::ActionType::kPress);
-		vrinput::AddCallback(InputEventHandlerStatic, settings.secondary, vrinput::Hand::kRight,
-			vrinput::ActionType::kPress);
-		vrinput::AddCallback(InputEventHandlerStatic, vr::EVRButtonId::k_EButton_DPad_Up,
-			vrinput::Hand::kRight, vrinput::ActionType::kPress);
-		vrinput::AddCallback(InputEventHandlerStatic, vr::EVRButtonId::k_EButton_DPad_Down,
-			vrinput::Hand::kRight, vrinput::ActionType::kPress);
-		vrinput::AddCallback(InputEventHandlerStatic, settings.primary, vrinput::Hand::kLeft,
-			vrinput::ActionType::kPress);
-		vrinput::AddCallback(InputEventHandlerStatic, settings.secondary, vrinput::Hand::kLeft,
-			vrinput::ActionType::kPress);
-		vrinput::AddCallback(InputEventHandlerStatic, vr::EVRButtonId::k_EButton_DPad_Up,
-			vrinput::Hand::kLeft, vrinput::ActionType::kPress);
-		vrinput::AddCallback(InputEventHandlerStatic, vr::EVRButtonId::k_EButton_DPad_Down,
-			vrinput::Hand::kLeft, vrinput::ActionType::kPress);
-		vrinput::AddCallback(InputEventHandlerStatic, vr::EVRButtonId::k_EButton_DPad_Left,
-			vrinput::Hand::kLeft, vrinput::ActionType::kPress);
-		vrinput::AddCallback(InputEventHandlerStatic, vr::EVRButtonId::k_EButton_DPad_Right,
-			vrinput::Hand::kLeft, vrinput::ActionType::kPress);
-		vrinput::AddCallback(InputEventHandlerStatic, vr::EVRButtonId::k_EButton_DPad_Left,
-			vrinput::Hand::kRight, vrinput::ActionType::kPress);
-		vrinput::AddCallback(InputEventHandlerStatic, vr::EVRButtonId::k_EButton_DPad_Right,
-			vrinput::Hand::kRight, vrinput::ActionType::kPress);
+			// register for input events
+
+			vrinput::AddCallback(InputEventHandlerStatic, settings.primary, vrinput::Hand::kRight,
+				vrinput::ActionType::kPress);
+			vrinput::AddCallback(InputEventHandlerStatic, settings.secondary, vrinput::Hand::kRight,
+				vrinput::ActionType::kPress);
+			vrinput::AddCallback(InputEventHandlerStatic, vr::EVRButtonId::k_EButton_DPad_Up,
+				vrinput::Hand::kRight, vrinput::ActionType::kPress);
+			vrinput::AddCallback(InputEventHandlerStatic, vr::EVRButtonId::k_EButton_DPad_Down,
+				vrinput::Hand::kRight, vrinput::ActionType::kPress);
+			vrinput::AddCallback(InputEventHandlerStatic, settings.primary, vrinput::Hand::kLeft,
+				vrinput::ActionType::kPress);
+			vrinput::AddCallback(InputEventHandlerStatic, settings.secondary, vrinput::Hand::kLeft,
+				vrinput::ActionType::kPress);
+			vrinput::AddCallback(InputEventHandlerStatic, vr::EVRButtonId::k_EButton_DPad_Up,
+				vrinput::Hand::kLeft, vrinput::ActionType::kPress);
+			vrinput::AddCallback(InputEventHandlerStatic, vr::EVRButtonId::k_EButton_DPad_Down,
+				vrinput::Hand::kLeft, vrinput::ActionType::kPress);
+			vrinput::AddCallback(InputEventHandlerStatic, vr::EVRButtonId::k_EButton_DPad_Left,
+				vrinput::Hand::kLeft, vrinput::ActionType::kPress);
+			vrinput::AddCallback(InputEventHandlerStatic, vr::EVRButtonId::k_EButton_DPad_Right,
+				vrinput::Hand::kLeft, vrinput::ActionType::kPress);
+			vrinput::AddCallback(InputEventHandlerStatic, vr::EVRButtonId::k_EButton_DPad_Left,
+				vrinput::Hand::kRight, vrinput::ActionType::kPress);
+			vrinput::AddCallback(InputEventHandlerStatic, vr::EVRButtonId::k_EButton_DPad_Right,
+				vrinput::Hand::kRight, vrinput::ActionType::kPress);
+
+			initialized = true;
+		}
 	}
 
 	void Controller::Update()
@@ -599,9 +603,9 @@ namespace vr_gui
 				SKSE::log::trace(
 					"showing extents on widget: {} {} {}", extents.x, extents.y, extents.z);
 			});
-			AddModel("DebugSphere.nif", true, [radius = this->radius](ArtAddon* sphere) {
-				if (sphere && sphere->Get3D()) sphere->Get3D()->local.scale = radius;
-			});
+			// AddModel("DebugSphere.nif", true, [radius = this->radius](ArtAddon* sphere) {
+			// 	if (sphere && sphere->Get3D()) sphere->Get3D()->local.scale = radius;
+			// });
 		}
 		else
 		{
