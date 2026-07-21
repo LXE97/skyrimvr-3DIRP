@@ -451,9 +451,9 @@ namespace helper
 	bool IntersectSphereOBB(const NiPoint3& sphereCenter, float sphereRadius,
 		const NiTransform& obbTransform, const NiPoint3& halfExtents)
 	{
-		// Transform sphere center to OBB local space
+		// Rotate the sphere center into the OBB's world-scaled local axes.
+		// halfExtents and sphereRadius are already expressed in world units.
 		NiPoint3 local = obbTransform.rotate.Transpose() * (sphereCenter - obbTransform.translate);
-		local /= obbTransform.scale;
 
 		// Clamp point to inside the box
 		NiPoint3 closestPoint = local;

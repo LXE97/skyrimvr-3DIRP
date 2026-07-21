@@ -15,6 +15,15 @@ namespace vr_gui
 		}
 	}
 
+		const NiTransform Hand::GetBoxTransform() const
+	{
+		if (transform) { return *transform * offset_box; }
+		else
+		{
+			return offset_box;
+		}
+	}
+
 	bool Hand::Init()
 	{
 		if (initialized) { return true; }
@@ -28,7 +37,7 @@ namespace vr_gui
 				node = hand_node;
 				transform = &node->world;
 				initialized = true;
-				//SetMode(Mode::kNormal);
+				ApplyMode(Mode::kNormal);
 				return true;
 			}
 		}
@@ -102,6 +111,7 @@ namespace vr_gui
 			extents = { 3, 1, 5 };
 			offset.rotate = NiMatrix3();
 			offset.translate = isLeft ? NiPoint3{ 0, 0.5, 5 } : NiPoint3{ 0, -0.5, 5 };
+			offset_box = offset;
 			g_vrikInterface->restoreFingers(isLeft);
 			break;
 
@@ -110,6 +120,7 @@ namespace vr_gui
 			extents = { 3, 1, 5 };
 			offset.translate = isLeft ? NiPoint3{ 0, 0.5, 5 } : NiPoint3{ 0, -0.5, 5 };
 			offset.rotate = NiMatrix3();
+			offset_box = offset;
 			g_vrikInterface->setFingerRange(isLeft, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1);
 			break;
 
@@ -118,14 +129,17 @@ namespace vr_gui
 			extents = { 3, 1, 5 };
 			offset.translate = isLeft ? NiPoint3{ 0, 0.5, 5 } : NiPoint3{ 0, -0.5, 5 };
 			offset.rotate = NiMatrix3();
+			offset_box = offset;
 			g_vrikInterface->setFingerRange(isLeft, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
 			break;
 
 		case Mode::kPointing:
 			radius = 7.f;
 			extents = { 0.7, 0.7, 3.5 };
-			offset.translate = isLeft ? NiPoint3{ -2.5, -1.6, 12 } : NiPoint3{ 2.5, -1.6, 12 };
-			offset.rotate.SetEulerAnglesXYZ(-0.3141593, isLeft ? 0.1396263 : -0.1396263, 0);
+			offset.translate = isLeft ? NiPoint3{ 0, 0.5, 7.5 } : NiPoint3{ 0, -0.5, 7.5 };
+			offset.rotate = NiMatrix3();
+			offset_box.translate = isLeft ? NiPoint3{ -2.5, -1.6, 12 } : NiPoint3{ 2.5, -1.6, 12 };
+			offset_box.rotate.SetEulerAnglesXYZ(-0.3141593, isLeft ? 0.1396263 : -0.1396263, 0);
 			g_vrikInterface->setFingerRange(isLeft, 0.1, 0.1, 1, 1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1);
 			break;
 		}

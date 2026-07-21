@@ -44,6 +44,7 @@ namespace vr_gui
 		void       ClearModes();
 
 		const NiTransform GetTransform() const;
+		const NiTransform GetBoxTransform() const;
 		const State       GetState() const { return state; }
 		const float       GetRadius() const { return radius; }
 		const NiPoint3*   GetExtents() const { return &extents; }
@@ -69,6 +70,7 @@ namespace vr_gui
 		State        state = State::kReady;
 		NiPoint3     extents = { 3, 1, 5 };
 		NiTransform  offset;
+		NiTransform  offset_box;
 		bool         initialized = false;
 
 		void ReleaseMode(std::uint64_t a_id);

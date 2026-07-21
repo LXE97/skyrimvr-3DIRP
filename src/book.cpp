@@ -6,6 +6,8 @@ namespace vr3dui
 
 	Window* SummonAttachedBook(bool isLeft)
 	{
+		const std::string kTestModel = "SpellBookVR/custom.nif";
+
 		RE::NiTransform default_t;
 		default_t.scale = 1.0;
 		default_t.translate = { 5.915527, -10.583008, 10.284607 };
@@ -17,7 +19,7 @@ namespace vr3dui
 			vrinput::GetHandNode(vrinput::Hand(isLeft), false)->AsNode(), default_t));
 		RE::NiTransform temp;
 		temp.scale = 0.9;
-		window->AddChild<Book>(isLeft, temp);
+		window->AddChild<Book>(kTestModel, isLeft, temp);
 
 		return window;
 	}
@@ -38,13 +40,11 @@ namespace vr3dui
 			[this]() { Controller::GetSingleton()->MarkForDelete(this->parent); });
 	}
 
-	Book::Book(Widget* a_parent, bool a_isLeft, NiTransform a_transform) :
+	Book::Book(Widget* a_parent, std::string a_model_path, bool a_isLeft, NiTransform a_transform) :
 		Widget(a_parent, a_transform, NiPoint3(40, 40, 40)),
 		isLeft(a_isLeft)
 	{
-		const std::string kModelPath = "SpellBookVR/custom.nif";
-
-		AddModel(kModelPath, false, [this, windowscale = local.scale](ArtAddon* m) {
+		AddModel(a_model_path, false, [this, windowscale = local.scale](ArtAddon* m) {
 			if (auto node = m->Get3D())
 			{
 				ni_animator::SetControllerFlags(node, true, false, false, false, true);
@@ -57,7 +57,7 @@ namespace vr3dui
 		grab_node = AddChild<GrabNode>(isLeft, t);
 
 		t.translate = { -10, 0, 5 };
-		auto interaction_volume = AddChild<BasicHitbox>(isLeft, t, NiPoint3(28, 20, 10));
+		auto interaction_volume = AddChild<BasicHitbox>(isLeft, t, NiPoint3(26, 17, 8));
 
 		interaction_volume->AddBehavior<HandPointing>(!isLeft);
 
@@ -113,25 +113,46 @@ namespace vr3dui
 		if (a_action == MenuAction::kSecondary)
 		{
 			if (a_activate)
-			{ 
-
-				isGrabbed = true;
-				hand_mode = a_hand.RequestMode(Hand::Mode::kFist, Hand::ModePriority::kGrab);
-				follow_target = vrinput::GetHandNode(
-					a_hand.IsLeft() ? vrinput::Hand::kLeft : vrinput::Hand::kRight, false);
-				parent_store = follow_target->world.Invert() * parent->GetWorld();
+			{
+				isGrabButtonHeld = true;
+				grabHoldTime = 0.0f;
+				grabHand = &a_hand;
 			}
 			else
 			{
+				isGrabButtonHeld = false;
+				grabHoldTime = 0.0f;
+				grabHand = nullptr;
 				isGrabbed = false;
-				hand_mode.Release();
 				follow_target = nullptr;
+				
+				if (!IsHovered(a_hand.IsLeft())) { hand_mode.Release(); }
+				else
+				{
+					hand_mode = a_hand.RequestMode(Hand::Mode::kOpen, Hand::ModePriority::kGrab);
+				}
 			}
 		}
 	}
 
 	void GrabNode::Update(float delta)
 	{
+		if (isGrabButtonHeld && !isGrabbed && grabHand)
+		{
+			grabHoldTime += delta;
+			if (grabHoldTime >= kGrabHoldTime)
+			{
+				follow_target = vrinput::GetHandNode(
+					grabHand->IsLeft() ? vrinput::Hand::kLeft : vrinput::Hand::kRight, false);
+				if (follow_target)
+				{
+					isGrabbed = true;
+					hand_mode = grabHand->RequestMode(Hand::Mode::kFist, Hand::ModePriority::kGrab);
+					parent_store = follow_target->world.Invert() * parent->GetWorld();
+				}
+			}
+		}
+
 		if (isGrabbed && follow_target)
 		{
 			dynamic_cast<Book*>(parent)->VirtualParent(follow_target, parent_store);
@@ -146,8 +167,12 @@ namespace vr3dui
 		}
 		if (!a_activate)
 		{
+			isGrabButtonHeld = false;
+			grabHoldTime = 0.0f;
+			grabHand = nullptr;
 			isGrabbed = false;
 			hand_mode.Release();
+			follow_target = nullptr;
 		}
 	}
 
@@ -178,8 +203,5 @@ namespace vr3dui
 		}
 	}
 
-	void Book::DrawExtents(bool show)
-	{
-
-	}
+	void Book::DrawExtents(bool show) {}
 }

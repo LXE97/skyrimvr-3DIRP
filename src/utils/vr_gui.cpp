@@ -638,7 +638,8 @@ namespace vr_gui
 		if (helper::IntersectSphereSphere(
 				t.translate, a_hand.GetRadius() * t.scale, w.translate, w.scale * radius))
 		{  // narrow phase
-			return helper::IntersectOBBOBB(t, *a_hand.GetExtents() * t.scale, w, extents * w.scale);
+			auto tbox = a_hand.GetBoxTransform();
+			return helper::IntersectOBBOBB(tbox, *a_hand.GetExtents() * t.scale, w, extents * w.scale);
 		}
 
 		return false;

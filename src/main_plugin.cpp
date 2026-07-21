@@ -60,10 +60,24 @@ namespace vr3dui
 		//vrinput::StartBlockingAll();
 	}
 
+	ArtAddonPtr handebug;
+
 	static void PlayerUpdate()
 	{
 		art_addon::ArtAddonManager::GetSingleton()->Update();
 		vr_gui::Controller::GetSingleton()->Update();
+
+		if (handebug && handebug->Get3D())
+		{
+			auto* hand = vr_gui::Controller::GetSingleton()->GetHand(false);
+			auto  world = hand->GetTransform();
+			world.scale = hand->GetRadius();
+
+			auto* node = handebug->Get3D();
+			node->local = handebug->GetParent()->world.Invert() * world;
+			RE::NiUpdateData ctx;
+			node->Update(ctx);
+		}
 	}
 
 	void PreLoadGame() { vr_gui::Controller::GetSingleton()->Cleanup(); }
@@ -87,6 +101,10 @@ namespace vr3dui
 			{
 				DismissBook(book_window);
 				book_window = nullptr;
+
+
+				// RE::NiTransform t{};
+				// handebug = ArtAddon::Make("HelperSphere.nif", pc, pc->Get3D(), t);
 			}
 
 			toggle ^= 1;

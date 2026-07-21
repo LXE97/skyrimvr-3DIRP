@@ -18,16 +18,16 @@ namespace vr3dui
 	class Book : public Widget
 	{
 	public:
-		Book(Widget* a_parent, bool a_isLeft, NiTransform a_transform);
+		Book(Widget* a_parent, std::string a_model_path, bool a_isLeft, NiTransform a_transform);
 
 		bool HandStateFilter(Hand& a_hand) const override { return a_hand.IsLeft() != isLeft; }
 
 		static constexpr float kDefaultWindowRadius = 40.f;
 
-		static constexpr ni_animator::AnimationRange open{ 0.0f, 0.95f, 0.95f };
-		static constexpr ni_animator::AnimationRange close{ 2.97f, 3.971f, 0.0f };
-		static constexpr ni_animator::AnimationRange flip_left{ 0.95f, 1.96f, 0.95f };
-		static constexpr ni_animator::AnimationRange flip_right{ 1.96f, 2.97f, 0.95f };
+		static constexpr ni_animator::AnimationRange open{ 0.0f, 1.f, 1.f };
+		static constexpr ni_animator::AnimationRange close{ 3.f, 3.97f, 0.0f };
+		static constexpr ni_animator::AnimationRange flip_left{ 1.f, 2.f, 1.f };
+		static constexpr ni_animator::AnimationRange flip_right{ 2.f, 3.f, 1.f };
 
 		void Update(float a_delta) override;
 
@@ -87,8 +87,13 @@ namespace vr3dui
 		void Update(float delta) override;
 
 	private:
+		static constexpr float kGrabHoldTime = 1.0f;
+
 		bool        isGrabbed = false;
+		bool        isGrabButtonHeld = false;
 		bool        isLeft = false;
+		float       grabHoldTime = 0.0f;
+		Hand*       grabHand{};
 		NiAVObject* follow_target{};
 		NiTransform parent_store{};
 
