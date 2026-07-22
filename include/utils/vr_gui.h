@@ -3,9 +3,9 @@
 #include "art_addon.h"
 #include "helper_math.h"
 #include "higgsinterface001.h"
+#include "vr_gui_hand.h"
 #include "vrikinterface001.h"
 #include "vrinput.h"
-#include "vr_gui_hand.h"
 
 #include <unordered_set>
 
@@ -142,6 +142,7 @@ namespace vr_gui
 		inline NiTransform  GetLocal() const { return local; }
 
 		int GetPriority() const { return priority; };
+		void SetPriority(int a_prio) { priority = a_prio; };
 
 		virtual void AddModel(const std::string& a_path, bool a_tempeffect = false,
 			std::function<void(art_addon::ArtAddon*)> a_3DInitializedCallback = nullptr);
@@ -219,7 +220,7 @@ namespace vr_gui
 		std::vector<art_addon::ArtAddonPtr> visual_effects;
 		bool                                enabled = true;
 		bool                                hover_state[2] = { false, false };
-		int                                 priority = 9;
+		int                                 priority = 50;
 
 		void RemoveChild(Widget* a_child);
 

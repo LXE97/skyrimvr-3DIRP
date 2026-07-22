@@ -1,3 +1,5 @@
+#pragma once
+
 #include "ni_animator.h"
 #include "vr_gui.h"
 
@@ -8,6 +10,8 @@ namespace vr3dui
 
 	class Book;
 	class ChapterTab;
+	class Page;
+	class Chapter;
 	class GrabNode;
 	class BasicHitob;
 
@@ -23,7 +27,7 @@ namespace vr3dui
 			NiPoint3 a_halfExtents, std::size_t a_chapterIndex) :
 			ModelDrivenWidget(a_parent, a_modelParent, std::move(a_local), a_halfExtents),
 			chapter_index(a_chapterIndex)
-		{ priority = 2; }
+		{}
 
 		void OnClick(bool a_activate, Hand& a_hand, MenuAction a_action) override;
 
@@ -46,36 +50,31 @@ namespace vr3dui
 	public:
 		Book(Widget* a_parent, std::string a_model_path, bool a_isLeft, NiTransform a_transform);
 
+		struct Layout
+		{
+			const NiPoint3 kLeftPageOrigin = { 3, 10.4, 0.01 };
+			const NiPoint3 kRightPageOrigin = { 0, 10.4, 0.01 };
+
+			static constexpr float kRightPageWidth = 15.5;
+			static constexpr float kLeftPageWidth = 13.7;
+			static constexpr float kPageHeight = 10.4 * 2;
+
+			const NiPoint3 kTabOffset = { 0.1f, 9.5f, -0.077f };
+
+			float tab_spacing = 1.8f;
+		};
+
+		struct PageContext
+		{
+			Layout& layout;
+			Widget& left_page;
+			Widget& right_page;
+		};
+
 		static constexpr float kDefaultWindowRadius = 40.f;
 
-		struct Page
-		{
-			virtual ~Page() = default;
-			virtual void Draw();
-		};
-
-		class Chapter
-		{
-		public:
-			Chapter() { MakePages(); }
-			virtual ~Chapter() = default;
-
-			virtual void MakePages()
-			{
-				pages.emplace_back(std::make_unique<Page>());
-				pages.emplace_back(std::make_unique<Page>());
-			};
-
-			virtual void OnSelected(bool a_selected)
-			{
-				if (tab) { tab->OnSelected(a_selected); }
-			}
-
-			std::vector<std::unique_ptr<Page>> pages;
-			ChapterTab*                        tab{};
-		};
-
-		void AddChapter(std::string a_model_path = kChapterTabModel);
+		void AddChapter(
+			std::unique_ptr<Chapter> a_chapter, std::string a_model_path = kChapterTabModel);
 
 		// Advance through pages
 		void TurnPageLeft();
@@ -98,19 +97,6 @@ namespace vr3dui
 		bool HandStateFilter(Hand& a_hand) const override { return a_hand.IsLeft() != isLeft; }
 
 	protected:
-		struct Layout
-		{
-			const NiPoint3 kLeftPageOrigin = { 3, 10.4, 0.01 };
-			const NiPoint3 kRightPageOrigin = { 0, 10.4, 0.01 };
-
-			static constexpr float kPageWidth = 15;
-			static constexpr float kPageHeight = 10.4 * 2;
-
-			const NiPoint3 kTabOffset = { 0.0f, 9.5f, -0.077f };
-
-			float tab_spacing = 1.8f;
-		};
-
 		static constexpr const char* kLeftPageNodeName = "Book CoverPage Turn04";
 		static constexpr const char* kRightPageNodeName = "Book TurnPage2";
 		static constexpr const char* kTabParentNodeName = "Book Pages Nub";
@@ -127,8 +113,17 @@ namespace vr3dui
 		NiAVObject*                              tab_parent{};
 		std::unique_ptr<art_addon::AddonTextBox> page_numbers;
 
-		void      AddChapterTab(std::size_t a_index, std::string a_model_path);
-		void      DrawCurrentPage();
+		Widget* left_page_parent{};
+		Widget* right_page_parent{};
+
+		void AddChapterTab(std::size_t a_index, std::string a_model_path);
+		void DrawCurrentPage();
+		void ClearPageView()
+		{
+			vr_gui::Controller::GetSingleton()->MarkForDelete(left_page_parent);
+			vr_gui::Controller::GetSingleton()->MarkForDelete(right_page_parent);
+		}
+
 		GrabNode* grab_node;
 
 		ni_animator::NiAnimator animator{};
@@ -139,10 +134,42 @@ namespace vr3dui
 		float animation_speed = 3;
 	};
 
+	class Page
+	{
+	public:
+		virtual ~Page() = default;
+		virtual void Draw(Book::PageContext a_context);
+	};
+
+	class Chapter
+	{
+	public:
+		Chapter() = default;
+		virtual ~Chapter() = default;
+
+		virtual void MakePages()
+		{
+			// for testing
+			pages.emplace_back(std::make_unique<Page>());
+			pages.emplace_back(std::make_unique<Page>());
+		};
+
+		virtual void OnSelected(bool a_selected)
+		{
+			if (tab) { tab->OnSelected(a_selected); }
+		}
+
+		std::vector<std::unique_ptr<Page>> pages;
+		ChapterTab*                        tab{};
+	};
+
 	class GrabNode : public Widget
 	{
 	public:
-		GrabNode(Widget* a_parent, bool isLeft, NiTransform a_local);
+		GrabNode(Widget* a_parent, bool isLeft, NiTransform a_local) :
+			isLeft(isLeft),
+			Widget(a_parent, a_local, NiPoint3(4, 4, 4))
+		{}
 
 		bool HandStateFilter(Hand& a_hand) const override
 		{
@@ -211,7 +238,7 @@ namespace vr3dui
 		BasicHitbox(Widget* a_parent, bool a_isLeft, NiTransform a_local, NiPoint3 a_extents) :
 			Widget(a_parent, a_local, a_extents),
 			isLeft(a_isLeft)
-		{ priority = 5; }
+		{}
 
 		bool HandStateFilter(Hand& a_hand) const override
 		{ return parent && parent->HandStateFilter(a_hand); }

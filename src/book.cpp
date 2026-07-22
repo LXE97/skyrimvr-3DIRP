@@ -50,17 +50,23 @@ namespace vr3dui
 				ni_animator::SetControllerFlags(node, true, false, false, false, true);
 				node->local.scale = windowscale / node->parent->world.scale;
 				tab_parent = node->GetObjectByName(kTabParentNodeName);
+
+				for (int i = 0; i < 12; i++) { AddChapter(std::make_unique<Chapter>()); }
 			}
 		});
+
+		this->SetPriority(100);
 
 		NiTransform t;
 
 		t.translate = { 10, -18, -4 };
 		grab_node = AddChild<GrabNode>(isLeft, t);
+		grab_node->SetPriority(5);
 
 		t.translate = { -10, 0, 5 };
 		auto interaction_volume = AddChild<BasicHitbox>(isLeft, t, NiPoint3(26, 17, 8));
 		interaction_volume->AddBehavior<HandPointing>(!isLeft);
+		interaction_volume->SetPriority(90);
 
 		animator.PlayImmediately(open, animation_speed);
 	}
@@ -85,8 +91,9 @@ namespace vr3dui
 		{
 			return;
 		}
-		DrawCurrentPage();
-		animator.Queue(flip_left, animation_speed);
+
+		ClearPageView();
+		animator.Queue(flip_left, animation_speed, [this] { DrawCurrentPage(); });
 	}
 
 	void Book::TurnPageRight()
@@ -110,11 +117,14 @@ namespace vr3dui
 			return;
 		}
 
+		ClearPageView();
 		animator.Queue(flip_right, animation_speed, [this] { DrawCurrentPage(); });
 	}
 
 	void Book::TurnToChapter(std::size_t a_index)
 	{
+		SKSE::log::trace("cur idx {}, tar idx {}, size {}", (int)chapter_index, (int)a_index,
+			(int)chapters.size());
 		if (animator.QueuedCount() >= 2) { return; }
 		if (a_index >= chapters.size() || a_index == chapter_index) { return; }
 
@@ -125,12 +135,14 @@ namespace vr3dui
 		chapters[chapter_index]->OnSelected(true);
 		page_index = 0;
 
+		ClearPageView();
 		animator.Queue(animation, animation_speed, [this] { DrawCurrentPage(); });
 	}
 
-	void Book::AddChapter(std::string a_model_path)
+	void Book::AddChapter(std::unique_ptr<Chapter> a_chapter, std::string a_model_path)
 	{
-		chapters.emplace_back(std::make_unique<Chapter>());
+		a_chapter->MakePages();
+		chapters.emplace_back(std::move(a_chapter));
 		AddChapterTab(chapters.size() - 1, a_model_path);
 		chapters[0]->OnSelected(true);
 	}
@@ -146,9 +158,11 @@ namespace vr3dui
 		NiTransform transform;
 		transform.translate = layout.kTabOffset;
 		transform.translate.y -= static_cast<float>(a_index) * layout.tab_spacing;
+		transform.translate.x -= (a_index % 2) * 0.3;
 
-		auto* tab = AddChild<ChapterTab>(tab_parent, transform, NiPoint3(1, 1, 1), a_index);
+		auto* tab = AddChild<ChapterTab>(tab_parent, transform, NiPoint3(0.7, 0.3, 0.5), a_index);
 		tab->AddModel(a_model_path);
+		tab->SetPriority(10+(int)a_index);
 		chapters[a_index]->tab = tab;
 	}
 
@@ -167,17 +181,40 @@ namespace vr3dui
 		auto& pages = chapters[chapter_index]->pages;
 		if (page_index >= pages.size() || !pages[page_index]) { return; }
 
-		pages[page_index]->Draw();
+		// Create parents for page content
+		NiTransform p{};
+		p.translate = { layout.kRightPageWidth / 2, 0, 0 };
+		NiPoint3 e = { layout.kRightPageWidth / 2, layout.kPageHeight / 2, 2 };
+		right_page_parent =
+			AddChild<ModelDrivenWidget>(model->Get3D()->GetObjectByName(kRightPageNodeName), p, e);
+
+		p.translate = { -layout.kLeftPageWidth / 2 + layout.kLeftPageOrigin.x, 0, 0 };
+
+		p.rotate = { { -1.0000000, 0.0000000, 0.0000000 }, { 0.0000000, 1.0000000, 0.0000000 },
+			{ -0.0000000, 0.0000000, -1.0000000 } };
+
+		left_page_parent =
+			AddChild<ModelDrivenWidget>(model->Get3D()->GetObjectByName(kLeftPageNodeName), p, e);
+
+		PageContext context{ layout, *left_page_parent, *right_page_parent };
+
+		pages[page_index]->Draw(context);
+
+		// Display page numbers
 		std::string page_str = std::to_string(page_index + 1);
 		page_str.append(" / ").append(std::to_string(pages.size()));
 		NiTransform t;
 		t.translate = layout.kRightPageOrigin;
-		t.translate += { layout.kPageWidth - 0.5, 0.5 - layout.kPageHeight, 0 };
+		t.translate += { layout.kRightPageWidth - 0.5, 0.5 - layout.kPageHeight, 0 };
 		page_numbers = std::make_unique<AddonTextBox>(page_str, -0.6f,
 			model->Get3D()->GetObjectByName(kRightPageNodeName), t, "SpellbookVR/char_2048.nif");
 	}
 
-	void Book::Page::Draw() {}
+	void Page::Draw(Book::PageContext a_context)
+	{
+		a_context.left_page.AddModel("HelperSphere.nif");
+		a_context.right_page.AddModel("HelperSphere.nif");
+	}
 
 	void Book::Update(float a_delta)
 	{
@@ -206,11 +243,6 @@ namespace vr3dui
 			node->Update(ctx);
 		}
 	}
-
-	GrabNode::GrabNode(Widget* a_parent, bool isLeft, NiTransform a_local) :
-		isLeft(isLeft),
-		Widget(a_parent, a_local, NiPoint3(4, 4, 4))
-	{ priority = 1; }
 
 	void GrabNode::OnClick(bool a_activate, Hand& a_hand, MenuAction a_action)
 	{

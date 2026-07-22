@@ -101,10 +101,6 @@ namespace vr3dui
 		if (book_window)book_window->ShowHitboxes(toggle);
 				if (e.button_state == vrinput::ButtonState::kButtonDown)
 		{
-			if (auto book = book_window->FindChild<Book>()){
-				SKSE::log::trace("adding chapter");
-				book->AddChapter();
-			}
 
 		}
 
