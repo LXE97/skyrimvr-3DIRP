@@ -3,6 +3,9 @@
 #include "ni_animator.h"
 #include "vr_gui.h"
 
+#include <concepts>
+#include <utility>
+
 namespace vr3dui
 {
 	using namespace RE;
@@ -15,7 +18,6 @@ namespace vr3dui
 	class GrabNode;
 	class BasicHitob;
 
-	Window* SummonAttachedBook(bool isLeft);
 	Window* SummonFloatingBook(bool isLeft);
 
 	void DismissBook(Window* a_book_window);
@@ -62,19 +64,30 @@ namespace vr3dui
 			const NiPoint3 kTabOffset = { 0.1f, 9.5f, -0.077f };
 
 			float tab_spacing = 1.8f;
+			float top_margin = 0.0f;
+			float bottom_margin = 0.0f;
+			float horizontal_margin = 0.0f;
+
+			float quest_line_spacing = 1.5f;
+			float body_text_scale = 1.0f;
+			float heading_text_scale = 1.0f;
+			float body_character_spacing = 0.0f;
+			float page_number_character_spacing = -0.6f;
+
+			std::string_view body_font_model_path = "3DIRP/char_2048.nif";
+			std::string_view page_number_font_model_path = "3DIRP/char_2048.nif";
 		};
 
 		struct PageContext
 		{
-			Layout& layout;
-			Widget& left_page;
-			Widget& right_page;
+			const Layout& layout;
+			Widget&       left_page;
+			Widget&       right_page;
 		};
 
 		static constexpr float kDefaultWindowRadius = 40.f;
 
-		void AddChapter(
-			std::unique_ptr<Chapter> a_chapter, std::string a_model_path = kChapterTabModel);
+		void AddChapter(std::unique_ptr<Chapter> a_chapter);
 
 		// Advance through pages
 		void TurnPageLeft();
@@ -116,13 +129,10 @@ namespace vr3dui
 		Widget* left_page_parent{};
 		Widget* right_page_parent{};
 
-		void AddChapterTab(std::size_t a_index, std::string a_model_path);
+		void AddChapterTab(std::size_t a_index);
 		void DrawCurrentPage();
-		void ClearPageView()
-		{
-			vr_gui::Controller::GetSingleton()->MarkForDelete(left_page_parent);
-			vr_gui::Controller::GetSingleton()->MarkForDelete(right_page_parent);
-		}
+
+		void ClearPageView();
 
 		GrabNode* grab_node;
 
@@ -144,10 +154,10 @@ namespace vr3dui
 	class Chapter
 	{
 	public:
-		Chapter() = default;
+		Chapter(std::string a_model_path) : model_path(std::move(a_model_path)) {}
 		virtual ~Chapter() = default;
 
-		virtual void MakePages()
+		virtual void MakePages(const Book::Layout&)
 		{
 			// for testing
 			pages.emplace_back(std::make_unique<Page>());
@@ -161,6 +171,7 @@ namespace vr3dui
 
 		std::vector<std::unique_ptr<Page>> pages;
 		ChapterTab*                        tab{};
+		std::string                        model_path;
 	};
 
 	class GrabNode : public Widget
@@ -250,5 +261,27 @@ namespace vr3dui
 	private:
 		bool isLeft;
 	};
+
+	template <class T, class... Args>
+		requires std::derived_from<T, Book> &&
+		std::constructible_from<T, Widget*, Args..., bool, NiTransform>
+	Window* SummonAttachedBook(bool a_isLeft, Args&&... a_args)
+	{
+		NiTransform transform;
+		transform.scale = 1.0f;
+		transform.translate = { 5.915527f, -10.583008f, 10.284607f };
+		transform.rotate = { { 0.839558f, -0.198012f, -0.493753f },
+			{ -0.528744f, -0.127261f, -0.825465f }, { 0.089592f, 0.956704f, -0.210660f } };
+
+		auto* window = Controller::GetSingleton()->AddWindow(std::make_unique<AttachedWindow>(
+			Book::kDefaultWindowRadius, PlayerCharacter::GetSingleton(),
+			vrinput::GetHandNode(vrinput::Hand(a_isLeft), false)->AsNode(), transform));
+
+		NiTransform book_transform;
+		book_transform.scale = 0.9f;
+		window->AddChild<T>(std::forward<Args>(a_args)..., a_isLeft, book_transform);
+
+		return window;
+	}
 
 }

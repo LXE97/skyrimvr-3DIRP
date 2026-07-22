@@ -42,6 +42,22 @@ namespace helper
 	void HideActivationText(TESObjectREFR* a_target, bool a_hidden)
 	{ a_target->extraList.SetExtraFlags(ExtraFlags::Flag::kBlockActivateText, a_hidden); }
 
+	bool SetQuestTracked(RE::TESQuest* a_quest, bool a_tracked)
+	{
+		if (!a_quest) { return false; }
+
+		auto* vm = RE::BSScript::Internal::VirtualMachine::GetSingleton();
+		auto* policy = vm ? vm->GetObjectHandlePolicy() : nullptr;
+		if (!policy) { return false; }
+
+		const auto handle = policy->GetHandleForObject(a_quest->GetFormType(), a_quest);
+		if (handle == policy->EmptyHandle()) { return false; }
+
+		RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> callback;
+		return vm->DispatchMethodCall(handle, "Quest", "SetActive",
+			RE::MakeFunctionArguments(static_cast<bool>(a_tracked)), callback);
+	}
+
 	float GetAVPercent(Actor* a_a, ActorValue a_v)
 	{
 		float current = a_a->AsActorValueOwner()->GetActorValue(a_v);

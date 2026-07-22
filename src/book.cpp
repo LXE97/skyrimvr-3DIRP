@@ -4,26 +4,6 @@ namespace vr3dui
 {
 	using namespace art_addon;
 
-	Window* SummonAttachedBook(bool isLeft)
-	{
-		const std::string kTestModel = "SpellBookVR/custom.nif";
-
-		RE::NiTransform default_t;
-		default_t.scale = 1.0;
-		default_t.translate = { 5.915527, -10.583008, 10.284607 };
-		default_t.rotate = { { 0.839558, -0.198012, -0.493753 },
-			{ -0.528744, -0.127261, -0.825465 }, { 0.089592, 0.956704, -0.210660 } };
-
-		auto window = Controller::GetSingleton()->AddWindow(std::make_unique<AttachedWindow>(
-			Book::kDefaultWindowRadius, RE::PlayerCharacter::GetSingleton(),
-			vrinput::GetHandNode(vrinput::Hand(isLeft), false)->AsNode(), default_t));
-		RE::NiTransform temp;
-		temp.scale = 0.9;
-		window->AddChild<Book>(kTestModel, isLeft, temp);
-
-		return window;
-	}
-
 	void DismissBook(Window* a_book_window)
 	{
 		if (a_book_window)
@@ -51,7 +31,10 @@ namespace vr3dui
 				node->local.scale = windowscale / node->parent->world.scale;
 				tab_parent = node->GetObjectByName(kTabParentNodeName);
 
-				for (int i = 0; i < 12; i++) { AddChapter(std::make_unique<Chapter>()); }
+				for (std::size_t i = 0; i < chapters.size(); ++i) { AddChapterTab(i); }
+
+				animator.PlayImmediately(open, animation_speed);
+				DrawCurrentPage();
 			}
 		});
 
@@ -67,8 +50,6 @@ namespace vr3dui
 		auto interaction_volume = AddChild<BasicHitbox>(isLeft, t, NiPoint3(26, 17, 8));
 		interaction_volume->AddBehavior<HandPointing>(!isLeft);
 		interaction_volume->SetPriority(90);
-
-		animator.PlayImmediately(open, animation_speed);
 	}
 
 	void Book::TurnPageLeft()
@@ -139,15 +120,15 @@ namespace vr3dui
 		animator.Queue(animation, animation_speed, [this] { DrawCurrentPage(); });
 	}
 
-	void Book::AddChapter(std::unique_ptr<Chapter> a_chapter, std::string a_model_path)
+	void Book::AddChapter(std::unique_ptr<Chapter> a_chapter)
 	{
-		a_chapter->MakePages();
+		if (!a_chapter) { return; }
+		a_chapter->MakePages(layout);
 		chapters.emplace_back(std::move(a_chapter));
-		AddChapterTab(chapters.size() - 1, a_model_path);
-		chapters[0]->OnSelected(true);
+		AddChapterTab(chapters.size() - 1);
 	}
 
-	void Book::AddChapterTab(std::size_t a_index, std::string a_model_path)
+	void Book::AddChapterTab(std::size_t a_index)
 	{
 		if (!tab_parent || a_index >= chapters.size() || !chapters[a_index] ||
 			chapters[a_index]->tab)
@@ -160,10 +141,11 @@ namespace vr3dui
 		transform.translate.y -= static_cast<float>(a_index) * layout.tab_spacing;
 		transform.translate.x -= (a_index % 2) * 0.3;
 
-		auto* tab = AddChild<ChapterTab>(tab_parent, transform, NiPoint3(0.7, 0.3, 0.5), a_index);
-		tab->AddModel(a_model_path);
-		tab->SetPriority(10+(int)a_index);
+		auto* tab = AddChild<ChapterTab>(tab_parent, transform, NiPoint3(1.0, 0.4, 0.5), a_index);
+		tab->AddModel(chapters[a_index]->model_path);
+		tab->SetPriority(10 + (int)a_index);
 		chapters[a_index]->tab = tab;
+		if (a_index == chapter_index) { chapters[a_index]->OnSelected(true); }
 	}
 
 	void ChapterTab::OnClick(bool a_activate, Hand&, MenuAction a_action)
@@ -190,6 +172,7 @@ namespace vr3dui
 
 		p.translate = { -layout.kLeftPageWidth / 2 + layout.kLeftPageOrigin.x, 0, 0 };
 
+		// left parent is upside down
 		p.rotate = { { -1.0000000, 0.0000000, 0.0000000 }, { 0.0000000, 1.0000000, 0.0000000 },
 			{ -0.0000000, 0.0000000, -1.0000000 } };
 
@@ -206,8 +189,20 @@ namespace vr3dui
 		NiTransform t;
 		t.translate = layout.kRightPageOrigin;
 		t.translate += { layout.kRightPageWidth - 0.5, 0.5 - layout.kPageHeight, 0 };
-		page_numbers = std::make_unique<AddonTextBox>(page_str, -0.6f,
-			model->Get3D()->GetObjectByName(kRightPageNodeName), t, "SpellbookVR/char_2048.nif");
+		page_numbers =
+			std::make_unique<AddonTextBox>(page_str, layout.page_number_character_spacing,
+				model->Get3D()->GetObjectByName(kRightPageNodeName), t,
+				std::string{ layout.page_number_font_model_path });
+	}
+
+	void Book::ClearPageView()
+	{
+		auto* left = std::exchange(left_page_parent, nullptr);
+		auto* right = std::exchange(right_page_parent, nullptr);
+
+		auto* controller = vr_gui::Controller::GetSingleton();
+		controller->MarkForDelete(left);
+		controller->MarkForDelete(right);
 	}
 
 	void Page::Draw(Book::PageContext a_context)

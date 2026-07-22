@@ -251,6 +251,8 @@ namespace vr_gui
 				helper::ComputeRadius(a_halfExtents))
 		{}
 
+		NiAVObject* GetModelParent() const {return model_parent;}
+
 		NiTransform GetWorld(int depth = 0) const override;
 
 		void AddModel(const std::string& a_path, bool a_tempeffect = false,

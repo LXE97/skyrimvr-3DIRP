@@ -201,12 +201,18 @@ namespace vr_gui
 			{
 				if (widget->GetParent())
 				{
-					widget->GetParent()->RemoveChild(widget);
-					//remove dangling reference from hover map
+					// Remove references to the widget and all of its descendants before
+					// destroying the subtree.
 					for (auto& [hand, windowMap] : hovered_map)
 					{
-						for (auto& [window, widgets] : windowMap) { std::erase(widgets, widget); }
+						for (auto& [window, widgets] : windowMap)
+						{
+							std::erase_if(widgets, [this, widget](Widget* hovered) {
+								return IsValid(widget, hovered);
+							});
+						}
 					}
+					widget->GetParent()->RemoveChild(widget);
 				}
 				else
 				{
@@ -390,14 +396,15 @@ namespace vr_gui
 	{
 		for (auto& child : a_parent.GetChildren())
 		{
-			// All conditions for determining whether a widget is active are here
-			if (child->IsEnabled() && child->HandStateFilter(a_hand) && child->TestOverlap(a_hand))
+			if (!child->IsEnabled()) { continue; }
+
+			if (child->HandStateFilter(a_hand) && child->TestOverlap(a_hand))
 			{
 				if (!child->IsHovered(a_hand.IsLeft())) { child->OnHoverImpl(true, a_hand); }
+
 				a_hover_list.push_back(child.get());
 			}
-			// always visit the whole tree even if parent is disabled
-			// TODO: why?
+
 			TraverseCollision(*child, a_hand, a_hover_list);
 		}
 	}
@@ -639,7 +646,8 @@ namespace vr_gui
 				t.translate, a_hand.GetRadius() * t.scale, w.translate, w.scale * radius))
 		{  // narrow phase
 			auto tbox = a_hand.GetBoxTransform();
-			return helper::IntersectOBBOBB(tbox, *a_hand.GetExtents() * t.scale, w, extents * w.scale);
+			return helper::IntersectOBBOBB(
+				tbox, *a_hand.GetExtents() * t.scale, w, extents * w.scale);
 		}
 
 		return false;

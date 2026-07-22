@@ -10,7 +10,7 @@
 namespace art_addon
 {
 	static constexpr const char* kEmptyNif = "effects/fxemptyobject.nif";
-	static constexpr const char* kFontAtlas = "SpellbookVR/char.nif";
+	static constexpr const char* kFontAtlas = "3DIRP/char_2048.nif";
 
 	class ArtAddon;
 	using ArtAddonPtr = std::shared_ptr<ArtAddon>;

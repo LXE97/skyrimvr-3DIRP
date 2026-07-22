@@ -232,7 +232,7 @@ namespace art_addon
 			{
 				if (string[i] == 0x0A)
 				{
-					t.translate.y += kLineSpacing;
+					t.translate.y -= kLineSpacing;
 					t.translate.x = 0.f;
 				}
 				else
@@ -257,7 +257,7 @@ namespace art_addon
 								newmat->texCoordOffset[1].y = temp.y;
 							}
 						}));
-					t.translate.x -= NifChar::kCharacterWidth + spacing;
+					t.translate.x += NifChar::kCharacterWidth + spacing;
 				}
 			}
 		}

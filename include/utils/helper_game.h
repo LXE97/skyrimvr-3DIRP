@@ -25,6 +25,7 @@ namespace helper
 	uint32_t     GetLocalID(RE::FormID a_formid);
 
 	void HideActivationText(RE::TESObjectREFR* a_target, bool a_hidden);
+	bool SetQuestTracked(RE::TESQuest* a_quest, bool a_tracked);
 
 	void CastSpellInstant(RE::Actor* a_src, RE::Actor* a_target, RE::SpellItem* sa_pell);
 	void Dispel(RE::Actor* a_src, RE::Actor* a_target, RE::SpellItem* a_spell);
