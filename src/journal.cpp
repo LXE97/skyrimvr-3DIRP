@@ -80,7 +80,7 @@ namespace vr3dui
 	public:
 		QuestStringHolder(Widget* a_parent, std::string a_string, NiTransform a_local,
 			TESQuest* a_target, const Book::Layout& a_layout) :
-			Widget(a_parent, a_local, NiPoint3((float)a_string.length() / 2, 1, 1)),
+			Widget(a_parent, a_local, NiPoint3((float)a_string.length() / 2, a_layout.body_character_spacing /2, 1)),
 			target(a_target)
 		{
 			text =

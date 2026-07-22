@@ -64,17 +64,17 @@ namespace vr3dui
 			static constexpr float kLeftPageWidth = 13.7;
 			static constexpr float kPageHeight = 10.4 * 2;
 
-			const NiPoint3 kTabOffset = { 0.1f, 9.5f, -0.077f };
+			const NiPoint3 kTabOffset = { 0.0f, 9.5f, 0.0f };
 
 			float tab_spacing = 1.8f;
 			float top_margin = 0.0f;
 			float bottom_margin = 0.0f;
-			float horizontal_margin = 0.0f;
+			float horizontal_margin = 2.0f;
 
 			float quest_line_spacing = 1.5f;
-			float body_text_scale = 1.0f;
+			float body_text_scale = 2.0f;
 			float heading_text_scale = 1.0f;
-			float body_character_spacing = 0.0f;
+			float body_character_spacing = -0.1f;
 			float page_number_character_spacing = -0.6f;
 
 			std::string_view body_font_model_path = "3DIRP/char_2048.nif";
@@ -88,6 +88,8 @@ namespace vr3dui
 			Widget&       right_page;
 		};
 
+		static constexpr int   kChapterTabGroupPriority = 10;
+		static constexpr int   kChapterTabPriority = 11;
 		static constexpr float kDefaultWindowRadius = 40.f;
 
 		void AddChapter(std::unique_ptr<Chapter> a_chapter);
@@ -146,8 +148,7 @@ namespace vr3dui
 
 		float animation_speed = 2;
 
-		ExclusiveHoverGroup chapter_tab_group{};
-		ExclusiveHoverGroup page_group{};
+		ExclusiveClickContainer* tab_container{};
 	};
 
 	class Page
@@ -289,5 +290,7 @@ namespace vr3dui
 
 		return window;
 	}
+
+
 
 }

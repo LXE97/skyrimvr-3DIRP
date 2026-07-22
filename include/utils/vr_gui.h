@@ -112,7 +112,9 @@ namespace vr_gui
 			static_assert(std::is_base_of_v<Widget, T>, "T must inherit from Widget");
 
 			children.emplace_back(std::make_unique<T>(this, std::forward<Args>(args)...));
-			return static_cast<T*>(children.back().get());
+			auto* child = static_cast<T*>(children.back().get());
+			OnChildAdded(*child);
+			return child;
 		}
 
 		virtual void DrawExtents(bool show);
@@ -199,6 +201,8 @@ namespace vr_gui
 		}
 
 	protected:
+		virtual void OnChildAdded(Widget&) {}
+
 		NiTransform local;
 		NiPoint3    extents;
 		float       radius = 1.f;

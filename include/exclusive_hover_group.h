@@ -82,4 +82,39 @@ namespace vr_gui
 		friend class ExclusiveHoverItem;
 	};
 
+	class ExclusiveClickContainer : public Widget
+	{
+	public:
+		ExclusiveClickContainer(Widget* a_parent, NiTransform a_local, NiPoint3 a_halfextents,
+			int a_priority) :
+			Widget(a_parent, a_local, a_halfextents)
+		{ SetPriority(a_priority); }
+
+		virtual void Update(float delta) override { group.Update(); }
+
+		ExclusiveHoverGroup* GetGroup() { return &group; }
+
+		bool HandStateFilter(Hand& a_hand) const override
+		{ return parent && parent->HandStateFilter(a_hand); }
+
+		void OnClick(bool a_activate, Hand& a_hand, MenuAction a_action) override
+		{
+			for (auto& c : GetChildren())
+			{
+				if (auto* item = dynamic_cast<ExclusiveHoverItem*>(c.get());
+					item && item->IsExclusivelyHovered(a_hand.IsLeft()))
+				{
+					c->OnClick(a_activate, a_hand, a_action);
+					break;
+				}
+			}
+		}
+
+	protected:
+		void OnChildAdded(Widget& a_child) override { a_child.SetPriority(priority+1); }
+
+	private:
+		ExclusiveHoverGroup group{};
+	};
+
 }

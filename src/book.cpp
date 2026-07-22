@@ -50,6 +50,11 @@ namespace vr3dui
 		auto interaction_volume = AddChild<BasicHitbox>(isLeft, t, NiPoint3(26, 17, 8));
 		interaction_volume->AddBehavior<HandPointing>(!isLeft);
 		interaction_volume->SetPriority(90);
+
+		t.translate = {0.1f, 0, -0.1f};
+		tab_container = AddChild<ExclusiveClickContainer>(t,
+			NiPoint3(1.0, layout.kPageHeight * 0.5f, 0.5), kChapterTabGroupPriority
+			);
 	}
 
 	void Book::TurnPageLeft()
@@ -132,7 +137,7 @@ namespace vr3dui
 
 	void Book::AddChapterTab(std::size_t a_index)
 	{
-		if (!tab_parent || a_index >= chapters.size() || !chapters[a_index] ||
+		if (!tab_parent || !tab_container || a_index >= chapters.size() || !chapters[a_index] ||
 			chapters[a_index]->tab)
 		{
 			return;
@@ -143,19 +148,24 @@ namespace vr3dui
 		transform.translate.y -= static_cast<float>(a_index) * layout.tab_spacing;
 		transform.translate.x -= (a_index % 2) * 0.3;
 
-		auto* tab = AddChild<ChapterTab>(
-			tab_parent, transform, NiPoint3(1.0, 0.4, 0.5), a_index, &chapter_tab_group);
+		auto* tab = tab_container->AddChild<ChapterTab>(
+			tab_parent, transform, NiPoint3(1.0, 0.4, 0.5), a_index, tab_container->GetGroup());
 		tab->AddModel(chapters[a_index]->model_path);
-		tab->SetPriority(10 + (int)a_index);
 		chapters[a_index]->tab = tab;
 		if (a_index == chapter_index) { chapters[a_index]->OnSelected(true); }
 	}
 
-	void ChapterTab::OnClick(bool a_activate, Hand&, MenuAction a_action)
+	void ChapterTab::OnClick(bool a_activate, Hand& h, MenuAction a_action)
 	{
-		if (a_activate && a_action == MenuAction::kPrimary)
+		if (IsExclusivelyHovered(h.IsLeft()))
 		{
-			if (auto* book = dynamic_cast<Book*>(parent)) { book->TurnToChapter(chapter_index); }
+			if (a_activate && a_action == MenuAction::kPrimary)
+			{
+				if (auto* book = GetWindow()->FindChild<Book>())
+				{
+					book->TurnToChapter(chapter_index);
+				}
+			}
 		}
 	}
 
@@ -221,8 +231,6 @@ namespace vr3dui
 	{
 		Widget::Update(a_delta);
 		animator.Update(Get3D(), a_delta);
-		chapter_tab_group.Update();
-		page_group.Update();
 	}
 
 	void Book::VirtualParent(NiAVObject* a_new, NiTransform& a_offset)
