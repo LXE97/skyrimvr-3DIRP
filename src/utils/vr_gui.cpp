@@ -813,6 +813,34 @@ namespace vr_gui
 		}
 	}
 
+	NiTransform ModelDrivenWidget::GetWorld(int) const
+	{
+		if (model)
+		{
+			if (auto* node = model->Get3D()) { return node->world; }
+		}
+
+		return model_parent ? model_parent->world * local : local;
+	}
+
+	void ModelDrivenWidget::AddModel(const std::string& a_path, bool a_tempeffect,
+		std::function<void(art_addon::ArtAddon*)> a_3DInitializedCallback)
+	{
+		auto* window = GetWindow();
+		if (!window || !model_parent) { return; }
+
+		if (a_tempeffect)
+		{
+			visual_effects.emplace_back(art_addon::ArtAddon::Make(a_path, window->GetObjRef(),
+				model_parent, local, std::move(a_3DInitializedCallback)));
+		}
+		else
+		{
+			model = art_addon::ArtAddon::Make(a_path, window->GetObjRef(), model_parent, local,
+				std::move(a_3DInitializedCallback));
+		}
+	}
+
 	void Window::AddModel(const std::string& a_path, bool a_tempeffect,
 		std::function<void(art_addon::ArtAddon*)> a_3DInitializedCallback)
 	{

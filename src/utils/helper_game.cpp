@@ -21,8 +21,6 @@ namespace helper
 		RE::write_vfunc<RE::PlayerCharacter, 0xAF, PlayerCharacter_Update>();
 	}
 
-
-
 	TESForm* LookupByName(FormType a_typeEnum, const char* a_name)
 	{
 		auto* data = TESDataHandler::GetSingleton();
@@ -103,7 +101,22 @@ namespace helper
 	float GetShoutCooldownPercent(Actor* a_a, float a_MaxCDTime)
 	{ return std::clamp(a_a->GetVoiceRecoveryTime() / a_MaxCDTime, 0.f, 100.f); }
 
-	void SetGlowMult() {}
+	void SetGlowMult(NiAVObject* a_target, float a_glow_mult)
+	{
+		if (a_target)
+		{
+			// if target has no geometry, try first child
+			BSGeometry* geom = a_target->AsGeometry();
+			if (!geom) { geom = a_target->AsNode()->GetChildren().front()->AsGeometry(); }
+			if (auto shaderProp = GetShaderProperty(geom))
+			{
+				if (auto shader = netimmerse_cast<RE::BSLightingShaderProperty*>(shaderProp))
+				{
+					shader->emissiveMult = a_glow_mult;
+				}
+			}
+		}
+	}
 
 	void SetGlowColor(NiAVObject* a_target, int a_color_hex)
 	{
@@ -191,20 +204,19 @@ namespace helper
 			int player = 0;
 			int dangling = 0;
 			processLists->ForEachModelEffect([&](RE::ModelReferenceEffect* a_modelEffect) {
+				if (a_modelEffect->artObject)
+				{
+					SKSE::log::debug("MRE:{}  AO:{:x} lifetime:{}", (void*)&a_modelEffect,
+						a_modelEffect->artObject->GetFormID(), a_modelEffect->lifetime);
+					player++;
+				}
+				else
+				{
+					SKSE::log::debug("MRE:{}  AO:{}  lifetime:{}", (void*)&a_modelEffect,
+						(void*)(a_modelEffect->artObject), a_modelEffect->lifetime);
+					dangling++;
+				}
 
-					if (a_modelEffect->artObject)
-					{
-						SKSE::log::debug("MRE:{}  AO:{:x} lifetime:{}", (void*)&a_modelEffect,
-							a_modelEffect->artObject->GetFormID(), a_modelEffect->lifetime);
-						player++;
-					}
-					else
-					{
-						SKSE::log::debug("MRE:{}  AO:{}  lifetime:{}", (void*)&a_modelEffect,
-							(void*)(a_modelEffect->artObject), a_modelEffect->lifetime);
-						dangling++;
-					}
-				
 				return RE::BSContainer::ForEachResult::kContinue;
 			});
 			SKSE::log::debug("{} effects and {} dangling MRE", player, dangling);

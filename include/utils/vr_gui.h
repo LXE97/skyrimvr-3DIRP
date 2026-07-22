@@ -3,9 +3,9 @@
 #include "art_addon.h"
 #include "helper_math.h"
 #include "higgsinterface001.h"
+#include "vr_gui_hand.h"
 #include "vrikinterface001.h"
 #include "vrinput.h"
-#include "vr_gui_hand.h"
 
 #include <unordered_set>
 
@@ -40,9 +40,6 @@ namespace vr_gui
 		RE::ExtraDataList*  extradata;
 		std::string         text;
 	};
-
-	// observes and caches input device state
-	
 
 	class Behavior
 	{
@@ -145,6 +142,7 @@ namespace vr_gui
 		inline NiTransform  GetLocal() const { return local; }
 
 		int GetPriority() const { return priority; };
+		void SetPriority(int a_prio) { priority = a_prio; };
 
 		virtual void AddModel(const std::string& a_path, bool a_tempeffect = false,
 			std::function<void(art_addon::ArtAddon*)> a_3DInitializedCallback = nullptr);
@@ -222,7 +220,7 @@ namespace vr_gui
 		std::vector<art_addon::ArtAddonPtr> visual_effects;
 		bool                                enabled = true;
 		bool                                hover_state[2] = { false, false };
-		int                                 priority = 9;
+		int                                 priority = 50;
 
 		void RemoveChild(Widget* a_child);
 
@@ -231,6 +229,35 @@ namespace vr_gui
 		static constexpr int MAX_DEPTH = 20;
 
 		friend class Controller;
+	};
+
+	/* Widget whose model is attached to a specific scene node and provides the authoritative
+	 * world transform. The Widget's local transform is the model's offset from that node. */
+	class ModelDrivenWidget : public Widget
+	{
+	public:
+		ModelDrivenWidget(Widget* a_parent, NiAVObject* a_modelParent, NiTransform a_local,
+			NiPoint3 a_halfExtents, float a_radius) :
+			Widget(a_parent, std::move(a_local), a_halfExtents, a_radius),
+			model_parent(a_modelParent)
+		{
+			base_extents = extents;
+			base_radius = radius;
+		}
+
+		ModelDrivenWidget(Widget* a_parent, NiAVObject* a_modelParent, NiTransform a_local,
+			NiPoint3 a_halfExtents) :
+			ModelDrivenWidget(a_parent, a_modelParent, std::move(a_local), a_halfExtents,
+				helper::ComputeRadius(a_halfExtents))
+		{}
+
+		NiTransform GetWorld(int depth = 0) const override;
+
+		void AddModel(const std::string& a_path, bool a_tempeffect = false,
+			std::function<void(art_addon::ArtAddon*)> a_3DInitializedCallback = nullptr) override;
+
+	private:
+		NiAVObject* model_parent{};
 	};
 
 	/* Root of all Widget trees, has an ObjectReference for attaching models.
