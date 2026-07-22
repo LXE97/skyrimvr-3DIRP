@@ -218,7 +218,7 @@ namespace vr_gui
 				{
 					RemoveWindow(static_cast<Window*>(widget));
 				}
-			}
+			} else {SKSE::log::trace("Invalid widget in deletion queue");}
 		}
 		widgets_to_delete.clear();
 	}
@@ -593,6 +593,8 @@ namespace vr_gui
 		radius(a_radius)
 	{}
 
+	Widget::~Widget() { children.clear(); }
+
 	void Widget::ShowHitboxes(bool show)
 	{
 		DrawExtents(show);
@@ -655,8 +657,6 @@ namespace vr_gui
 
 	void Widget::OnClick(bool a_activate, Hand& a_hand, MenuAction a_action)
 	{
-		SKSE::log::debug("click event received on widget: {} {}",
-			a_hand.IsLeft() ? "left" : "right", a_activate ? "down" : "up");
 	}
 
 	void Widget::OnHoverImpl(bool activate, Hand& hand)
@@ -687,33 +687,14 @@ namespace vr_gui
 	void Widget::Resize(float a_scale)
 	{
 		local.scale = a_scale;
-
-		// Apply the new scale to the model. Since it has a different parent tree than the Widget, we need
-		// to accumulate the Widget scale up the tree
-		if (auto* node = Get3D())
-		{
-			RE::NiUpdateData ctx;
-			node->local.scale = GetLocalToRoot().scale;
-			node->Update(ctx);
-		}
-
-		for (auto& w : children) { w->UpdateModelTransform(); }
+		UpdateModelTransform();
 	}
 
 	/* Set new local translation */
 	void Widget::MoveTo(NiPoint3 a_translate_local)
 	{
 		local.translate = a_translate_local;
-		if (auto* node = Get3D())
-		{
-			RE::NiUpdateData ctx;
-			auto             model_local = node->parent->world.Invert() * GetWorld();
-
-			node->local.translate = model_local.translate;
-			node->Update(ctx);
-		}
-
-		for (auto& w : children) { w->UpdateModelTransform(); }
+		UpdateModelTransform();
 	}
 
 	void Widget::OnHover(bool a_activate, Hand& a_hand) {}
@@ -782,39 +763,49 @@ namespace vr_gui
 	NiTransform Widget::GetLocalToRoot() const
 	{ return GetWindow()->GetRootNode()->world.Invert() * GetWorld(); }
 
+	NiTransform Widget::GetLocalTo(NiAVObject* a_target) const
+	{ return a_target ? a_target->world.Invert() * GetWorld() : local; }
+
+	NiAVObject* Widget::GetModelParentNode() const
+	{
+		if (parent) { return parent->GetModelParentNode(); }
+
+		auto* window = GetWindow();
+		return window ? window->GetRootNode() : nullptr;
+	}
+
 	void Widget::UpdateModelTransform()
 	{
 		if (auto node = Get3D())
 		{
 			RE::NiUpdateData ctx;
-			node->local = GetLocalToRoot();
+			node->local = GetLocalTo(node->parent);
 			node->Update(ctx);
 		}
+
+		for (auto& child : children) { child->UpdateModelTransform(); }
 	}
 
 	void Widget::AddModel(const std::string& a_path, bool a_tempeffect,
 		std::function<void(art_addon::ArtAddon*)> a_3DInitializedCallback)
 	{
-		// get object reference first
-		if (auto root = GetWindow())
+		if (auto* window = GetWindow())
 		{
-			if (auto rv = dynamic_cast<const Window*>(root))
+			if (auto* object = window->GetObjRef())
 			{
-				if (auto obj = rv->GetObjRef())
+				if (auto* target = GetModelParentNode())
 				{
-					NiAVObject* target = rv->GetRootNode();
-					NiTransform t = GetLocalToRoot();
+					auto transform = GetLocalTo(target);
 
-					// Add the model
 					if (a_tempeffect)
 					{
 						visual_effects.emplace_back(art_addon::ArtAddon::Make(
-							a_path.c_str(), obj, target, t, a_3DInitializedCallback));
+							a_path.c_str(), object, target, transform, a_3DInitializedCallback));
 					}
 					else
 					{
 						model = art_addon::ArtAddon::Make(
-							a_path.c_str(), obj, target, t, a_3DInitializedCallback);
+							a_path.c_str(), object, target, transform, a_3DInitializedCallback);
 					}
 				}
 			}
@@ -831,22 +822,10 @@ namespace vr_gui
 		return model_parent ? model_parent->world * local : local;
 	}
 
-	void ModelDrivenWidget::AddModel(const std::string& a_path, bool a_tempeffect,
-		std::function<void(art_addon::ArtAddon*)> a_3DInitializedCallback)
+	NiTransform ModelDrivenWidget::GetLocalTo(NiAVObject* a_target) const
 	{
-		auto* window = GetWindow();
-		if (!window || !model_parent) { return; }
-
-		if (a_tempeffect)
-		{
-			visual_effects.emplace_back(art_addon::ArtAddon::Make(a_path, window->GetObjRef(),
-				model_parent, local, std::move(a_3DInitializedCallback)));
-		}
-		else
-		{
-			model = art_addon::ArtAddon::Make(a_path, window->GetObjRef(), model_parent, local,
-				std::move(a_3DInitializedCallback));
-		}
+		const auto world = model_parent ? model_parent->world * local : local;
+		return a_target ? a_target->world.Invert() * world : local;
 	}
 
 	void Window::AddModel(const std::string& a_path, bool a_tempeffect,

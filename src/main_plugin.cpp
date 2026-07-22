@@ -112,49 +112,6 @@ namespace vr3dui
 
 		if (e.button_state == vrinput::ButtonState::kButtonDown)
 		{
-			// for (auto* quest : RE::PlayerCharacter::GetSingleton()->questLog)
-			// {
-			// 	if (!quest || !quest->owner) { continue; }
-
-			// 	auto     type = quest->owner->GetType();
-			// 	BSString text{};
-			// 	quest->owner->GetJournalTextForInstance(text, quest->owner->currentInstanceID);
-
-			// 	auto logentry = quest->GetLogEntry(quest->owner);
-
-			// 	SKSE::log::trace("{} : {} \n {} : {}", quest->owner->GetFullName(),
-			// 		GetQuestTypeInfo(type).chapter_model_path, text.c_str(), logentry);
-
-			// 	for (auto& obj : quest->owner->objectives)
-			// 	{
-
-			// 			SKSE::log::trace("{}", obj->displayText.c_str());
-
-			// 	}
-			// }
-
-			for (auto& obj : RE::PlayerCharacter::GetSingleton()->objectives)
-			{
-				if (obj.Objective->state == RE::QUEST_OBJECTIVE_STATE::kDisplayed)
-				{
-					if (obj.Objective->ownerQuest->IsActive())
-					{
-						SKSE::log::trace("TRACKED: {} {}", obj.Objective->ownerQuest->GetFullName(),
-							obj.Objective->displayText);
-					}
-					else
-					{
-						SKSE::log::trace("ACTIVE: {} {}", obj.Objective->ownerQuest->GetFullName(),
-							obj.Objective->displayText);
-					}
-				}
-				else if (obj.Objective->state == RE::QUEST_OBJECTIVE_STATE::kCompletedDisplayed)
-				{
-					SKSE::log::trace("COMPLETE: {} {}", obj.Objective->ownerQuest->GetFullName(),
-						obj.Objective->displayText);
-				}
-			}
-
 			toggle ^= 1;
 		}
 		return false;

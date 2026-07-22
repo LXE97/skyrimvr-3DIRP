@@ -82,7 +82,7 @@ namespace vr_gui
 			base_radius = radius;
 			base_extents = extents;
 		}
-		virtual ~Widget() = default;
+		virtual ~Widget();
 
 		void SetEnabled(bool a_enabled) { enabled = a_enabled; };
 		bool IsEnabled() const { return enabled; };
@@ -128,18 +128,13 @@ namespace vr_gui
 		NiTransform& GetTransform() { return local; }
 		void         SetTransform(NiTransform a_t)
 		{
-			NiUpdateData ctx;
-			local = a_t;
-			if (auto node = Get3D())
-			{
-				node->local.rotate = a_t.rotate;
-				node->local.scale = a_t.scale;
-				node->Update(ctx);
-			}
+			local = std::move(a_t);
+			UpdateModelTransform();
 		}
 
 		virtual NiTransform GetWorld(int depth = 0) const;
 		inline NiTransform  GetLocal() const { return local; }
+		virtual NiAVObject* GetModelParentNode() const;
 
 		int GetPriority() const { return priority; };
 		void SetPriority(int a_prio) { priority = a_prio; };
@@ -225,6 +220,7 @@ namespace vr_gui
 		void RemoveChild(Widget* a_child);
 
 		NiTransform GetLocalToRoot() const;
+		virtual NiTransform GetLocalTo(NiAVObject* a_target) const;
 
 		static constexpr int MAX_DEPTH = 20;
 
@@ -251,14 +247,14 @@ namespace vr_gui
 				helper::ComputeRadius(a_halfExtents))
 		{}
 
-		NiAVObject* GetModelParent() const {return model_parent;}
+		NiAVObject* GetModelParent() const { return model_parent; }
+		NiAVObject* GetModelParentNode() const override { return model_parent; }
 
 		NiTransform GetWorld(int depth = 0) const override;
 
-		void AddModel(const std::string& a_path, bool a_tempeffect = false,
-			std::function<void(art_addon::ArtAddon*)> a_3DInitializedCallback = nullptr) override;
-
 	private:
+		NiTransform GetLocalTo(NiAVObject* a_target) const override;
+
 		NiAVObject* model_parent{};
 	};
 

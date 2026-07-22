@@ -224,7 +224,6 @@ namespace art_addon
 
 	void AddonTextBox::MakeString(std::string font_path)
 	{
-		SKSE::log::trace("making string with font {}", font_path);
 		if (auto root_node = root ? root->Get3D() : nullptr)
 		{
 			NiTransform t;

@@ -16,7 +16,7 @@ namespace vr3dui
 	void Book::Close()
 	{
 		if (animator.HasQueued()) { animator.ClearQueue(); }
-		animator.Queue(close, animation_speed * 1.5,
+		animator.PlayImmediately(close, animation_speed * 1.2,
 			[this]() { Controller::GetSingleton()->MarkForDelete(this->parent); });
 	}
 
@@ -54,7 +54,7 @@ namespace vr3dui
 
 	void Book::TurnPageLeft()
 	{
-		if (animator.QueuedCount() >= 2) { return; }
+		if (animator.QueuedCount() >= 1) { return; }
 
 		if (chapters.empty() || chapter_index >= chapters.size()) { return; }
 
@@ -72,14 +72,15 @@ namespace vr3dui
 		{
 			return;
 		}
-
 		ClearPageView();
-		animator.Queue(flip_left, animation_speed, [this] { DrawCurrentPage(); });
+		animator.Queue(flip_left, animation_speed, [this] {
+			if (!animator.HasQueued()) DrawCurrentPage();
+		});
 	}
 
 	void Book::TurnPageRight()
 	{
-		if (animator.QueuedCount() >= 2) { return; }
+		if (animator.QueuedCount() >= 1) { return; }
 
 		if (chapters.empty() || chapter_index >= chapters.size()) { return; }
 
@@ -97,15 +98,14 @@ namespace vr3dui
 		{
 			return;
 		}
-
 		ClearPageView();
-		animator.Queue(flip_right, animation_speed, [this] { DrawCurrentPage(); });
+		animator.Queue(flip_right, animation_speed, [this] {
+			if (!animator.HasQueued()) DrawCurrentPage();
+		});
 	}
 
 	void Book::TurnToChapter(std::size_t a_index)
 	{
-		SKSE::log::trace("cur idx {}, tar idx {}, size {}", (int)chapter_index, (int)a_index,
-			(int)chapters.size());
 		if (animator.QueuedCount() >= 2) { return; }
 		if (a_index >= chapters.size() || a_index == chapter_index) { return; }
 
@@ -117,7 +117,9 @@ namespace vr3dui
 		page_index = 0;
 
 		ClearPageView();
-		animator.Queue(animation, animation_speed, [this] { DrawCurrentPage(); });
+		animator.Queue(animation, animation_speed, [this] {
+			if (!animator.HasQueued()) DrawCurrentPage();
+		});
 	}
 
 	void Book::AddChapter(std::unique_ptr<Chapter> a_chapter)
@@ -141,7 +143,8 @@ namespace vr3dui
 		transform.translate.y -= static_cast<float>(a_index) * layout.tab_spacing;
 		transform.translate.x -= (a_index % 2) * 0.3;
 
-		auto* tab = AddChild<ChapterTab>(tab_parent, transform, NiPoint3(1.0, 0.4, 0.5), a_index);
+		auto* tab = AddChild<ChapterTab>(
+			tab_parent, transform, NiPoint3(1.0, 0.4, 0.5), a_index, &chapter_tab_group);
 		tab->AddModel(chapters[a_index]->model_path);
 		tab->SetPriority(10 + (int)a_index);
 		chapters[a_index]->tab = tab;
@@ -181,6 +184,9 @@ namespace vr3dui
 
 		PageContext context{ layout, *left_page_parent, *right_page_parent };
 
+		right_page_parent->SetPriority(100);
+		left_page_parent->SetPriority(100);
+
 		pages[page_index]->Draw(context);
 
 		// Display page numbers
@@ -215,6 +221,8 @@ namespace vr3dui
 	{
 		Widget::Update(a_delta);
 		animator.Update(Get3D(), a_delta);
+		chapter_tab_group.Update();
+		page_group.Update();
 	}
 
 	void Book::VirtualParent(NiAVObject* a_new, NiTransform& a_offset)
@@ -346,7 +354,18 @@ namespace vr3dui
 
 	void Book::DrawExtents(bool show) {}
 
-	void ChapterTab::OnHover(bool a_activate, Hand& a_hand) { UpdateSelectionVisual(); }
+	void ChapterTab::OnHover(bool a_activate, Hand& a_hand)
+	{
+		if (!group) { return; }
+
+		if (a_activate) { group->Request(this, GetWorld().translate, a_hand); }
+		else
+		{
+			group->Release(this, a_hand);
+		}
+	}
+
+	void ChapterTab::OnHoverExclusive(bool a_activate, Hand& a_hand) { UpdateSelectionVisual(); }
 
 	void ChapterTab::OnSelected(bool a_selected)
 	{
@@ -358,7 +377,8 @@ namespace vr3dui
 	{
 		if (auto* node = Get3D())
 		{
-			const bool highlighted = selected || IsHovered(false) || IsHovered(true);
+			const bool highlighted =
+				selected || IsExclusivelyHovered(false) || IsExclusivelyHovered(true);
 
 			helper::SetGlowMult(node, highlighted ? 0.9f : 0.0f);
 		}

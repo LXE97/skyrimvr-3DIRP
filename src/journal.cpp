@@ -78,22 +78,18 @@ namespace vr3dui
 	class QuestStringHolder : public Widget
 	{
 	public:
-		QuestStringHolder(
-			Widget* a_parent, std::string a_string, NiTransform a_local, TESQuest* a_target,
-			const Book::Layout& a_layout) :
+		QuestStringHolder(Widget* a_parent, std::string a_string, NiTransform a_local,
+			TESQuest* a_target, const Book::Layout& a_layout) :
 			Widget(a_parent, a_local, NiPoint3((float)a_string.length() / 2, 1, 1)),
 			target(a_target)
 		{
-			text = std::make_unique<art_addon::AddonTextBox>(a_string,
-				a_layout.body_character_spacing,
-				dynamic_cast<ModelDrivenWidget*>(parent)->GetModelParent(), a_local,
-				std::string{ a_layout.body_font_model_path });
-            AddModel("HelperSphere.nif");
-				
-				
-			// 	, [this](art_addon::ArtAddon* a){
-            //     a->Get3D()->local.translate.x -= this->extents.x + 0.5 ;
-            // });
+			text =
+				std::make_unique<art_addon::AddonTextBox>(a_string, a_layout.body_character_spacing,
+					dynamic_cast<ModelDrivenWidget*>(parent)->GetModelParent(), a_local,
+					std::string{ a_layout.body_font_model_path });
+			AddModel("HelperSphere.nif", false, [this](art_addon::ArtAddon* a) {
+				a->Get3D()->local.translate.x -= this->extents.x + 0.5;
+			});
 		};
 
 		void OnClick(bool a_activate, Hand& a_hand, MenuAction a_action) override
@@ -110,7 +106,7 @@ namespace vr3dui
 		}
 
 	private:
-		TESQuest*                target{};
+		TESQuest*                                target{};
 		std::unique_ptr<art_addon::AddonTextBox> text;
 	};
 
@@ -132,8 +128,7 @@ namespace vr3dui
 
 		NiTransform cursor{};
 		cursor.scale = a_context.layout.body_text_scale;
-		cursor.translate.y =
-			a_context.layout.kPageHeight * 0.5f - a_context.layout.top_margin;
+		cursor.translate.y = a_context.layout.kPageHeight * 0.5f - a_context.layout.top_margin;
 
 		for (const auto& quest : quests)
 		{

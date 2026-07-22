@@ -1,5 +1,6 @@
 #pragma once
 
+#include "exclusive_hover_group.h"
 #include "ni_animator.h"
 #include "vr_gui.h"
 
@@ -22,18 +23,20 @@ namespace vr3dui
 
 	void DismissBook(Window* a_book_window);
 
-	class ChapterTab : public ModelDrivenWidget
+	class ChapterTab : public ModelDrivenWidget, ExclusiveHoverItem
 	{
 	public:
 		ChapterTab(Widget* a_parent, NiAVObject* a_modelParent, NiTransform a_local,
-			NiPoint3 a_halfExtents, std::size_t a_chapterIndex) :
+			NiPoint3 a_halfExtents, std::size_t a_chapterIndex, ExclusiveHoverGroup* a_group) :
 			ModelDrivenWidget(a_parent, a_modelParent, std::move(a_local), a_halfExtents),
+			ExclusiveHoverItem(a_group),
 			chapter_index(a_chapterIndex)
 		{}
 
 		void OnClick(bool a_activate, Hand& a_hand, MenuAction a_action) override;
 
 		void OnHover(bool a_activate, Hand& a_hand) override;
+		void OnHoverExclusive(bool a_activate, Hand& a_hand) override;
 
 		void OnSelected(bool a_selected);
 
@@ -141,7 +144,10 @@ namespace vr3dui
 		bool   isLeft;
 		Layout layout;
 
-		float animation_speed = 3;
+		float animation_speed = 2;
+
+		ExclusiveHoverGroup chapter_tab_group{};
+		ExclusiveHoverGroup page_group{};
 	};
 
 	class Page
