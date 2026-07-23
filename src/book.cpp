@@ -29,8 +29,6 @@ namespace vr3dui
 			{
 				ni_animator::SetControllerFlags(node, true, false, false, false, true);
 				node->local.scale = windowscale / node->parent->world.scale;
-				tab_parent = node->GetObjectByName(kTabParentNodeName);
-
 				for (std::size_t i = 0; i < chapters.size(); ++i) { AddChapterTab(i); }
 
 				animator.PlayImmediately(open, animation_speed);
@@ -136,7 +134,7 @@ namespace vr3dui
 
 	void Book::AddChapterTab(std::size_t a_index)
 	{
-		if (!tab_parent || !tab_container || a_index >= chapters.size() || !chapters[a_index] ||
+		if (!tab_container || a_index >= chapters.size() || !chapters[a_index] ||
 			chapters[a_index]->tab)
 		{
 			return;
@@ -148,7 +146,7 @@ namespace vr3dui
 		transform.translate.x -= (a_index % 2) * 0.3;
 
 		auto* tab = tab_container->AddChild<ChapterTab>(
-			tab_parent, transform, NiPoint3(1.0, 0.4, 0.5), a_index, tab_container->GetGroup());
+			transform, NiPoint3(1.0, 0.4, 0.5), a_index, tab_container->GetGroup());
 		tab->AddModel(chapters[a_index]->model_path);
 		chapters[a_index]->tab = tab;
 		if (a_index == chapter_index) { chapters[a_index]->OnSelected(true); }

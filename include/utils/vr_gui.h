@@ -136,9 +136,8 @@ namespace vr_gui
 
 		virtual NiTransform GetWorld(int depth = 0) const;
 		inline NiTransform  GetLocal() const { return local; }
-		virtual NiAVObject* GetModelParentNode() const;
 
-		int GetPriority() const { return priority; };
+		int  GetPriority() const { return priority; };
 		void SetPriority(int a_prio) { priority = a_prio; };
 
 		virtual void AddModel(const std::string& a_path, bool a_tempeffect = false,
@@ -224,42 +223,10 @@ namespace vr_gui
 		void RemoveChild(Widget* a_child);
 
 		NiTransform GetLocalToRoot() const;
-		virtual NiTransform GetLocalTo(NiAVObject* a_target) const;
 
 		static constexpr int MAX_DEPTH = 20;
 
 		friend class Controller;
-	};
-
-	/* Widget whose model is attached to a specific scene node and provides the authoritative
-	 * world transform. The Widget's local transform is the model's offset from that node. */
-	class ModelDrivenWidget : public Widget
-	{
-	public:
-		ModelDrivenWidget(Widget* a_parent, NiAVObject* a_modelParent, NiTransform a_local,
-			NiPoint3 a_halfExtents, float a_radius) :
-			Widget(a_parent, std::move(a_local), a_halfExtents, a_radius),
-			model_parent(a_modelParent)
-		{
-			base_extents = extents;
-			base_radius = radius;
-		}
-
-		ModelDrivenWidget(Widget* a_parent, NiAVObject* a_modelParent, NiTransform a_local,
-			NiPoint3 a_halfExtents) :
-			ModelDrivenWidget(a_parent, a_modelParent, std::move(a_local), a_halfExtents,
-				helper::ComputeRadius(a_halfExtents))
-		{}
-
-		NiAVObject* GetModelParent() const { return model_parent; }
-		NiAVObject* GetModelParentNode() const override { return model_parent; }
-
-		NiTransform GetWorld(int depth = 0) const override;
-
-	private:
-		NiTransform GetLocalTo(NiAVObject* a_target) const override;
-
-		NiAVObject* model_parent{};
 	};
 
 	/* Root of all Widget trees, has an ObjectReference for attaching models.
@@ -324,6 +291,28 @@ namespace vr_gui
 	protected:
 		void                                 Update(float delta);
 		std::function<void(FloatingWindow*)> InitializedCallback;
+	};
+
+	/* Window that creates its own static attachment model and node */
+	class ModelAttachedWindow : public Window
+	{
+	public:
+		using OnInitialized = std::function<void(ModelAttachedWindow*)>;
+
+		ModelAttachedWindow(float a_radius, RE::TESObjectREFR* a_rootObject,
+			RE::NiNode* a_attachmentNode, std::string_view a_modelPath, RE::NiTransform a_local,
+			std::string_view a_widgetRootNodeName = {}, OnInitialized a_callback = nullptr);
+
+		/* Returns the node that defines the coordinate space for the Widget tree. */
+		RE::NiNode* GetRootNode() const override;
+		/* Returns the root of the owned model, which may differ from the Widget root. */
+		RE::NiNode* GetModelRootNode() const;
+
+		RE::NiTransform GetWorld(int a_depth = 0) const override;
+
+	private:
+		std::string widget_root_node_name;
+		RE::NiNode* widget_root_node{};
 	};
 
 	/* Interacts via button presses */

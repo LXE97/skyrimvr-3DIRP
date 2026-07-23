@@ -23,12 +23,12 @@ namespace vr3dui
 
 	void DismissBook(Window* a_book_window);
 
-	class ChapterTab : public ModelDrivenWidget, ExclusiveHoverItem
+	class ChapterTab : public Widget, ExclusiveHoverItem
 	{
 	public:
-		ChapterTab(Widget* a_parent, NiAVObject* a_modelParent, NiTransform a_local,
-			NiPoint3 a_halfExtents, std::size_t a_chapterIndex, ExclusiveHoverGroup* a_group) :
-			ModelDrivenWidget(a_parent, a_modelParent, std::move(a_local), a_halfExtents),
+		ChapterTab(Widget* a_parent, NiTransform a_local, NiPoint3 a_halfExtents,
+			std::size_t a_chapterIndex, ExclusiveHoverGroup* a_group) :
+			Widget(a_parent, std::move(a_local), a_halfExtents),
 			ExclusiveHoverItem(a_group),
 			chapter_index(a_chapterIndex)
 		{}
@@ -118,7 +118,6 @@ namespace vr3dui
 	protected:
 		static constexpr const char* kLeftPageNodeName = "Book CoverPage Turn04";
 		static constexpr const char* kRightPageNodeName = "Book Pages";
-		static constexpr const char* kTabParentNodeName = "Book Pages Nub";
 		static constexpr const char* kChapterTabModel = "ChapterTab.nif";
 
 		static constexpr ni_animator::AnimationRange open{ 0.0f, 1.f, 1.f };
@@ -129,7 +128,6 @@ namespace vr3dui
 		std::vector<std::unique_ptr<Chapter>>    chapters;
 		std::size_t                              chapter_index{};
 		std::size_t                              page_index{};
-		NiAVObject*                              tab_parent{};
 		std::unique_ptr<art_addon::AddonTextBox> page_numbers;
 
 		ExclusiveClickContainer* left_page_parent{};

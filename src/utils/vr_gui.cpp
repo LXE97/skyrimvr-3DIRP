@@ -218,7 +218,11 @@ namespace vr_gui
 				{
 					RemoveWindow(static_cast<Window*>(widget));
 				}
-			} else {SKSE::log::trace("Invalid widget in deletion queue");}
+			}
+			else
+			{
+				SKSE::log::trace("Invalid widget in deletion queue");
+			}
 		}
 		widgets_to_delete.clear();
 	}
@@ -655,9 +659,7 @@ namespace vr_gui
 		return false;
 	}
 
-	void Widget::OnClick(bool a_activate, Hand& a_hand, MenuAction a_action)
-	{
-	}
+	void Widget::OnClick(bool a_activate, Hand& a_hand, MenuAction a_action) {}
 
 	void Widget::OnHoverImpl(bool activate, Hand& hand)
 	{
@@ -763,23 +765,12 @@ namespace vr_gui
 	NiTransform Widget::GetLocalToRoot() const
 	{ return GetWindow()->GetRootNode()->world.Invert() * GetWorld(); }
 
-	NiTransform Widget::GetLocalTo(NiAVObject* a_target) const
-	{ return a_target ? a_target->world.Invert() * GetWorld() : local; }
-
-	NiAVObject* Widget::GetModelParentNode() const
-	{
-		if (parent) { return parent->GetModelParentNode(); }
-
-		auto* window = GetWindow();
-		return window ? window->GetRootNode() : nullptr;
-	}
-
 	void Widget::UpdateModelTransform()
 	{
 		if (auto node = Get3D())
 		{
 			RE::NiUpdateData ctx;
-			node->local = GetLocalTo(node->parent);
+			node->local = parent ? GetLocalToRoot() : local;
 			node->Update(ctx);
 		}
 
@@ -793,9 +784,9 @@ namespace vr_gui
 		{
 			if (auto* object = window->GetObjRef())
 			{
-				if (auto* target = GetModelParentNode())
+				if (auto* target = window->GetRootNode())
 				{
-					auto transform = GetLocalTo(target);
+					auto transform = GetLocalToRoot();
 
 					if (a_tempeffect)
 					{
@@ -810,22 +801,6 @@ namespace vr_gui
 				}
 			}
 		}
-	}
-
-	NiTransform ModelDrivenWidget::GetWorld(int) const
-	{
-		if (model)
-		{
-			if (auto* node = model->Get3D()) { return node->world; }
-		}
-
-		return model_parent ? model_parent->world * local : local;
-	}
-
-	NiTransform ModelDrivenWidget::GetLocalTo(NiAVObject* a_target) const
-	{
-		const auto world = model_parent ? model_parent->world * local : local;
-		return a_target ? a_target->world.Invert() * world : local;
 	}
 
 	void Window::AddModel(const std::string& a_path, bool a_tempeffect,
@@ -1034,6 +1009,59 @@ namespace vr_gui
 
 			++visible_index;
 		}
+	}
+
+	ModelAttachedWindow::ModelAttachedWindow(float a_radius, RE::TESObjectREFR* a_rootObject,
+		RE::NiNode* a_attachmentNode, std::string_view a_modelPath, RE::NiTransform a_local,
+		std::string_view a_widgetRootNodeName, OnInitialized a_callback) :
+		Window(a_radius, a_rootObject, a_attachmentNode, a_local),
+		widget_root_node_name(a_widgetRootNodeName)
+	{
+		SetEnabled(false);
+
+		model = art_addon::ArtAddon::Make(a_modelPath, a_rootObject, a_attachmentNode, local,
+			[this, modelPath = std::string(a_modelPath), callback = std::move(a_callback)](
+				art_addon::ArtAddon* a_model) {
+				auto* model3D = a_model ? a_model->Get3D() : nullptr;
+				if (auto* modelRoot = model3D ? model3D->AsNode() : nullptr)
+				{
+					widget_root_node = modelRoot;
+
+					if (!widget_root_node_name.empty())
+					{
+						auto* object = modelRoot->GetObjectByName(RE::BSFixedString(widget_root_node_name));
+						if (auto* node = object ? object->AsNode() : nullptr)
+						{
+							widget_root_node = node;
+						}
+						else
+						{
+							SKSE::log::error("Widget root node '{}' was not found in model '{}'",
+								widget_root_node_name, modelPath);
+						}
+					}
+				}
+
+				SetEnabled(true);
+
+				if (callback) { callback(this); }
+			});
+	}
+
+	RE::NiNode* ModelAttachedWindow::GetRootNode() const
+	{ return widget_root_node ? widget_root_node : GetModelRootNode(); }
+
+	RE::NiNode* ModelAttachedWindow::GetModelRootNode() const
+	{
+		auto* node = model ? model->Get3D() : nullptr;
+		return node ? node->AsNode() : nullptr;
+	}
+
+	NiTransform ModelAttachedWindow::GetWorld(int) const
+	{
+		if (auto* root = GetRootNode()) { return root->world; }
+
+		return parent_node ? parent_node->world * local : local;
 	}
 
 }
