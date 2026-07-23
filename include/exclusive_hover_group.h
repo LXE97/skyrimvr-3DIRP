@@ -23,7 +23,7 @@ namespace vr_gui
 		ExclusiveHoverItem& operator=(const ExclusiveHoverItem&) = delete;
 		ExclusiveHoverItem& operator=(ExclusiveHoverItem&&) = delete;
 
-		virtual void OnHoverExclusive(bool a_activate, Hand& a_hand) = 0;
+		virtual void OnHoverExclusive(bool a_activate, Hand& a_hand){};
 
 		bool IsExclusivelyHovered(bool a_isLeft) const { return exclusive_hover_state[a_isLeft]; }
 

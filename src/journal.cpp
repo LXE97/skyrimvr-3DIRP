@@ -75,18 +75,20 @@ namespace vr3dui
 		}
 	}
 
-	class QuestStringHolder : public Widget
+	class QuestStringHolder : public Widget, ExclusiveHoverItem
 	{
 	public:
 		QuestStringHolder(Widget* a_parent, std::string a_string, NiTransform a_local,
-			TESQuest* a_target, const Book::Layout& a_layout) :
-			Widget(a_parent, a_local, NiPoint3((float)a_string.length() / 2, a_layout.body_character_spacing /2, 1)),
+			TESQuest* a_target, const Book::Layout& a_layout, ExclusiveHoverGroup* a_group) :
+			Widget(a_parent, a_local,
+				NiPoint3((float)a_string.length() / 2, a_layout.body_character_spacing / 2, 1)),
+			ExclusiveHoverItem(a_group),
 			target(a_target)
 		{
-			text =
-				std::make_unique<art_addon::AddonTextBox>(a_string, a_layout.body_character_spacing,
-					dynamic_cast<ModelDrivenWidget*>(parent)->GetModelParent(), a_local,
-					std::string{ a_layout.body_font_model_path });
+			// text =
+			// 	std::make_unique<art_addon::AddonTextBox>(a_string, a_layout.body_character_spacing,
+			// 		, a_local,
+			// 		std::string{ a_layout.body_font_model_path });
 			AddModel("HelperSphere.nif", false, [this](art_addon::ArtAddon* a) {
 				a->Get3D()->local.translate.x -= this->extents.x + 0.5;
 			});
@@ -102,6 +104,17 @@ namespace vr3dui
 				{
 					helper::SetGlowColor(model->Get3D(), tracked ? 0xFF0000 : 0xFFFFFF);
 				}
+			}
+		}
+
+		void OnHover(bool a_activate, Hand& a_hand) override
+		{
+			if (!group) { return; }
+
+			if (a_activate) { group->Request(this, GetWorld().translate, a_hand); }
+			else
+			{
+				group->Release(this, a_hand);
 			}
 		}
 
@@ -126,6 +139,8 @@ namespace vr3dui
 	{
 		if (quests.empty()) { return; }
 
+		auto& right_page = a_context.right_page;
+
 		NiTransform cursor{};
 		cursor.scale = a_context.layout.body_text_scale;
 		cursor.translate.y = a_context.layout.kPageHeight * 0.5f - a_context.layout.top_margin;
@@ -133,8 +148,9 @@ namespace vr3dui
 		for (const auto& quest : quests)
 		{
 			cursor.translate.y -= a_context.layout.quest_line_spacing;
-			a_context.right_page.AddChild<QuestStringHolder>(
-				quest.owner->GetFullName(), cursor, quest.owner, a_context.layout);
+
+			right_page.AddChild<QuestStringHolder>(quest.owner->GetFullName(), cursor, quest.owner,
+				a_context.layout, right_page.GetGroup());
 		}
 	}
 

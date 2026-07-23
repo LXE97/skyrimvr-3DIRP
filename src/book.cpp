@@ -51,10 +51,9 @@ namespace vr3dui
 		interaction_volume->AddBehavior<HandPointing>(!isLeft);
 		interaction_volume->SetPriority(90);
 
-		t.translate = {0.1f, 0, -0.1f};
-		tab_container = AddChild<ExclusiveClickContainer>(t,
-			NiPoint3(1.0, layout.kPageHeight * 0.5f, 0.5), kChapterTabGroupPriority
-			);
+		t.translate = { 0.1f, 0, -0.1f };
+		tab_container = AddChild<ExclusiveClickContainer>(
+			t, NiPoint3(1.0, layout.kPageHeight * 0.5f, 0.5), kChapterTabGroupPriority);
 	}
 
 	void Book::TurnPageLeft()
@@ -177,25 +176,26 @@ namespace vr3dui
 		if (page_index >= pages.size() || !pages[page_index]) { return; }
 
 		// Create parents for page content
+		auto right_node = model->Get3D()->GetObjectByName(kRightPageNodeName);
+		auto left_node = model->Get3D()->GetObjectByName(kLeftPageNodeName);
+
+		if (!right_node || !left_node) { return; }
+
 		NiTransform p{};
-		p.translate = { layout.kRightPageWidth / 2, 0, 0 };
+		p.translate = right_node->local.translate + layout.kRightPageParentOffset;
 		NiPoint3 e = { layout.kRightPageWidth / 2, layout.kPageHeight / 2, 2 };
-		right_page_parent =
-			AddChild<ModelDrivenWidget>(model->Get3D()->GetObjectByName(kRightPageNodeName), p, e);
+		right_page_parent = AddChild<ExclusiveClickContainer>(p, e, kPageGroupPriority);
 
 		p.translate = { -layout.kLeftPageWidth / 2 + layout.kLeftPageOrigin.x, 0, 0 };
+		p.translate += left_node->local.translate;
 
 		// left parent is upside down
 		p.rotate = { { -1.0000000, 0.0000000, 0.0000000 }, { 0.0000000, 1.0000000, 0.0000000 },
 			{ -0.0000000, 0.0000000, -1.0000000 } };
 
-		left_page_parent =
-			AddChild<ModelDrivenWidget>(model->Get3D()->GetObjectByName(kLeftPageNodeName), p, e);
+		left_page_parent = AddChild<ExclusiveClickContainer>(p, e, kPageGroupPriority);
 
-		PageContext context{ layout, *left_page_parent, *right_page_parent };
-
-		right_page_parent->SetPriority(100);
-		left_page_parent->SetPriority(100);
+		PageContext context{ layout, *left_page_parent,*right_page_parent };
 
 		pages[page_index]->Draw(context);
 
@@ -221,11 +221,7 @@ namespace vr3dui
 		controller->MarkForDelete(right);
 	}
 
-	void Page::Draw(Book::PageContext a_context)
-	{
-		a_context.left_page.AddModel("HelperSphere.nif");
-		a_context.right_page.AddModel("HelperSphere.nif");
-	}
+	void Page::Draw(Book::PageContext a_context) {}
 
 	void Book::Update(float a_delta)
 	{
@@ -239,20 +235,20 @@ namespace vr3dui
 		auto* root = window ? window->GetRootNode() : nullptr;
 		if (!a_new || !root) { return; }
 
-		const auto desired_world = a_new->world * a_offset;
-		const auto desired_window_world = desired_world * local.Invert();
+		const auto desired_book_world = a_new->world * a_offset;
+		const auto desired_window_world = desired_book_world * local.Invert();
+		const auto desired_window_local = root->world.Invert() * desired_window_world;
 
-		window->GetTransform() = root->world.Invert() * desired_window_world;
+		auto*       node = Get3D();
+		const float model_scale = node ? node->local.scale : 1.0f;
 
-		if (auto* node = Get3D())
-		{
-			const float inverse_parent_scale = node->local.scale;
-			node->local = GetLocalToRoot();
-			node->local.scale = inverse_parent_scale;
+		window->SetTransform(desired_window_local);
 
-			NiUpdateData ctx{};
-			node->Update(ctx);
-		}
+		if (!node) { return; }
+
+		node->local.scale = model_scale;
+		NiUpdateData ctx{};
+		node->Update(ctx);
 	}
 
 	void GrabNode::OnClick(bool a_activate, Hand& a_hand, MenuAction a_action)

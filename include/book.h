@@ -59,6 +59,7 @@ namespace vr3dui
 		{
 			const NiPoint3 kLeftPageOrigin = { 3, 10.4, 0.01 };
 			const NiPoint3 kRightPageOrigin = { 0, 10.4, 0.01 };
+			const NiPoint3 kRightPageParentOffset = { 9.0, 0.0, 1.21 };
 
 			static constexpr float kRightPageWidth = 15.5;
 			static constexpr float kLeftPageWidth = 13.7;
@@ -84,12 +85,12 @@ namespace vr3dui
 		struct PageContext
 		{
 			const Layout& layout;
-			Widget&       left_page;
-			Widget&       right_page;
+			ExclusiveClickContainer&       left_page;
+			ExclusiveClickContainer&       right_page;
 		};
 
 		static constexpr int   kChapterTabGroupPriority = 10;
-		static constexpr int   kChapterTabPriority = 11;
+		static constexpr int   kPageGroupPriority = 15;
 		static constexpr float kDefaultWindowRadius = 40.f;
 
 		void AddChapter(std::unique_ptr<Chapter> a_chapter);
@@ -116,7 +117,7 @@ namespace vr3dui
 
 	protected:
 		static constexpr const char* kLeftPageNodeName = "Book CoverPage Turn04";
-		static constexpr const char* kRightPageNodeName = "Book TurnPage2";
+		static constexpr const char* kRightPageNodeName = "Book Pages";
 		static constexpr const char* kTabParentNodeName = "Book Pages Nub";
 		static constexpr const char* kChapterTabModel = "ChapterTab.nif";
 
@@ -131,8 +132,8 @@ namespace vr3dui
 		NiAVObject*                              tab_parent{};
 		std::unique_ptr<art_addon::AddonTextBox> page_numbers;
 
-		Widget* left_page_parent{};
-		Widget* right_page_parent{};
+		ExclusiveClickContainer* left_page_parent{};
+		ExclusiveClickContainer* right_page_parent{};
 
 		void AddChapterTab(std::size_t a_index);
 		void DrawCurrentPage();
