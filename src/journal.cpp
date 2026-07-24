@@ -75,54 +75,6 @@ namespace vr3dui
 		}
 	}
 
-	class QuestStringHolder : public Widget, ExclusiveHoverItem
-	{
-	public:
-		QuestStringHolder(Widget* a_parent, std::string a_string, NiTransform a_local,
-			TESQuest* a_target, const Book::Layout& a_layout, ExclusiveHoverGroup* a_group) :
-			Widget(a_parent, a_local,
-				NiPoint3((float)a_string.length() / 2, a_layout.body_character_spacing / 2, 1)),
-			ExclusiveHoverItem(a_group),
-			target(a_target)
-		{
-			// text =
-			// 	std::make_unique<art_addon::AddonTextBox>(a_string, a_layout.body_character_spacing,
-			// 		, a_local,
-			// 		std::string{ a_layout.body_font_model_path });
-			AddModel("HelperSphere.nif", false, [this](art_addon::ArtAddon* a) {
-				a->Get3D()->local.translate.x -= this->extents.x + 0.5;
-			});
-		};
-
-		void OnClick(bool a_activate, Hand& a_hand, MenuAction a_action) override
-		{
-			if (a_action == MenuAction::kPrimary && a_activate)
-			{
-				const bool tracked = !target->IsActive();
-
-				if (helper::SetQuestTracked(target, tracked))
-				{
-					helper::SetGlowColor(model->Get3D(), tracked ? 0xFF0000 : 0xFFFFFF);
-				}
-			}
-		}
-
-		void OnHover(bool a_activate, Hand& a_hand) override
-		{
-			if (!group) { return; }
-
-			if (a_activate) { group->Request(this, GetWorld().translate, a_hand); }
-			else
-			{
-				group->Release(this, a_hand);
-			}
-		}
-
-	private:
-		TESQuest*                                target{};
-		std::unique_ptr<art_addon::AddonTextBox> text;
-	};
-
 	void QuestChapter::MakePages(const Book::Layout&)
 	{
 		auto quests = GetQuestsByType(type);
@@ -149,13 +101,26 @@ namespace vr3dui
 		{
 			cursor.translate.y -= a_context.layout.quest_line_spacing;
 
-			right_page.AddChild<QuestStringHolder>(quest.owner->GetFullName(), cursor, quest.owner,
-				a_context.layout, right_page.GetGroup());
+			const std::string_view quest_name = quest.owner->GetFullName();
+			const float            text_half_width = static_cast<float>(quest_name.size()) * 0.5f;
+
+			auto* line = right_page.AddChild<Widget>(cursor,
+				NiPoint3(text_half_width, a_context.layout.quest_line_spacing * 0.5f, 1.0f));
+
+			auto* name = line->AddChild<Widget>(NiTransform{}, NiPoint3{});
+			name->AddText(quest_name, a_context.layout.body_character_spacing,
+				a_context.layout.body_font_model_path);
+
+			NiTransform tracker_transform{};
+			tracker_transform.translate.x = -text_half_width - 0.5f;
+			auto* tracker = line->AddChild<Widget>(tracker_transform, NiPoint3(0.5f, 0.5f, 0.5f));
+			tracker->AddModel("HelperSphere.nif");
 		}
 	}
 
-	Journal::Journal(Widget* a_parent, bool a_isLeft, NiTransform a_transform) :
-		Book(a_parent, kJournalModelPath, a_isLeft, a_transform)
+	Journal::Journal(
+		bool a_isLeft, TESObjectREFR* a_objectReference, NiAVObject* a_root, NiTransform a_local) :
+		Book(a_isLeft, a_objectReference, a_root, a_local)
 	{
 		auto seen_types = GetPlayerQuestTypes();
 

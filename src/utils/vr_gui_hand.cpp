@@ -65,6 +65,7 @@ namespace vr_gui
 
 	ModeHandle Hand::RequestMode(Mode a_mode, ModePriority a_priority)
 	{
+				SKSE::log::trace("requesting mode on hand {}", this->IsLeft() ? "left" : "right");
 		const auto id = next_mode_request_id++;
 
 		mode_requests.push_back(ModeRequest{ .id = id, .mode = a_mode, .priority = static_cast<int>(a_priority) });

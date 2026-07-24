@@ -1,6 +1,5 @@
 #pragma once
 
-#include "exclusive_hover_group.h"
 #include "ni_animator.h"
 #include "vr_gui.h"
 
@@ -13,59 +12,26 @@ namespace vr3dui
 	using namespace vr_gui;
 
 	class Book;
-	class ChapterTab;
 	class Page;
 	class Chapter;
 	class GrabNode;
-	class BasicHitob;
-
-	Window* SummonFloatingBook(bool isLeft);
-
-	void DismissBook(Window* a_book_window);
-
-	class ChapterTab : public Widget, ExclusiveHoverItem
-	{
-	public:
-		ChapterTab(Widget* a_parent, NiTransform a_local, NiPoint3 a_halfExtents,
-			std::size_t a_chapterIndex, ExclusiveHoverGroup* a_group) :
-			Widget(a_parent, std::move(a_local), a_halfExtents),
-			ExclusiveHoverItem(a_group),
-			chapter_index(a_chapterIndex)
-		{}
-
-		void OnClick(bool a_activate, Hand& a_hand, MenuAction a_action) override;
-
-		void OnHover(bool a_activate, Hand& a_hand) override;
-		void OnHoverExclusive(bool a_activate, Hand& a_hand) override;
-
-		void OnSelected(bool a_selected);
-
-		virtual void UpdateSelectionVisual();
-
-		bool HandStateFilter(Hand& a_hand) const override
-		{ return parent && parent->HandStateFilter(a_hand); }
-
-	private:
-		std::size_t chapter_index{};
-		bool        selected{ false };
-	};
+	class BasicHitbox;
 
 	class Book : public Widget
 	{
 	public:
-		Book(Widget* a_parent, std::string a_model_path, bool a_isLeft, NiTransform a_transform);
+		Book(bool a_isLeft, TESObjectREFR* a_objectReference, NiAVObject* a_root,
+			NiTransform a_local);
 
 		struct Layout
 		{
-			const NiPoint3 kLeftPageOrigin = { 3, 10.4, 0.01 };
-			const NiPoint3 kRightPageOrigin = { 0, 10.4, 0.01 };
-			const NiPoint3 kRightPageParentOffset = { 9.0, 0.0, 1.21 };
+			const NiPoint3 kLeftPageOrigin = { 3, 10.4, 0.02 };
+			const NiPoint3 kRightPageOrigin = { 9.2, 0.0, 1.21 };
+			const NiPoint3 kTabOffset = { 0.0f, 9.5f, 1.1f };
 
 			static constexpr float kRightPageWidth = 15.5;
 			static constexpr float kLeftPageWidth = 13.7;
 			static constexpr float kPageHeight = 10.4 * 2;
-
-			const NiPoint3 kTabOffset = { 0.0f, 9.5f, 0.0f };
 
 			float tab_spacing = 1.8f;
 			float top_margin = 0.0f;
@@ -73,8 +39,8 @@ namespace vr3dui
 			float horizontal_margin = 2.0f;
 
 			float quest_line_spacing = 1.5f;
-			float body_text_scale = 2.0f;
-			float heading_text_scale = 1.0f;
+			float body_text_scale = 1.5f;
+			float heading_text_scale = 2.0f;
 			float body_character_spacing = -0.1f;
 			float page_number_character_spacing = -0.6f;
 
@@ -85,13 +51,16 @@ namespace vr3dui
 		struct PageContext
 		{
 			const Layout& layout;
-			ExclusiveClickContainer&       left_page;
-			ExclusiveClickContainer&       right_page;
+			Widget&       left_page;
+			Widget&       right_page;
 		};
 
-		static constexpr int   kChapterTabGroupPriority = 10;
-		static constexpr int   kPageGroupPriority = 15;
-		static constexpr float kDefaultWindowRadius = 40.f;
+		static constexpr std::string_view kModelPath = "3DIRP/custom.nif";
+		static constexpr const char*      kDefaultParent = "Book Pages Nub";
+		static constexpr const char*      kChapterParent = "Book Pages Nub";
+		static constexpr const char*      kRightParent = "Book Pages";
+		static constexpr const char*      kLeftParent = "Book CoverPage Turn04";
+		static constexpr float            kDefaultWindowRadius = 40.f;
 
 		void AddChapter(std::unique_ptr<Chapter> a_chapter);
 
@@ -116,22 +85,16 @@ namespace vr3dui
 		bool HandStateFilter(Hand& a_hand) const override { return a_hand.IsLeft() != isLeft; }
 
 	protected:
-		static constexpr const char* kLeftPageNodeName = "Book CoverPage Turn04";
-		static constexpr const char* kRightPageNodeName = "Book Pages";
-		static constexpr const char* kChapterTabModel = "ChapterTab.nif";
-
 		static constexpr ni_animator::AnimationRange open{ 0.0f, 1.f, 1.f };
 		static constexpr ni_animator::AnimationRange close{ 3.f, 3.97f, 0.0f };
 		static constexpr ni_animator::AnimationRange flip_left{ 1.f, 2.f, 1.f };
 		static constexpr ni_animator::AnimationRange flip_right{ 2.f, 3.f, 1.f };
 
-		std::vector<std::unique_ptr<Chapter>>    chapters;
-		std::size_t                              chapter_index{};
-		std::size_t                              page_index{};
-		std::unique_ptr<art_addon::AddonTextBox> page_numbers;
-
-		ExclusiveClickContainer* left_page_parent{};
-		ExclusiveClickContainer* right_page_parent{};
+		std::vector<std::unique_ptr<Chapter>> chapters;
+		std::size_t                           chapter_index{};
+		std::size_t                           page_index{};
+		Widget*                               left_page_parent{};
+		Widget*                               right_page_parent{};
 
 		void AddChapterTab(std::size_t a_index);
 		void DrawCurrentPage();
@@ -147,7 +110,7 @@ namespace vr3dui
 
 		float animation_speed = 2;
 
-		ExclusiveClickContainer* tab_container{};
+		Widget* tab_container{};
 	};
 
 	class Page
@@ -170,34 +133,26 @@ namespace vr3dui
 			pages.emplace_back(std::make_unique<Page>());
 		};
 
-		virtual void OnSelected(bool a_selected)
-		{
-			if (tab) { tab->OnSelected(a_selected); }
-		}
-
 		std::vector<std::unique_ptr<Page>> pages;
-		ChapterTab*                        tab{};
+		Widget*                            tab{};
 		std::string                        model_path;
 	};
 
 	class GrabNode : public Widget
 	{
 	public:
-		GrabNode(Widget* a_parent, bool isLeft, NiTransform a_local) :
-			isLeft(isLeft),
-			Widget(a_parent, a_local, NiPoint3(4, 4, 4))
-		{}
+		using Widget::Widget;
 
 		bool HandStateFilter(Hand& a_hand) const override
 		{
-			if (a_hand.IsLeft() != isLeft)
+			if (parent->HandStateFilter(a_hand))
 			{
 				// only grab when palm is facing along this Y axis
 				const NiPoint3  local_y{ 0.0f, 1.0f, 0.0f };
 				const auto      hand_normal = a_hand.GetTransform().rotate * local_y;
 				const auto      grab_normal = GetWorld().rotate * local_y;
-				constexpr float kCos45Degrees = 0.70710678f;
-				if (hand_normal.Dot(grab_normal) < -kCos45Degrees) { return true; }
+				constexpr float kCos60Degrees = 0.5f;
+				if (hand_normal.Dot(grab_normal) < -kCos60Degrees) { return true; }
 			}
 			return false;
 		}
@@ -209,6 +164,7 @@ namespace vr3dui
 		void Update(float delta) override;
 
 	private:
+		// TODO: make setting
 		static constexpr float kGrabHoldTime = 1.0f;
 
 		bool        isGrabbed = false;
@@ -225,26 +181,21 @@ namespace vr3dui
 	class HandPointing : public Behavior
 	{
 	public:
-		HandPointing(Widget* a_parent, bool isLeft) : Behavior(a_parent), isLeft(isLeft) {}
+		HandPointing(Widget* a_parent) : Behavior(a_parent) {}
 
 		void OnHover(bool a_activate, Hand& a_hand) override
 		{
-			if (a_hand.IsLeft() == isLeft)
+			if (a_activate)
 			{
-				if (a_activate)
-				{
-					hand_mode =
-						a_hand.RequestMode(Hand::Mode::kPointing, Hand::ModePriority::kPassive);
-				}
-				else
-				{
-					hand_mode.Release();
-				}
+				hand_mode = a_hand.RequestMode(Hand::Mode::kPointing, Hand::ModePriority::kPassive);
+			}
+			else
+			{
+				hand_mode.Release();
 			}
 		}
 
 	private:
-		bool       isLeft;
 		ModeHandle hand_mode;
 	};
 
@@ -257,9 +208,6 @@ namespace vr3dui
 			isLeft(a_isLeft)
 		{}
 
-		bool HandStateFilter(Hand& a_hand) const override
-		{ return parent && parent->HandStateFilter(a_hand); }
-
 		void OnClick(bool a_activate, Hand& a_hand, MenuAction a_action) override;
 
 		virtual bool TestOverlap(Hand& a_hand) const override;
@@ -267,29 +215,4 @@ namespace vr3dui
 	private:
 		bool isLeft;
 	};
-
-	template <class T, class... Args>
-		requires std::derived_from<T, Book> &&
-		std::constructible_from<T, Widget*, Args..., bool, NiTransform>
-	Window* SummonAttachedBook(bool a_isLeft, Args&&... a_args)
-	{
-		NiTransform transform;
-		transform.scale = 1.0f;
-		transform.translate = { 5.915527f, -10.583008f, 10.284607f };
-		transform.rotate = { { 0.839558f, -0.198012f, -0.493753f },
-			{ -0.528744f, -0.127261f, -0.825465f }, { 0.089592f, 0.956704f, -0.210660f } };
-
-		auto* window = Controller::GetSingleton()->AddWindow(std::make_unique<AttachedWindow>(
-			Book::kDefaultWindowRadius, PlayerCharacter::GetSingleton(),
-			vrinput::GetHandNode(vrinput::Hand(a_isLeft), false)->AsNode(), transform));
-
-		NiTransform book_transform;
-		book_transform.scale = 0.9f;
-		window->AddChild<T>(std::forward<Args>(a_args)..., a_isLeft, book_transform);
-
-		return window;
-	}
-
-
-
 }

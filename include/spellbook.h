@@ -1,5 +1,3 @@
-#include "ni_animator.h"
-#include "vr_gui.h"
 #include "book.h"
 
 namespace spellbook
@@ -13,9 +11,6 @@ namespace spellbook
 	class Spellbook : public Book
 	{
 	public:
-
-		void DisplaySpellInfo(std::string font, float z_offset = -0.03f);
-
 
 	private:
 		struct Layout
