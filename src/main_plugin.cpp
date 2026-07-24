@@ -132,17 +132,7 @@ namespace vr3dui
 
 		if (e.button_state == vrinput::ButtonState::kButtonDown)
 		{
-			if (toggle)
 
-			{
-				SKSE::log::trace("blocking higgs");
-				g_higgsInterface->DisableHand(false);
-			}
-			else
-			{
-				SKSE::log::trace("enabling higgs");
-				g_higgsInterface->EnableHand(false);
-			}
 			toggle ^= 1;
 		}
 		return false;

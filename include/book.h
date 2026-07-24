@@ -2,6 +2,7 @@
 
 #include "ni_animator.h"
 #include "vr_gui.h"
+#include "vr_gui_input_block.h"
 
 #include <concepts>
 #include <utility>
@@ -111,6 +112,8 @@ namespace vr3dui
 		float animation_speed = 2;
 
 		Widget* tab_container{};
+
+		InputBlockHandle block_handle;
 	};
 
 	class Page
@@ -178,6 +181,23 @@ namespace vr3dui
 		ModeHandle hand_mode;
 	};
 
+	// widget for interaction volumes that only uses the Hand's radius for hit detection
+	class BasicHitbox : public Widget
+	{
+	public:
+		BasicHitbox(Widget* a_parent, bool a_isLeft, NiTransform a_local, NiPoint3 a_extents) :
+			Widget(a_parent, a_local, a_extents),
+			isLeft(a_isLeft)
+		{}
+
+		void OnClick(bool a_activate, Hand& a_hand, MenuAction a_action) override;
+
+		virtual bool TestOverlap(Hand& a_hand) const override;
+
+	private:
+		bool isLeft;
+	};
+
 	class HandPointing : public Behavior
 	{
 	public:
@@ -199,20 +219,28 @@ namespace vr3dui
 		ModeHandle hand_mode;
 	};
 
-	// widget for interaction volumes that only uses the Hand's radius for hit detection
-	class BasicHitbox : public Widget
+	class BlockInputOnHover : public Behavior
 	{
 	public:
-		BasicHitbox(Widget* a_parent, bool a_isLeft, NiTransform a_local, NiPoint3 a_extents) :
-			Widget(a_parent, a_local, a_extents),
-			isLeft(a_isLeft)
+		BlockInputOnHover(Widget* a_parent, InputBlock a_blocks) :
+			Behavior(a_parent),
+			blocks(a_blocks)
 		{}
 
-		void OnClick(bool a_activate, Hand& a_hand, MenuAction a_action) override;
+		void OnHover(bool a_activate, Hand& a_hand) override
+		{
+			auto& handle = handles[a_hand.IsLeft()];
 
-		virtual bool TestOverlap(Hand& a_hand) const override;
+			if (a_activate) { handle = InputBlockManager::GetSingleton()->Acquire(a_hand.IsLeft(), blocks); }
+			else
+			{
+				handle.Release();
+			}
+		}
 
 	private:
-		bool isLeft;
+		InputBlock                  blocks;
+		std::array<InputBlockHandle, 2> handles;
 	};
+
 }
