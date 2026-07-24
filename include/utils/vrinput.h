@@ -63,15 +63,8 @@ namespace vrinput
 	*/
 	typedef bool (*InputCallbackFunc)(const ModInputEvent& e);
 
-	void StartBlockingAll();
-	void StopBlockingAll();
-	bool isBlockingAll();
-
 	void StartSmoothing();
 	void StopSmoothing();
-
-	void BlockAxis(bool isLeft);
-	void UnBlockAxis(bool isLeft);
 
 	/* returns the state of the specified button's action type */
 	ButtonState GetButtonState(

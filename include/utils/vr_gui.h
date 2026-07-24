@@ -370,9 +370,6 @@ namespace vr_gui
 		void RemoveActivatorOverride(Widget* a_owner);
 		void RemoveActivatorOverride(Widget* a_owner, bool a_isLeft);
 
-		void AcquireInputBlock();
-		void ReleaseInputBlock(bool a_force = false);
-
 	private:
 		Controller() = default;
 		~Controller() = default;
@@ -382,7 +379,7 @@ namespace vr_gui
 		Controller& operator=(Controller&&) = delete;
 
 		void HandleInput();
-		void HandleEvents();
+		void HandleEvents(const std::vector<ButtonEvent>& a_events);
 		void HandleDeletionQueue();
 
 		bool        InputEventHandler(const vrinput::ModInputEvent& e);
@@ -414,6 +411,8 @@ namespace vr_gui
 		RE::TESBoundObject* activator_default_base = nullptr;
 
 		int input_block_counter = 0;
+
+		std::mutex button_queue_mutex;
 
 		std::chrono::steady_clock::time_point last_update_time{ std::chrono::steady_clock::now() };
 

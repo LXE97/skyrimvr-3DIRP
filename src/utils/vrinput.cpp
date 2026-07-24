@@ -3,6 +3,8 @@
 #include "VR/OpenVRUtils.h"
 #include "helper_math.h"
 #include "menu_checker.h"
+#include "vr_gui_input_block.h"
+
 #include <xbyak/xbyak.h>
 #define PROCESSAXES 1
 namespace vrinput
@@ -19,11 +21,9 @@ namespace vrinput
 		{ return (device == a_rhs.device) && (type == a_rhs.type) && (func == a_rhs.func); }
 	};
 
-	bool  block_all_inputs = false;
 	bool  smoothing = 0;
 	float joystick_dpad_threshold = 0.7f;
 	float joystick_dpad_threshold_negative = -0.7f;
-	bool  block_axes[2] = { false, false };
 
 	std::mutex               callback_lock;
 	vr::TrackedDeviceIndex_t g_leftcontroller;
@@ -46,12 +46,6 @@ namespace vrinput
 
 	std::vector<uint16_t>* g_haptic_keyframes_left = nullptr;
 	std::vector<uint16_t>* g_haptic_keyframes_right = nullptr;
-
-	void StartBlockingAll() { block_all_inputs = true; }
-	void StopBlockingAll() { block_all_inputs = false; }
-	bool isBlockingAll() { return block_all_inputs; }
-	void BlockAxis(bool isLeft){block_axes[isLeft] = true;}
-	void UnBlockAxis(bool isLeft){block_axes[isLeft] = false;}
 
 	void StartSmoothing() { smoothing = 1; }
 	void StopSmoothing() { smoothing = 0; }
@@ -390,15 +384,9 @@ namespace vrinput
 					}
 				}
 
-				if (block_all_inputs)
-				{
-					pOutputControllerState->ulButtonPressed = 0;
-					pOutputControllerState->ulButtonTouched = 0;
-					pOutputControllerState->rAxis[0].x = 0.0;
-					pOutputControllerState->rAxis[0].y = 0.0;
-					local_trigger = 0.0;
-				}
-				else if (block_axes[isLeft])
+				using namespace vr_gui;
+
+				if (InputBlockManager::GetSingleton()->IsBlocked(isLeft, InputBlock::kJoystick))
 				{
 					pOutputControllerState->rAxis[0].x = 0.0;
 					pOutputControllerState->rAxis[0].y = 0.0;

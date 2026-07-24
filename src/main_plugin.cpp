@@ -72,7 +72,7 @@ namespace vr3dui
 		pc = PlayerCharacter::GetSingleton();
 	}
 
-	Book* book;
+	Book*       book;
 	ArtAddonPtr test;
 
 	static bool OnDebugButton(const vrinput::ModInputEvent& e)
@@ -87,7 +87,7 @@ namespace vr3dui
 
 				auto hand_node = vrinput::GetHandNode(vrinput::Hand(book_hand_isLeft), false);
 				NiTransform t{};
-				t.translate = {10, 0, 0};
+				t.translate = { 10, 0, 0 };
 				//test = ArtAddon::Make("HelperSphere.nif", pc, hand_node, t);
 
 				// TODO: store in settings json or skse cosave
@@ -98,7 +98,8 @@ namespace vr3dui
 				default_transform.rotate = { { 0.839558f, -0.198012f, -0.493753f },
 					{ -0.528744f, -0.127261f, -0.825465f }, { 0.089592f, 0.956704f, -0.210660f } };
 
-				auto temp = std::make_unique<Book>(book_hand_isLeft, pc->AsReference(), hand_node, default_transform);
+				auto temp = std::make_unique<Book>(
+					book_hand_isLeft, pc->AsReference(), hand_node, default_transform);
 				book = temp.get();
 				vr_gui::Controller::GetSingleton()->AddRoot(std::move(temp));
 			}
@@ -129,7 +130,21 @@ namespace vr3dui
 	{
 		static bool toggle = true;
 
-		if (e.button_state == vrinput::ButtonState::kButtonDown) { toggle ^= 1; }
+		if (e.button_state == vrinput::ButtonState::kButtonDown)
+		{
+			if (toggle)
+
+			{
+				SKSE::log::trace("blocking higgs");
+				g_higgsInterface->DisableHand(false);
+			}
+			else
+			{
+				SKSE::log::trace("enabling higgs");
+				g_higgsInterface->EnableHand(false);
+			}
+			toggle ^= 1;
+		}
 		return false;
 	}
 

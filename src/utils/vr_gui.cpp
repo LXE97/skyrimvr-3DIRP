@@ -2,40 +2,12 @@
 
 #include "helper_game.h"
 #include "helper_math.h"
+#include "vr_gui_input_block.h"
 
 namespace vr_gui
 {
 	static const char* kHelperModelPath = "HelperSphere.nif";
 	static const char* kDebugModelPath = "DebugSphere.nif";
-
-	namespace
-	{
-		bool BlockKeypress(const vrinput::ModInputEvent& e) { return false; }
-
-		void DrawBox(art_addon::ArtAddon* box, const RE::NiPoint3& dimensions)
-		{
-			if (box)
-			{
-				RE::NiAVObject* geom = box->Get3D();
-				for (int i : { 0, 1 })
-					for (int j : { 0, 1 })
-						for (int k : { 0, 1 })
-						{
-							char name[4] = { char('0' + i), char('0' + j), char('0' + k), 0 };
-
-							if (auto node = geom->GetObjectByName(name))
-							{
-								float x = (i ? +dimensions.x : -dimensions.x);
-								float y = (j ? +dimensions.y : -dimensions.y);
-								float z = (k ? +dimensions.z : -dimensions.z);
-
-								node->local.translate = { x, y, z };
-							}
-						}
-			}
-		}
-
-	}
 
 	void Controller::Cleanup()
 	{
@@ -54,7 +26,6 @@ namespace vr_gui
 		widgets_to_delete.clear();
 		hovered_map.clear();
 
-		ReleaseInputBlock(true);
 		// create right (0) and left hands
 		hands = { Hand(false), Hand(true) };
 
@@ -144,10 +115,17 @@ namespace vr_gui
 				do_update = true;
 			}
 		}
+
+		std::vector<ButtonEvent> pending;
+		{
+			std::scoped_lock lock(button_queue_mutex);
+			pending.swap(button_queue);
+		}
+
 		if (do_update)
 		{
 			HandleInput();
-			HandleEvents();
+			HandleEvents(pending);
 		}
 		else
 		{
@@ -166,22 +144,49 @@ namespace vr_gui
 		ButtonEvent temp;
 		temp.down = (bool)e.button_state;
 		temp.isLeft = (bool)e.device;
-		if (e.button_ID == settings.primary)
-			temp.button = MenuAction::kPrimary;
-		else if (e.button_ID == settings.secondary)
-			temp.button = MenuAction::kSecondary;
-		else if (e.button_ID == vr::EVRButtonId::k_EButton_DPad_Up)
-			temp.button = MenuAction::kScrollUp;
-		else if (e.button_ID == vr::EVRButtonId::k_EButton_DPad_Down)
-			temp.button = MenuAction::kScrollDown;
-		else if (e.button_ID == vr::EVRButtonId::k_EButton_DPad_Left)
-			temp.button = MenuAction::kScrollLeft;
-		else
-			temp.button = MenuAction::kScrollRight;
+		bool block_input = false;
 
+		if (e.button_ID == settings.primary)
+		{
+			temp.button = MenuAction::kPrimary;
+			block_input =
+				InputBlockManager::GetSingleton()->IsBlocked(temp.isLeft, InputBlock::kPrimary);
+		}
+		else if (e.button_ID == settings.secondary)
+		{
+			temp.button = MenuAction::kSecondary;
+			block_input =
+				InputBlockManager::GetSingleton()->IsBlocked(temp.isLeft, InputBlock::kSecondary);
+		}
+		else if (e.button_ID == vr::EVRButtonId::k_EButton_DPad_Up)
+		{
+			temp.button = MenuAction::kScrollUp;
+			block_input =
+				InputBlockManager::GetSingleton()->IsBlocked(temp.isLeft, InputBlock::kJoystick);
+		}
+		else if (e.button_ID == vr::EVRButtonId::k_EButton_DPad_Down)
+		{
+			temp.button = MenuAction::kScrollDown;
+			block_input =
+				InputBlockManager::GetSingleton()->IsBlocked(temp.isLeft, InputBlock::kJoystick);
+		}
+		else if (e.button_ID == vr::EVRButtonId::k_EButton_DPad_Left)
+		{
+			temp.button = MenuAction::kScrollLeft;
+			block_input =
+				InputBlockManager::GetSingleton()->IsBlocked(temp.isLeft, InputBlock::kJoystick);
+		}
+		else if (e.button_ID == vr::EVRButtonId::k_EButton_DPad_Right)
+		{
+			temp.button = MenuAction::kScrollRight;
+			block_input =
+				InputBlockManager::GetSingleton()->IsBlocked(temp.isLeft, InputBlock::kJoystick);
+		}
+
+		std::scoped_lock lock(button_queue_mutex);
 		button_queue.push_back(temp);
 
-		return false;
+		return temp.down && block_input;
 	}
 
 	void Controller::MarkForDelete(Widget* w)
@@ -368,9 +373,9 @@ namespace vr_gui
 		}
 	}
 
-	void Controller::HandleEvents()
+	void Controller::HandleEvents(const std::vector<ButtonEvent>& a_events)
 	{
-		for (auto& event : button_queue)
+		for (auto& event : a_events)
 		{
 			// Dispatch the button to the highest priority widget that is hovered
 			// only look in the first window with hovered widgets for this hand- unlikely to have overlapping Windows
@@ -388,7 +393,6 @@ namespace vr_gui
 				}
 			}
 		}
-		button_queue.clear();
 	}
 
 	void Controller::TraverseCollision(
@@ -434,39 +438,6 @@ namespace vr_gui
 		if (it != activator_overrides.end())
 		{
 			activator_overrides.erase(it, activator_overrides.end());
-		}
-	}
-
-	void Controller::AcquireInputBlock()
-	{
-		if (++input_block_counter == 1)
-		{
-			SKSE::log::trace("---------------------------------------------------- BLOCKING");
-			// disable HIGGS, Spellwheel, etc
-			for (bool isLeft : { true, false }) { vrinput::BlockAxis(isLeft); }
-			g_higgsInterface->GetSettingDouble("FarCastDistance", FarCastDistance);
-			g_higgsInterface->GetSettingDouble("NearCastDistance", NearCastDistance);
-			g_higgsInterface->SetSettingDouble("FarCastDistance", 0.0000001);
-			g_higgsInterface->SetSettingDouble("NearCastDistance", 0.0000001);
-			g_vrikInterface->beginGestureProfile();
-			auto* setting = RE::GetINISetting("fActivatePickLength:Interface");
-			if (setting) setting->data.f = 10.f;
-		}
-	}
-
-	void Controller::ReleaseInputBlock(bool a_force)
-	{
-		if (a_force || --input_block_counter == 0)
-		{
-			input_block_counter = 0;
-			SKSE::log::trace("---------------------------------------------------- RELEASING");
-			// re enable everything
-			for (bool isLeft : { true, false }) { vrinput::UnBlockAxis(isLeft); }
-			g_higgsInterface->SetSettingDouble("FarCastDistance", FarCastDistance);
-			g_higgsInterface->SetSettingDouble("NearCastDistance", NearCastDistance);
-			g_vrikInterface->beginGestureProfile();
-			auto* setting = RE::GetINISetting("fActivatePickLength:Interface");
-			if (setting) setting->data.f = Controller::GetSingleton()->factivatepicklength_default;
 		}
 	}
 
@@ -627,7 +598,7 @@ namespace vr_gui
 			else
 			{
 				AddModel("DrawExtents.nif", true,
-					[extents = this->extents](ArtAddon* box) { DrawBox(box, extents); });
+					[extents = this->extents](ArtAddon* box) { helper::DrawBox(box, extents); });
 			}
 		}
 		else
