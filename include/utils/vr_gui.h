@@ -419,16 +419,11 @@ namespace vr_gui
 		// element 0 = right hand, 1 = left hand
 		std::vector<Hand> hands;
 
-		// higgs save
-		double FarCastDistance;
-		double NearCastDistance;
-
 		Settings settings;
 
 		RE::NiTransform rollover_default_hand;
 		RE::NiPoint3    rollover_default_hand_pos;
 		RE::NiMatrix3   rollover_default_hand_rot;
-		float           factivatepicklength_default;
 
 		bool initialized = false;
 	};

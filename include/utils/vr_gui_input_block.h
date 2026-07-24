@@ -13,7 +13,8 @@ namespace vr_gui
 		kSecondary = 1 << 1,
 		kJoystick = 1 << 2,
 		kHiggs = 1 << 3,
-		kAll = 0x0F
+		kActivatePickLength = 1 << 4,
+		kAll = 0x1F
 	};
 
 	[[nodiscard]] constexpr InputBlock operator|(InputBlock a_lhs, InputBlock a_rhs) noexcept
@@ -70,7 +71,8 @@ namespace vr_gui
 		}
 
 		[[nodiscard]] InputBlockHandle Acquire(bool a_isLeft, InputBlock a_blocks);
-		[[nodiscard]] bool IsBlocked(bool a_isLeft, InputBlock a_block) const noexcept;
+		[[nodiscard]] bool             IsBlocked(bool a_isLeft, InputBlock a_block) const noexcept;
+		void                           Init();
 
 	private:
 		friend class InputBlockHandle;
@@ -88,5 +90,11 @@ namespace vr_gui
 		void Release(bool a_isLeft, InputBlock a_blocks) noexcept;
 
 		std::array<std::array<std::atomic_uint32_t, kBlockCount>, kHandCount> block_counts{};
+
+		RE::Setting* activate_pick_length_setting{};
+		float        activate_pick_length_default{};
+		bool         initialized{};
+
+		std::uint32_t activate_pick_length_blocks{};
 	};
 }

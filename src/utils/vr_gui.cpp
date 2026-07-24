@@ -60,14 +60,9 @@ namespace vr_gui
 
 		if (!initialized)
 		{
-			auto* setting = RE::GetINISetting("fActivatePickLength:Interface");
-			if (setting) factivatepicklength_default = setting->data.f;
-
-			g_higgsInterface->GetSettingDouble("FarCastDistance", FarCastDistance);
-			g_higgsInterface->GetSettingDouble("NearCastDistance", NearCastDistance);
+			InputBlockManager::GetSingleton()->Init();
 
 			// register for input events
-
 			vrinput::AddCallback(InputEventHandlerStatic, settings.primary, vrinput::Hand::kRight,
 				vrinput::ActionType::kPress);
 			vrinput::AddCallback(InputEventHandlerStatic, settings.secondary, vrinput::Hand::kRight,

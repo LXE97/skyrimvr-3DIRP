@@ -13,9 +13,7 @@ namespace vr_gui
 			InputBlock::kJoystick, InputBlock::kHiggs };
 
 		[[nodiscard]] constexpr bool Contains(InputBlock a_blocks, InputBlock a_block) noexcept
-		{
-			return (a_blocks & a_block) != InputBlock::kNone;
-		}
+		{ return (a_blocks & a_block) != InputBlock::kNone; }
 	}
 
 	InputBlockHandle::InputBlockHandle(
@@ -55,6 +53,20 @@ namespace vr_gui
 		}
 	}
 
+	void InputBlockManager::Init()
+	{
+		if (initialized) { return; }
+
+		activate_pick_length_setting = RE::GetINISetting("fActivatePickLength:Interface");
+
+		if (activate_pick_length_setting)
+		{
+			activate_pick_length_default = activate_pick_length_setting->data.f;
+
+			initialized = true;
+		}
+	}
+
 	InputBlockHandle InputBlockManager::Acquire(bool a_isLeft, InputBlock a_blocks)
 	{
 		a_blocks = a_blocks & InputBlock::kAll;
@@ -72,11 +84,24 @@ namespace vr_gui
 			}
 		}
 
+		if (Contains(a_blocks, InputBlock::kActivatePickLength))
+		{
+			if (activate_pick_length_blocks++ == 0 && activate_pick_length_setting)
+			{
+				activate_pick_length_setting->data.f = 0.0f;
+			}
+		}
+
 		return InputBlockHandle(this, a_isLeft, a_blocks);
 	}
 
 	bool InputBlockManager::IsBlocked(bool a_isLeft, InputBlock a_block) const noexcept
 	{
+		if (Contains(a_block, InputBlock::kActivatePickLength) && activate_pick_length_blocks != 0)
+		{
+			return true;
+		}
+		
 		const auto hand = static_cast<std::size_t>(a_isLeft);
 		for (std::size_t i = 0; i < kBlockTypes.size(); ++i)
 		{
@@ -100,6 +125,14 @@ namespace vr_gui
 			if (kBlockTypes[i] == InputBlock::kHiggs && previous == 1 && g_higgsInterface)
 			{
 				g_higgsInterface->EnableHand(a_isLeft);
+			}
+		}
+
+		if (Contains(a_blocks, InputBlock::kActivatePickLength))
+		{
+			if (--activate_pick_length_blocks == 0 && activate_pick_length_setting)
+			{
+				activate_pick_length_setting->data.f = activate_pick_length_default;
 			}
 		}
 	}
