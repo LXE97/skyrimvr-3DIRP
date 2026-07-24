@@ -293,6 +293,11 @@ namespace vrinput
 #endif
 				if (pressed_change)
 				{
+					// fix for blocked buttons becoming unblocked by other button presses
+					pOutputControllerState->ulButtonPressed =
+						(pOutputControllerState->ulButtonPressed & pressed_change) |
+						(prev_pressed_out[isLeft] & ~pressed_change);
+
 					ProcessButtonChanges(pressed_change, pControllerState->ulButtonPressed, isLeft,
 						false, pOutputControllerState);
 					prev_pressed[isLeft] = pControllerState->ulButtonPressed;
@@ -305,6 +310,10 @@ namespace vrinput
 
 				if (touched_change)
 				{
+					pOutputControllerState->ulButtonTouched =
+						(pOutputControllerState->ulButtonTouched & touched_change) |
+						(prev_touched_out[isLeft] & ~touched_change);
+
 					ProcessButtonChanges(touched_change, pControllerState->ulButtonTouched, isLeft,
 						true, pOutputControllerState);
 					prev_touched[isLeft] = pControllerState->ulButtonTouched;
