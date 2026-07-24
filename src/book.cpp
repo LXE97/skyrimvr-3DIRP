@@ -4,56 +4,101 @@ namespace vr3dui
 {
 	using namespace art_addon;
 
-	void DismissBook(Window* a_book_window)
-	{
-		if (a_book_window)
-		{
-			auto book = a_book_window->FindChild<Book>();
-			if (book) { book->Close(); }
-		}
-	}
-
 	void Book::Close()
 	{
 		if (animator.HasQueued()) { animator.ClearQueue(); }
 		animator.PlayImmediately(close, animation_speed * 1.2,
-			[this]() { Controller::GetSingleton()->MarkForDelete(this->parent); });
+			[this]() { Controller::GetSingleton()->MarkForDelete(this); });
 	}
 
-	Book::Book(Widget* a_parent, std::string a_model_path, bool a_isLeft, NiTransform a_transform) :
-		Widget(a_parent, a_transform, NiPoint3(40, 40, 40)),
+	Book::Book(
+		bool a_isLeft, TESObjectREFR* a_objectReference, NiAVObject* a_root, NiTransform a_local) :
+		Widget(kDefaultWindowRadius, a_objectReference, a_root, a_local),
 		isLeft(a_isLeft)
 	{
-		AddModel(a_model_path, false, [this, windowscale = local.scale](ArtAddon* m) {
-			if (auto node = m->Get3D())
+		local.scale /= a_root->world.scale;
+
+		// Block inputs on the book hand for as long as it exists
+		block_handle = InputBlockManager::GetSingleton()->Acquire(
+			a_isLeft, InputBlock::kPrimary | InputBlock::kSecondary | InputBlock::kHiggs);
+
+		AddModel(kModelPath, false, [this](ArtAddon* a) {
+			ni_animator::SetControllerFlags(Get3D(), true, false, false, false, true);
+
+			this->SetHitTestEnabled(false);
+
+			// Construct widget layout
+			auto* right_parent = Get3D()->GetObjectByName(kRightParent);
+			auto  left_parent = Get3D()->GetObjectByName(kLeftParent);
+			if (!right_parent || !left_parent)
 			{
-				ni_animator::SetControllerFlags(node, true, false, false, false, true);
-				node->local.scale = windowscale / node->parent->world.scale;
-				tab_parent = node->GetObjectByName(kTabParentNodeName);
-
-				for (std::size_t i = 0; i < chapters.size(); ++i) { AddChapterTab(i); }
-
-				animator.PlayImmediately(open, animation_speed);
-				DrawCurrentPage();
+				SKSE::log::error("Book construction failed: content nodes not found");
+				return;
 			}
+
+			NiTransform t;
+			// Interaction Volume
+			t.translate = { -9, 0, 4 };
+			auto interaction_volume = AddChild<BasicHitbox>(isLeft, t, NiPoint3(18, 14, 5));
+			interaction_volume->AddBehavior<HandPointing>();
+			interaction_volume->AddBehavior<BlockInputOnHover>(InputBlock::kAll);
+			interaction_volume->SetPriority(90);
+
+			// Chapter tabs
+			auto chapter_parent = Get3D()->GetObjectByName(kChapterParent);
+			t.translate = { 0.1f, 0, -0.1f };
+			tab_container =
+				AddChild<Widget>(t, NiPoint3(1.0, layout.kPageHeight * 0.5f, 0.5), chapter_parent);
+
+			for (std::size_t i = 0; i < chapters.size(); ++i) AddChapterTab(i);
+
+			// Page Content anchors
+			t.translate = layout.kRightPageOrigin;
+			right_page_parent = AddChild<Widget>(t,
+				NiPoint3(layout.kRightPageWidth * 0.5f, layout.kPageHeight * 0.5f, 1),
+				right_parent);
+			right_page_parent->SetHitTestEnabled(false);
+
+			t.translate = { -layout.kLeftPageWidth / 2 + layout.kLeftPageOrigin.x, 0, 0 };
+
+			// left parent is upside down
+			t.rotate = {
+				{ -1.0000000, 0.0000000, 0.0000000 },
+				{ 0.0000000, 1.0000000, 0.0000000 },
+				{ 0.0000000, 0.0000000, -1.0000000 },
+			};
+
+			left_page_parent = AddChild<Widget>(t,
+				NiPoint3(layout.kLeftPageWidth * 0.5f, layout.kPageHeight * 0.5f, 1), left_parent);
+			left_page_parent->SetHitTestEnabled(false);
+
+			// Grab Node
+			t.translate = { 7, 14, -1 };
+			t.rotate = {
+				{ 1.0000000, 0.0000000, 0.0000000 },
+				{ 0.0000000, -1.0000000, 0.0000000 },
+				{ 0.0000000, 0.0000000, -1.0000000 },
+			};
+			grab_node = AddChild<GrabNode>(t, NiPoint3(3, 3, 3));
+			grab_node->SetPriority(5);
+
+			animator.PlayImmediately(open, animation_speed);
+
+			DrawCurrentPage();
 		});
 
-		this->SetPriority(100);
-
-		NiTransform t;
-
-		t.translate = { 10, -18, -4 };
-		grab_node = AddChild<GrabNode>(isLeft, t);
-		grab_node->SetPriority(5);
-
-		t.translate = { -10, 0, 5 };
-		auto interaction_volume = AddChild<BasicHitbox>(isLeft, t, NiPoint3(26, 17, 8));
-		interaction_volume->AddBehavior<HandPointing>(!isLeft);
-		interaction_volume->SetPriority(90);
-
-		t.translate = { 0.1f, 0, -0.1f };
-		tab_container = AddChild<ExclusiveClickContainer>(
-			t, NiPoint3(1.0, layout.kPageHeight * 0.5f, 0.5), kChapterTabGroupPriority);
+		AddChapter(std::make_unique<Chapter>("3DIRP/Chapters/All.nif"));
+		AddChapter(std::make_unique<Chapter>("3DIRP/Chapters/All.nif"));
+		AddChapter(std::make_unique<Chapter>("3DIRP/Chapters/All.nif"));
+		AddChapter(std::make_unique<Chapter>("3DIRP/Chapters/All.nif"));
+		AddChapter(std::make_unique<Chapter>("3DIRP/Chapters/All.nif"));
+		AddChapter(std::make_unique<Chapter>("3DIRP/Chapters/All.nif"));
+		AddChapter(std::make_unique<Chapter>("3DIRP/Chapters/All.nif"));
+		AddChapter(std::make_unique<Chapter>("3DIRP/Chapters/All.nif"));
+		AddChapter(std::make_unique<Chapter>("3DIRP/Chapters/All.nif"));
+		AddChapter(std::make_unique<Chapter>("3DIRP/Chapters/All.nif"));
+		AddChapter(std::make_unique<Chapter>("3DIRP/Chapters/All.nif"));
+		AddChapter(std::make_unique<Chapter>("3DIRP/Chapters/All.nif"));
 	}
 
 	void Book::TurnPageLeft()
@@ -67,9 +112,7 @@ namespace vr3dui
 		if (page_index + 1 < chapter.pages.size()) { ++page_index; }
 		else if (chapter_index + 1 < chapters.size())
 		{
-			chapters[chapter_index]->OnSelected(false);
 			++chapter_index;
-			chapters[chapter_index]->OnSelected(true);
 			page_index = 0;
 		}
 		else
@@ -93,9 +136,7 @@ namespace vr3dui
 		if (page_index > 0) { --page_index; }
 		else if (chapter_index > 0)
 		{
-			chapters[chapter_index]->OnSelected(false);
 			--chapter_index;
-			chapters[chapter_index]->OnSelected(true);
 			page_index = chapters[chapter_index]->pages.size() - 1;
 		}
 		else
@@ -115,9 +156,7 @@ namespace vr3dui
 
 		const auto& animation = a_index < chapter_index ? flip_right : flip_left;
 
-		chapters[chapter_index]->OnSelected(false);
 		chapter_index = a_index;
-		chapters[chapter_index]->OnSelected(true);
 		page_index = 0;
 
 		ClearPageView();
@@ -136,7 +175,7 @@ namespace vr3dui
 
 	void Book::AddChapterTab(std::size_t a_index)
 	{
-		if (!tab_parent || !tab_container || a_index >= chapters.size() || !chapters[a_index] ||
+		if (!tab_container || a_index >= chapters.size() || !chapters[a_index] ||
 			chapters[a_index]->tab)
 		{
 			return;
@@ -146,26 +185,11 @@ namespace vr3dui
 		transform.translate = layout.kTabOffset;
 		transform.translate.y -= static_cast<float>(a_index) * layout.tab_spacing;
 		transform.translate.x -= (a_index % 2) * 0.3;
+		transform.translate.z -= 0.1 * a_index;
 
-		auto* tab = tab_container->AddChild<ChapterTab>(
-			tab_parent, transform, NiPoint3(1.0, 0.4, 0.5), a_index, tab_container->GetGroup());
+		auto* tab = tab_container->AddChild<Widget>(transform, NiPoint3(1.0, 0.4, 0.5));
 		tab->AddModel(chapters[a_index]->model_path);
 		chapters[a_index]->tab = tab;
-		if (a_index == chapter_index) { chapters[a_index]->OnSelected(true); }
-	}
-
-	void ChapterTab::OnClick(bool a_activate, Hand& h, MenuAction a_action)
-	{
-		if (IsExclusivelyHovered(h.IsLeft()))
-		{
-			if (a_activate && a_action == MenuAction::kPrimary)
-			{
-				if (auto* book = GetWindow()->FindChild<Book>())
-				{
-					book->TurnToChapter(chapter_index);
-				}
-			}
-		}
 	}
 
 	void Book::DrawCurrentPage()
@@ -175,27 +199,7 @@ namespace vr3dui
 		auto& pages = chapters[chapter_index]->pages;
 		if (page_index >= pages.size() || !pages[page_index]) { return; }
 
-		// Create parents for page content
-		auto right_node = model->Get3D()->GetObjectByName(kRightPageNodeName);
-		auto left_node = model->Get3D()->GetObjectByName(kLeftPageNodeName);
-
-		if (!right_node || !left_node) { return; }
-
-		NiTransform p{};
-		p.translate = right_node->local.translate + layout.kRightPageParentOffset;
-		NiPoint3 e = { layout.kRightPageWidth / 2, layout.kPageHeight / 2, 2 };
-		right_page_parent = AddChild<ExclusiveClickContainer>(p, e, kPageGroupPriority);
-
-		p.translate = { -layout.kLeftPageWidth / 2 + layout.kLeftPageOrigin.x, 0, 0 };
-		p.translate += left_node->local.translate;
-
-		// left parent is upside down
-		p.rotate = { { -1.0000000, 0.0000000, 0.0000000 }, { 0.0000000, 1.0000000, 0.0000000 },
-			{ -0.0000000, 0.0000000, -1.0000000 } };
-
-		left_page_parent = AddChild<ExclusiveClickContainer>(p, e, kPageGroupPriority);
-
-		PageContext context{ layout, *left_page_parent,*right_page_parent };
+		PageContext context{ layout, *left_page_parent, *right_page_parent };
 
 		pages[page_index]->Draw(context);
 
@@ -203,25 +207,24 @@ namespace vr3dui
 		std::string page_str = std::to_string(page_index + 1);
 		page_str.append(" / ").append(std::to_string(pages.size()));
 		NiTransform t;
-		t.translate = layout.kRightPageOrigin;
-		t.translate += { layout.kRightPageWidth - 0.5, 0.5 - layout.kPageHeight, 0 };
-		page_numbers =
-			std::make_unique<AddonTextBox>(page_str, layout.page_number_character_spacing,
-				model->Get3D()->GetObjectByName(kRightPageNodeName), t,
-				std::string{ layout.page_number_font_model_path });
+		t.translate = { layout.kRightPageWidth * 0.5f - 0.5f, 0.5f - layout.kPageHeight * 0.5f,
+			0.0f };
+		auto* page_number = right_page_parent->AddChild<Widget>(t, NiPoint3{});
+		page_number->AddText(
+			page_str, layout.page_number_character_spacing, layout.page_number_font_model_path);
 	}
 
 	void Book::ClearPageView()
 	{
-		auto* left = std::exchange(left_page_parent, nullptr);
-		auto* right = std::exchange(right_page_parent, nullptr);
-
-		auto* controller = vr_gui::Controller::GetSingleton();
-		controller->MarkForDelete(left);
-		controller->MarkForDelete(right);
+		left_page_parent->ClearChildren();
+		right_page_parent->ClearChildren();
 	}
 
-	void Page::Draw(Book::PageContext a_context) {}
+	void Page::Draw(Book::PageContext a_context)
+	{
+		a_context.left_page.AddModel("HelperSphere.nif");
+		a_context.right_page.AddModel("HelperSphere.nif");
+	}
 
 	void Book::Update(float a_delta)
 	{
@@ -231,24 +234,17 @@ namespace vr3dui
 
 	void Book::VirtualParent(NiAVObject* a_new, NiTransform& a_offset)
 	{
-		auto* window = GetWindow();
-		auto* root = window ? window->GetRootNode() : nullptr;
-		if (!a_new || !root) { return; }
+		if (!a_new) { return; }
 
 		const auto desired_book_world = a_new->world * a_offset;
-		const auto desired_window_world = desired_book_world * local.Invert();
-		const auto desired_window_local = root->world.Invert() * desired_window_world;
-
-		auto*       node = Get3D();
-		const float model_scale = node ? node->local.scale : 1.0f;
-
-		window->SetTransform(desired_window_local);
-
-		if (!node) { return; }
-
-		node->local.scale = model_scale;
-		NiUpdateData ctx{};
-		node->Update(ctx);
+		if (auto* transform_parent = GetTransformParentNode())
+		{
+			SetTransform(transform_parent->world.Invert() * desired_book_world);
+		}
+		else
+		{
+			SetTransform(desired_book_world);
+		}
 	}
 
 	void GrabNode::OnClick(bool a_activate, Hand& a_hand, MenuAction a_action)
@@ -298,7 +294,10 @@ namespace vr3dui
 
 		if (isGrabbed && follow_target)
 		{
-			dynamic_cast<Book*>(parent)->VirtualParent(follow_target, parent_store);
+			if (auto* book = dynamic_cast<Book*>(parent))
+			{
+				book->VirtualParent(follow_target, parent_store);
+			}
 		}
 	}
 
@@ -358,33 +357,4 @@ namespace vr3dui
 
 	void Book::DrawExtents(bool show) {}
 
-	void ChapterTab::OnHover(bool a_activate, Hand& a_hand)
-	{
-		if (!group) { return; }
-
-		if (a_activate) { group->Request(this, GetWorld().translate, a_hand); }
-		else
-		{
-			group->Release(this, a_hand);
-		}
-	}
-
-	void ChapterTab::OnHoverExclusive(bool a_activate, Hand& a_hand) { UpdateSelectionVisual(); }
-
-	void ChapterTab::OnSelected(bool a_selected)
-	{
-		selected = a_selected;
-		UpdateSelectionVisual();
-	}
-
-	void ChapterTab::UpdateSelectionVisual()
-	{
-		if (auto* node = Get3D())
-		{
-			const bool highlighted =
-				selected || IsExclusivelyHovered(false) || IsExclusivelyHovered(true);
-
-			helper::SetGlowMult(node, highlighted ? 0.9f : 0.0f);
-		}
-	}
 }

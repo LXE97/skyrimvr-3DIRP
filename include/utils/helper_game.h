@@ -6,6 +6,11 @@
 #include <iostream>
 #include <string>
 
+namespace art_addon
+{
+	class ArtAddon;
+}
+
 namespace helper
 {
 	void InstallPlayerUpdateHook(std::function<void(void)> a_func);
@@ -35,6 +40,8 @@ namespace helper
 	float GetGameHour();  //  24hr time
 	float GetAmmoPercent(RE::Actor* a_a, float a_ammoCountMult);
 	float GetShoutCooldownPercent(RE::Actor* a_a, float a_MaxCDTime);
+
+	void DrawBox(art_addon::ArtAddon* box, const RE::NiPoint3& dimensions);
 
 	void SetGlowMult(RE::NiAVObject* a_target, float a_glow_mult);
 	void SetGlowColor(RE::NiAVObject* a_target, int a_color_hex);

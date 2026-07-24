@@ -1,5 +1,6 @@
 #include "helper_game.h"
 
+#include "art_addon.h"
 #include "helper_math.h"
 
 namespace helper
@@ -468,6 +469,29 @@ namespace helper
 		SKSE::log::trace("No model found for formID {} with formtype {}", a_obj->GetFormID(),
 			RE::FormTypeToString(a_obj->GetFormType()));
 		return nullptr;
+	}
+
+	void DrawBox(art_addon::ArtAddon* box, const RE::NiPoint3& dimensions)
+	{
+		if (box)
+		{
+			RE::NiAVObject* geom = box->Get3D();
+			for (int i : { 0, 1 })
+				for (int j : { 0, 1 })
+					for (int k : { 0, 1 })
+					{
+						char name[4] = { char('0' + i), char('0' + j), char('0' + k), 0 };
+
+						if (auto node = geom->GetObjectByName(name))
+						{
+							float x = (i ? +dimensions.x : -dimensions.x);
+							float y = (j ? +dimensions.y : -dimensions.y);
+							float z = (k ? +dimensions.z : -dimensions.z);
+
+							node->local.translate = { x, y, z };
+						}
+					}
+		}
 	}
 
 	const char* GetObjectModelPath(RE::TESObjectREFR* a_obj)

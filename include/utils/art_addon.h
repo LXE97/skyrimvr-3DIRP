@@ -20,6 +20,8 @@ namespace art_addon
 		friend class ArtAddonManager;
 
 	public:
+		using OnInitialized = std::function<void(ArtAddon*)>;
+
 		/** Returns: shared_ptr, or nullptr if modelPath or target is invalid
 		 * 
 		 * Constructs a new ArtAddon and queues the creation of its 3D model. The model is not 
@@ -34,8 +36,8 @@ namespace art_addon
 		 * 					to set other NIF properties besides transform
 		 */
 		[[nodiscard]] static ArtAddonPtr Make(std::string_view a_model_path,
-			RE::TESObjectREFR* a_target, RE::NiAVObject* a_attach_node, RE::NiTransform& a_local,
-			std::function<void(ArtAddon*)> a_callback = nullptr);
+			RE::TESObjectREFR* a_target, RE::NiAVObject* a_attach_node,
+			const RE::NiTransform& a_local, OnInitialized a_callback = nullptr);
 
 		~ArtAddon()
 		{
@@ -48,6 +50,9 @@ namespace art_addon
 		/** Returns: Pointer to the attached NiAVObject. nullptr if initialization hasn't finished. */
 		RE::NiAVObject* Get3D() { return root3D; }
 		RE::NiAVObject* GetParent() { return attach_node; }
+
+		/** Keeps the addon at the requested world transform regardless of its physical parent. */
+		void SetWorldTransform(const RE::NiTransform& a_world);
 
 	protected:
 		ArtAddon() = default;
@@ -127,8 +132,16 @@ namespace art_addon
 	{
 	public:
 		static constexpr float kLineSpacing = 1.1f;
-		AddonTextBox(std::string_view a_string, const float a_spacing, RE::NiAVObject* a_attach_to,
-			RE::NiTransform& a_local, std::string font_path);
+		AddonTextBox(std::string_view a_string, float a_spacing, RE::TESObjectREFR* a_target,
+			RE::NiAVObject* a_attach_to, const RE::NiTransform& a_local, std::string font_path);
+		AddonTextBox(std::string_view a_string, float a_spacing, RE::NiAVObject* a_attach_to,
+			const RE::NiTransform& a_local, std::string font_path) :
+			AddonTextBox(a_string, a_spacing, RE::PlayerCharacter::GetSingleton(), a_attach_to,
+				a_local, std::move(font_path))
+		{}
+
+		RE::NiAVObject* Get3D() { return root ? root->Get3D() : nullptr; }
+		void            SetWorldTransform(const RE::NiTransform& a_world);
 
 	private:
 		struct LifetimeToken
@@ -142,6 +155,7 @@ namespace art_addon
 
 		ArtAddonPtr              root;
 		std::vector<ArtAddonPtr> characters;
+		RE::TESObjectREFR*       target{};
 		std::string              string;
 		const float              spacing;
 		std::string              font;

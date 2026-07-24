@@ -67,9 +67,7 @@ namespace vr3dui
 	class QuestPage : public Page
 	{
 	public:
-		explicit QuestPage(std::vector<JournalQuestData> a_quests) :
-			quests(std::move(a_quests))
-		{}
+		explicit QuestPage(std::vector<JournalQuestData> a_quests) : quests(std::move(a_quests)) {}
 
 		void Draw(Book::PageContext a_context) override;
 
@@ -80,9 +78,10 @@ namespace vr3dui
 	class Journal : public Book
 	{
 	public:
-		static constexpr const char* kJournalModelPath = "3DIRP/journal.nif";
+		static constexpr std::string_view kModelPath = "3DIRP/journal.nif";
 
-		Journal(Widget* a_parent, bool a_isLeft, NiTransform a_transform);
+		Journal(bool a_isLeft, TESObjectREFR* a_objectReference, NiAVObject* a_root,
+			NiTransform a_local);
 
 	private:
 	};

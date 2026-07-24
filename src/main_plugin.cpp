@@ -72,7 +72,8 @@ namespace vr3dui
 		pc = PlayerCharacter::GetSingleton();
 	}
 
-	Window* book_window;
+	Book*       book;
+	ArtAddonPtr test;
 
 	static bool OnDebugButton(const vrinput::ModInputEvent& e)
 	{
@@ -80,11 +81,32 @@ namespace vr3dui
 
 		if (e.button_state == vrinput::ButtonState::kButtonDown)
 		{
-			if (!book_window) { book_window = SummonAttachedBook<Journal>(true); }
+			if (!book)
+			{
+				auto book_hand_isLeft = true;
+
+				auto hand_node = vrinput::GetHandNode(vrinput::Hand(book_hand_isLeft), false);
+				NiTransform t{};
+				t.translate = { 10, 0, 0 };
+				//test = ArtAddon::Make("HelperSphere.nif", pc, hand_node, t);
+
+				// TODO: store in settings json or skse cosave
+				NiTransform zero{};
+				NiTransform default_transform;
+				default_transform.scale = 1.0f;
+				default_transform.translate = { 5.915527f, -10.583008f, 10.284607f };
+				default_transform.rotate = { { 0.839558f, -0.198012f, -0.493753f },
+					{ -0.528744f, -0.127261f, -0.825465f }, { 0.089592f, 0.956704f, -0.210660f } };
+
+				auto temp = std::make_unique<Book>(
+					book_hand_isLeft, pc->AsReference(), hand_node, default_transform);
+				book = temp.get();
+				vr_gui::Controller::GetSingleton()->AddRoot(std::move(temp));
+			}
 			else
 			{
-				DismissBook(book_window);
-				book_window = nullptr;
+				book->Close();
+				book = nullptr;
 			}
 
 			toggle ^= 1;
@@ -97,14 +119,12 @@ namespace vr3dui
 	{
 		static bool toggle = true;
 
-		if (book_window) book_window->ShowHitboxes(toggle);
+		if (book) book->ShowHitboxes(toggle);
 		if (e.button_state == vrinput::ButtonState::kButtonDown) {}
 
 		toggle ^= 1;
 		return false;
 	}
-
-
 
 	static bool OnDpad(const vrinput::ModInputEvent& e)
 	{
@@ -112,6 +132,7 @@ namespace vr3dui
 
 		if (e.button_state == vrinput::ButtonState::kButtonDown)
 		{
+
 			toggle ^= 1;
 		}
 		return false;

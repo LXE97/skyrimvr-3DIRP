@@ -15,7 +15,7 @@ namespace art_addon
 	static constexpr int kMaxPerFrame = 20;
 
 	std::shared_ptr<ArtAddon> ArtAddon::Make(std::string_view a_model_path, TESObjectREFR* a_target,
-		NiAVObject* a_attach_node, NiTransform& a_local, std::function<void(ArtAddon*)> a_callback)
+		NiAVObject* a_attach_node, const NiTransform& a_local, OnInitialized a_callback)
 	{
 		auto manager = ArtAddonManager::GetSingleton();
 		auto art_object = manager->GetArtForm(a_model_path);
@@ -43,6 +43,15 @@ namespace art_addon
 			SKSE::log::error("Art addon failed: invalid target");
 			return std::shared_ptr<ArtAddon>(new ArtAddon);
 		}
+	}
+
+	void ArtAddon::SetWorldTransform(const NiTransform& a_world)
+	{
+		if (!root3D || !attach_node) { return; }
+
+		root3D->local = attach_node->world.Invert() * a_world;
+		NiUpdateData context{};
+		root3D->Update(context);
 	}
 
 	void RemoveCollisionNodes(NiAVObject* a_node)
@@ -207,19 +216,25 @@ namespace art_addon
 		}
 	}
 
-	AddonTextBox::AddonTextBox(std::string_view a_string, const float a_spacing,
-		RE::NiAVObject* a_attach_to, RE::NiTransform& a_local, std::string font_path) :
+	AddonTextBox::AddonTextBox(std::string_view a_string, float a_spacing,
+		RE::TESObjectREFR* a_target, RE::NiAVObject* a_attach_to, const RE::NiTransform& a_local,
+		std::string font_path) :
+		target(a_target),
 		string(a_string),
 		spacing(a_spacing),
 		font(font_path)
 	{
 		std::weak_ptr<LifetimeToken> weak_token = token;
 
-		root = ArtAddon::Make(kEmptyNif, PlayerCharacter::GetSingleton(),
-			(a_attach_to ? a_attach_to : PlayerCharacter::GetSingleton()->Get3D()), a_local,
+		root = ArtAddon::Make(kEmptyNif, a_target, a_attach_to, a_local,
 			[weak_token, this](ArtAddon* a) {
 				if (auto token = weak_token.lock(); token && token->alive) { MakeString(font); }
 			});
+	}
+
+	void AddonTextBox::SetWorldTransform(const NiTransform& a_world)
+	{
+		if (root) { root->SetWorldTransform(a_world); }
 	}
 
 	void AddonTextBox::MakeString(std::string font_path)
@@ -236,7 +251,7 @@ namespace art_addon
 				}
 				else
 				{
-					characters.push_back(ArtAddon::Make(font_path, PlayerCharacter::GetSingleton(),
+					characters.push_back(ArtAddon::Make(font_path, target,
 						root_node, t, [c = string[i]](ArtAddon* m) {
 							if (auto shader =
 									helper::GetShaderProperty(m->Get3D(), NifChar::kNodeName))
