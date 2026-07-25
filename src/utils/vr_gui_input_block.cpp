@@ -1,6 +1,7 @@
 #include "vr_gui_input_block.h"
 
 #include "higgsinterface001.h"
+#include "vrikinterface001.h"
 
 #include <memory>
 #include <utility>
@@ -10,7 +11,7 @@ namespace vr_gui
 	namespace
 	{
 		constexpr std::array kBlockTypes{ InputBlock::kPrimary, InputBlock::kSecondary,
-			InputBlock::kJoystick, InputBlock::kHiggs };
+			InputBlock::kJoystick, InputBlock::kHiggs};
 
 		[[nodiscard]] constexpr bool Contains(InputBlock a_blocks, InputBlock a_block) noexcept
 		{ return (a_blocks & a_block) != InputBlock::kNone; }
@@ -92,6 +93,11 @@ namespace vr_gui
 			}
 		}
 
+		if (Contains(a_blocks, InputBlock::kVrikGestures))
+		{
+			if (vrik_gesture_blocks++ == 0) { g_vrikInterface->beginGestureProfile(); }
+		}
+
 		return InputBlockHandle(this, a_isLeft, a_blocks);
 	}
 
@@ -101,7 +107,11 @@ namespace vr_gui
 		{
 			return true;
 		}
-		
+		if (Contains(a_block, InputBlock::kVrikGestures) && vrik_gesture_blocks != 0)
+		{
+			return true;
+		}
+
 		const auto hand = static_cast<std::size_t>(a_isLeft);
 		for (std::size_t i = 0; i < kBlockTypes.size(); ++i)
 		{
@@ -134,6 +144,11 @@ namespace vr_gui
 			{
 				activate_pick_length_setting->data.f = activate_pick_length_default;
 			}
+		}
+
+		if (Contains(a_blocks, InputBlock::kVrikGestures))
+		{
+			if (--vrik_gesture_blocks == 0) { g_vrikInterface->endGestureProfile(); }
 		}
 	}
 }

@@ -14,7 +14,8 @@ namespace vr_gui
 		kJoystick = 1 << 2,
 		kHiggs = 1 << 3,
 		kActivatePickLength = 1 << 4,
-		kAll = 0x1F
+		kVrikGestures = 1 << 5,
+		kAll = 0x3F
 	};
 
 	[[nodiscard]] constexpr InputBlock operator|(InputBlock a_lhs, InputBlock a_rhs) noexcept
@@ -96,5 +97,6 @@ namespace vr_gui
 		bool         initialized{};
 
 		std::uint32_t activate_pick_length_blocks{};
+		std::uint32_t vrik_gesture_blocks{};
 	};
 }

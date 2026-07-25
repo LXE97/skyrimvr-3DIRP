@@ -19,8 +19,10 @@ namespace vr3dui
 		local.scale /= a_root->world.scale;
 
 		// Block inputs on the book hand for as long as it exists
-		block_handle = InputBlockManager::GetSingleton()->Acquire(
-			a_isLeft, InputBlock::kPrimary | InputBlock::kSecondary | InputBlock::kHiggs);
+		block_handle = InputBlockManager::GetSingleton()->Acquire(a_isLeft,
+			InputBlock::kPrimary | InputBlock::kSecondary | InputBlock::kHiggs |
+				InputBlock::kVrikGestures |
+				(!a_isLeft ? InputBlock::kActivatePickLength : InputBlock::kNone));
 
 		AddModel(kModelPath, false, [this](ArtAddon* a) {
 			ni_animator::SetControllerFlags(Get3D(), true, false, false, false, true);
@@ -38,7 +40,7 @@ namespace vr3dui
 
 			NiTransform t;
 			// Interaction Volume
-			t.translate = { -9, 0, 4 };
+			t.translate = { -9, -2, 4 };
 			auto interaction_volume = AddChild<BasicHitbox>(isLeft, t, NiPoint3(18, 14, 5));
 			interaction_volume->AddBehavior<HandPointing>();
 			interaction_volume->AddBehavior<BlockInputOnHover>(InputBlock::kAll);
