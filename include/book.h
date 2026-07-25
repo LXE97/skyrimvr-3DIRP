@@ -98,7 +98,8 @@ namespace vr3dui
 		Widget*                               right_page_parent{};
 
 		void AddChapterTab(std::size_t a_index);
-		void DrawCurrentPage();
+
+		void DrawCurrentPage(bool a_left_page);
 
 		void ClearPageView();
 
@@ -120,7 +121,7 @@ namespace vr3dui
 	{
 	public:
 		virtual ~Page() = default;
-		virtual void Draw(Book::PageContext a_context);
+		virtual void Draw(Book::PageContext a_context, bool a_left_page);
 	};
 
 	class Chapter

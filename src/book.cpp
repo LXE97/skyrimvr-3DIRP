@@ -82,9 +82,9 @@ namespace vr3dui
 			grab_node = AddChild<GrabNode>(t, NiPoint3(3, 3, 3));
 			grab_node->SetPriority(5);
 
-			animator.PlayImmediately(open, animation_speed);
+			animator.PlayImmediately(open, animation_speed, [this]() { DrawCurrentPage(true); });
 
-			DrawCurrentPage();
+			DrawCurrentPage(false);
 		});
 
 		AddChapter(std::make_unique<Chapter>("3DIRP/Chapters/All.nif"));
@@ -120,8 +120,9 @@ namespace vr3dui
 			return;
 		}
 		ClearPageView();
+		DrawCurrentPage(false);
 		animator.Queue(flip_left, animation_speed, [this] {
-			if (!animator.HasQueued()) DrawCurrentPage();
+			if (!animator.HasQueued()) DrawCurrentPage(true);
 		});
 	}
 
@@ -144,8 +145,9 @@ namespace vr3dui
 			return;
 		}
 		ClearPageView();
+		DrawCurrentPage(true);
 		animator.Queue(flip_right, animation_speed, [this] {
-			if (!animator.HasQueued()) DrawCurrentPage();
+			if (!animator.HasQueued()) DrawCurrentPage(false);
 		});
 	}
 
@@ -154,14 +156,17 @@ namespace vr3dui
 		if (animator.QueuedCount() >= 2) { return; }
 		if (a_index >= chapters.size() || a_index == chapter_index) { return; }
 
-		const auto& animation = a_index < chapter_index ? flip_right : flip_left;
+		bool turn_left = a_index > chapter_index;
+
+		const auto& animation = turn_left ? flip_left : flip_right;
 
 		chapter_index = a_index;
 		page_index = 0;
 
 		ClearPageView();
-		animator.Queue(animation, animation_speed, [this] {
-			if (!animator.HasQueued()) DrawCurrentPage();
+		DrawCurrentPage(!turn_left);
+		animator.Queue(animation, animation_speed, [this, turn_left] {
+			if (!animator.HasQueued()) DrawCurrentPage(turn_left);
 		});
 	}
 
@@ -192,7 +197,7 @@ namespace vr3dui
 		chapters[a_index]->tab = tab;
 	}
 
-	void Book::DrawCurrentPage()
+	void Book::DrawCurrentPage(bool a_left_page)
 	{
 		if (chapter_index >= chapters.size() || !chapters[chapter_index]) { return; }
 
@@ -201,7 +206,7 @@ namespace vr3dui
 
 		PageContext context{ layout, *left_page_parent, *right_page_parent };
 
-		pages[page_index]->Draw(context);
+		pages[page_index]->Draw(context, a_left_page);
 
 		// Display page numbers
 		std::string page_str = std::to_string(page_index + 1);
@@ -220,10 +225,12 @@ namespace vr3dui
 		right_page_parent->ClearChildren();
 	}
 
-	void Page::Draw(Book::PageContext a_context)
+	void Page::Draw(Book::PageContext a_context, bool a_left_page)
 	{
-		a_context.left_page.AddModel("HelperSphere.nif");
-		a_context.right_page.AddModel("HelperSphere.nif");
+		if (a_left_page)
+			a_context.left_page.AddModel("HelperSphere.nif");
+		else
+			a_context.right_page.AddModel("HelperSphere.nif");
 	}
 
 	void Book::Update(float a_delta)

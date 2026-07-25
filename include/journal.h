@@ -69,7 +69,7 @@ namespace vr3dui
 	public:
 		explicit QuestPage(std::vector<JournalQuestData> a_quests) : quests(std::move(a_quests)) {}
 
-		void Draw(Book::PageContext a_context) override;
+		void Draw(Book::PageContext a_context, bool a_left_page) override;
 
 	private:
 		std::vector<JournalQuestData> quests;

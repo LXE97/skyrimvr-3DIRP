@@ -87,7 +87,7 @@ namespace vr3dui
 		// split quests vector and pass to each page
 	}
 
-	void QuestPage::Draw(Book::PageContext a_context)
+	void QuestPage::Draw(Book::PageContext a_context, bool a_left_page)
 	{
 		if (quests.empty()) { return; }
 
