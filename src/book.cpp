@@ -1,6 +1,6 @@
 #include "book.h"
 
-namespace vr3dui
+namespace vr3dirp
 {
 	using namespace art_addon;
 
@@ -16,19 +16,22 @@ namespace vr3dui
 		Widget(kDefaultWindowRadius, a_objectReference, a_root, a_local),
 		isLeft(a_isLeft)
 	{
+		// store state of dismissal button when summoned to avoid instant closing
+		const auto settings = Controller::GetSingleton()->GetSettings();
+		secondary_pressed_during_creation =
+			vrinput::GetButtonState(settings.secondary, vrinput::Hand(a_isLeft),
+				vrinput::ActionType::kPress) == vrinput::ButtonState::kButtonDown;
+
 		local.scale /= a_root->world.scale;
 
 		// Block inputs on the book hand for as long as it exists
 		block_handle = InputBlockManager::GetSingleton()->Acquire(a_isLeft,
 			InputBlock::kPrimary | InputBlock::kSecondary | InputBlock::kHiggs |
-				InputBlock::kVrikGestures |
+				//InputBlock::kVrikGestures |
 				(!a_isLeft ? InputBlock::kActivatePickLength : InputBlock::kNone));
 
 		AddModel(kModelPath, false, [this](ArtAddon* a) {
 			ni_animator::SetControllerFlags(Get3D(), true, false, false, false, true);
-
-			this->SetHitTestEnabled(false);
-
 			// Construct widget layout
 			auto* right_parent = Get3D()->GetObjectByName(kRightParent);
 			auto  left_parent = Get3D()->GetObjectByName(kLeftParent);
@@ -39,9 +42,10 @@ namespace vr3dui
 			}
 
 			NiTransform t;
+
 			// Interaction Volume
 			t.translate = { -9, -2, 4 };
-			auto interaction_volume = AddChild<BasicHitbox>(isLeft, t, NiPoint3(18, 14, 5));
+			auto interaction_volume = AddChild<BasicHitbox>(t, NiPoint3(18, 14, 5));
 			interaction_volume->AddBehavior<HandPointing>();
 			interaction_volume->AddBehavior<BlockInputOnHover>(InputBlock::kAll);
 			interaction_volume->SetPriority(90);
@@ -237,8 +241,36 @@ namespace vr3dui
 
 	void Book::Update(float a_delta)
 	{
-		Widget::Update(a_delta);
 		animator.Update(Get3D(), a_delta);
+		if (secondary_press_elapsed)
+		{
+			*secondary_press_elapsed += a_delta;
+			if (*secondary_press_elapsed > secondary_double_tap_threshold)
+			{
+				secondary_press_elapsed.reset();
+			}
+		}
+
+		const auto settings = Controller::GetSingleton()->GetSettings();
+
+		const bool secondary_pressed =
+			vrinput::GetButtonState(settings.secondary, vrinput::Hand(isLeft),
+				vrinput::ActionType::kPress) == vrinput::ButtonState::kButtonDown;
+
+		if (secondary_pressed && !secondary_pressed_during_creation)
+		{
+			if (secondary_press_elapsed)
+			{
+				secondary_press_elapsed.reset();
+				Close();
+			}
+			else
+			{
+				secondary_press_elapsed = 0.0f;
+			}
+		}
+
+		secondary_pressed_during_creation = secondary_pressed;
 	}
 
 	void Book::VirtualParent(NiAVObject* a_new, NiTransform& a_offset)

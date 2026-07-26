@@ -1,6 +1,6 @@
 #include "journal.h"
 
-namespace vr3dui
+namespace vr3dirp
 {
 	namespace
 	{

@@ -15,7 +15,7 @@ namespace vr_gui
 		}
 	}
 
-		const NiTransform Hand::GetBoxTransform() const
+	const NiTransform Hand::GetBoxTransform() const
 	{
 		if (transform) { return *transform * offset_box; }
 		else
@@ -51,12 +51,11 @@ namespace vr_gui
 	{
 		if (Init())
 		{
-			//query HIGGS state
-			if (g_higgsInterface->IsHandInGrabbableState(isLeft)) { state = State::kReady; }
-			else if (g_higgsInterface->GetGrabbedObject(isLeft)) { state = State::kGrabbing; }
+			if (!g_higgsInterface->IsHandInGrabbableState(isLeft)) { state = State::kGrabbing; }
+			else if (!helper::IsHandEmpty(isLeft)) { state = State::kWeapon; }
 			else
 			{
-				state = State::kWeapon;
+				state = State::kReady;
 			}
 			return true;
 		}
@@ -65,10 +64,11 @@ namespace vr_gui
 
 	ModeHandle Hand::RequestMode(Mode a_mode, ModePriority a_priority)
 	{
-				SKSE::log::trace("requesting mode on hand {}", this->IsLeft() ? "left" : "right");
+		//SKSE::log::trace("requesting mode on hand {}", this->IsLeft() ? "left" : "right");
 		const auto id = next_mode_request_id++;
 
-		mode_requests.push_back(ModeRequest{ .id = id, .mode = a_mode, .priority = static_cast<int>(a_priority) });
+		mode_requests.push_back(
+			ModeRequest{ .id = id, .mode = a_mode, .priority = static_cast<int>(a_priority) });
 
 		RefreshMode();
 

@@ -7,7 +7,7 @@
 #include <concepts>
 #include <utility>
 
-namespace vr3dui
+namespace vr3dirp
 {
 	using namespace RE;
 	using namespace vr_gui;
@@ -115,6 +115,10 @@ namespace vr3dui
 		Widget* tab_container{};
 
 		InputBlockHandle block_handle;
+
+		bool                 secondary_pressed_during_creation{};
+		std::optional<float> secondary_press_elapsed{};
+		float                secondary_double_tap_threshold = 1.0f;
 	};
 
 	class Page
@@ -186,17 +190,13 @@ namespace vr3dui
 	class BasicHitbox : public Widget
 	{
 	public:
-		BasicHitbox(Widget* a_parent, bool a_isLeft, NiTransform a_local, NiPoint3 a_extents) :
-			Widget(a_parent, a_local, a_extents),
-			isLeft(a_isLeft)
+		BasicHitbox(Widget* a_parent, NiTransform a_local, NiPoint3 a_extents) :
+			Widget(a_parent, a_local, a_extents)
 		{}
 
 		void OnClick(bool a_activate, Hand& a_hand, MenuAction a_action) override;
 
 		virtual bool TestOverlap(Hand& a_hand) const override;
-
-	private:
-		bool isLeft;
 	};
 
 	class HandPointing : public Behavior
@@ -206,18 +206,34 @@ namespace vr3dui
 
 		void OnHover(bool a_activate, Hand& a_hand) override
 		{
+			auto* pc = RE::PlayerCharacter::GetSingleton();
 			if (a_activate)
 			{
 				hand_mode = a_hand.RequestMode(Hand::Mode::kPointing, Hand::ModePriority::kPassive);
+
+				if (auto* equipped = pc->GetEquippedObject(a_hand.IsLeft());
+					pc->IsWeaponDrawn() && equipped && equipped->As<RE::SpellItem>())
+				{
+					pc->DrawWeaponMagicHands(false);
+					force_sheathed = true;
+				}
+
 			}
 			else
 			{
 				hand_mode.Release();
+				if (auto* equipped = pc->GetEquippedObject(a_hand.IsLeft());
+					equipped && equipped->As<RE::SpellItem>() && force_sheathed)
+				{
+					pc->DrawWeaponMagicHands(true);
+					force_sheathed = false;
+				}
 			}
 		}
 
 	private:
 		ModeHandle hand_mode;
+		bool       force_sheathed{ false };
 	};
 
 	class BlockInputOnHover : public Behavior
@@ -232,7 +248,10 @@ namespace vr3dui
 		{
 			auto& handle = handles[a_hand.IsLeft()];
 
-			if (a_activate) { handle = InputBlockManager::GetSingleton()->Acquire(a_hand.IsLeft(), blocks); }
+			if (a_activate)
+			{
+				handle = InputBlockManager::GetSingleton()->Acquire(a_hand.IsLeft(), blocks);
+			}
 			else
 			{
 				handle.Release();
@@ -240,7 +259,7 @@ namespace vr3dui
 		}
 
 	private:
-		InputBlock                  blocks;
+		InputBlock                      blocks;
 		std::array<InputBlockHandle, 2> handles;
 	};
 

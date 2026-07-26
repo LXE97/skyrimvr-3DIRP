@@ -12,9 +12,38 @@ namespace vr_gui
 	void Controller::Cleanup()
 	{
 		roots.clear();
+		pending_roots.clear();
 		activator_overrides.clear();
 		widgets_to_delete.clear();
 		hovered_map.clear();
+		update_in_progress = false;
+	}
+
+	void Controller::SetSettings(Settings a_settings)
+	{
+		if (initialized)
+		{
+			for (auto hand : { vrinput::Hand::kRight, vrinput::Hand::kLeft })
+			{
+				vrinput::RemoveCallback(InputEventHandlerStatic, settings.primary, hand,
+					vrinput::ActionType::kPress);
+				vrinput::RemoveCallback(InputEventHandlerStatic, settings.secondary, hand,
+					vrinput::ActionType::kPress);
+			}
+		}
+
+		settings = std::move(a_settings);
+
+		if (initialized)
+		{
+			for (auto hand : { vrinput::Hand::kRight, vrinput::Hand::kLeft })
+			{
+				vrinput::AddCallback(InputEventHandlerStatic, settings.primary, hand,
+					vrinput::ActionType::kPress);
+				vrinput::AddCallback(InputEventHandlerStatic, settings.secondary, hand,
+					vrinput::ActionType::kPress);
+			}
+		}
 	}
 
 	void Controller::Init()
@@ -22,9 +51,11 @@ namespace vr_gui
 		SKSE::log::trace("Controller init");
 
 		roots.clear();
+		pending_roots.clear();
 		activator_overrides.clear();
 		widgets_to_delete.clear();
 		hovered_map.clear();
+		update_in_progress = false;
 
 		// create right (0) and left hands
 		hands = { Hand(false), Hand(true) };
@@ -94,6 +125,8 @@ namespace vr_gui
 
 	void Controller::Update()
 	{
+		update_in_progress = true;
+
 		// Only process input if there is at least one enabled widget tree.
 		bool do_update = false;
 
@@ -129,6 +162,10 @@ namespace vr_gui
 
 		//HandleHUDOverrides happens in the PostWandUpdate
 		HandleDeletionQueue();
+
+		update_in_progress = false;
+		for (auto& root : pending_roots) { roots.emplace_back(std::move(root)); }
+		pending_roots.clear();
 	}
 
 	bool Controller::InputEventHandlerStatic(const vrinput::ModInputEvent& e)
@@ -336,7 +373,7 @@ namespace vr_gui
 
 			for (auto& root : roots)
 			{
-				if (root->IsEnabled())
+				if (root->IsEnabled() && root->HandStateFilter(hand))
 				{
 					// Copy currently hovered children for this hand and widget tree.
 					auto&                cur_list = hovered_map[&hand][root.get()];
@@ -424,6 +461,21 @@ namespace vr_gui
 		auto it = std::find_if(activator_overrides.begin(), activator_overrides.end(),
 			[&](const ActivatorOverride& a) { return a.owner == a_owner && a.isLeft == a_isLeft; });
 		if (it != activator_overrides.end()) { activator_overrides.erase(it); }
+	}
+
+	bool Controller::IsMenuActionPressed(Hand& a_hand, MenuAction a_action)
+	{
+		if (a_action == MenuAction::kPrimary)
+		{
+			return vrinput::GetButtonState(settings.primary, vrinput::Hand(a_hand.IsLeft()),
+					   vrinput::ActionType::kPress) == vrinput::ButtonState::kButtonDown;
+		}
+		else if (a_action == MenuAction::kSecondary)
+		{
+			return vrinput::GetButtonState(settings.secondary, vrinput::Hand(a_hand.IsLeft()),
+					   vrinput::ActionType::kPress) == vrinput::ButtonState::kButtonDown;
+		}
+		return false;
 	}
 
 	void Controller::RemoveActivatorOverridesForRoot(Widget* a_root)
@@ -759,8 +811,6 @@ namespace vr_gui
 	void Widget::AddModel(const std::string_view a_path, bool a_temporaryEffect,
 		art_addon::ArtAddon::OnInitialized a_callback)
 	{
-		SKSE::log::trace("Adding model {} {}", GetObjectReference()->GetName(),
-			GetModelAttachmentNode()->name.c_str());
 		auto* object = GetObjectReference();
 		auto* target = GetModelAttachmentNode();
 		if (!object || !target) { return; }

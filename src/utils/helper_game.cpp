@@ -471,6 +471,64 @@ namespace helper
 		return nullptr;
 	}
 
+	/* Returns true if the given hand:
+	* Is empty, sheathed, holding a spell, or the other hand is holding a bow and there is no ammo equipped.
+	*  Traverses inventory each time to check for equipped ammo.
+	* TODO: do not traverse inventory, store dirty flag as global variable and check ammo in OnEquip().
+	*/
+	bool IsHandEmpty(bool a_isLeft)
+	{
+		auto* player = RE::PlayerCharacter::GetSingleton();
+		if (!player) { return true; }
+
+		if (!player->IsWeaponDrawn()) { return true; }
+
+		const bool equipment_left = a_isLeft;
+		auto*      equipped = player->GetEquippedObject(equipment_left);
+		if (equipped && equipped->As<RE::SpellItem>()) { return true; }
+
+		auto* main_hand = player->GetEquippedObject(false);
+		auto* main_hand_weapon = main_hand ? main_hand->As<RE::TESObjectWEAP>() : nullptr;
+
+		if (main_hand_weapon)
+		{
+			bool has_equipped_ammo = false;
+			if (auto* inventory_changes = player->GetInventoryChanges(false);
+				inventory_changes && inventory_changes->entryList)
+			{
+				for (auto* entry : *inventory_changes->entryList)
+				{
+					if (entry && entry->object && entry->object->IsAmmo() && entry->IsWorn())
+					{
+						has_equipped_ammo = true;
+						break;
+					}
+				}
+			}
+
+			const bool is_bow = main_hand_weapon->IsBow();
+			const bool is_two_handed = is_bow || main_hand_weapon->IsCrossbow() ||
+				main_hand_weapon->IsTwoHandedSword() || main_hand_weapon->IsTwoHandedAxe();
+
+			if (is_two_handed &&
+				((is_bow && !equipment_left && !has_equipped_ammo) ||
+					(!is_bow && equipment_left)))
+			{
+				return true;
+			}
+		}
+
+		if (!equipped)
+		{
+			auto*      left_equipped = player->GetEquippedObject(true);
+			auto*      armor = left_equipped ? left_equipped->As<RE::TESObjectARMO>() : nullptr;
+			const bool has_shield = armor && armor->IsShield();
+			return !has_shield || !equipment_left;
+		}
+
+		return false;
+	}
+
 	void DrawBox(art_addon::ArtAddon* box, const RE::NiPoint3& dimensions)
 	{
 		if (box)

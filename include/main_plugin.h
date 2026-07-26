@@ -7,7 +7,7 @@
 #include "higgsinterface001.h"
 #include "vrikinterface001.h"
 
-namespace vr3dui
+namespace vr3dirp
 {
 	constexpr const char* kPluginName = "Real_Spellbook_VR";
 

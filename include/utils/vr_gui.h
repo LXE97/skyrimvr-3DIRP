@@ -342,10 +342,20 @@ namespace vr_gui
 
 		RE::TESObjectREFR* GetActivator() { return activator_obj; }
 		Hand*              GetHand(bool a_isLeft) { return &hands[a_isLeft]; }
+		const Settings&    GetSettings() const { return settings; }
+		void               SetSettings(Settings a_settings);
 
 		Widget* AddRoot(std::unique_ptr<Widget> a_root)
 		{
-			roots.emplace_back(std::move(a_root));
+			auto* created = a_root.get();
+			if (update_in_progress)
+			{
+				pending_roots.emplace_back(std::move(a_root));
+			}
+			else
+			{
+				roots.emplace_back(std::move(a_root));
+			}
 #ifdef HUD_OVERRIDES
 			SKSE::GetTaskInterface()->AddTask([this]() {
 				if (activator_obj)
@@ -354,7 +364,25 @@ namespace vr_gui
 				}
 			});
 #endif
-			return roots.back().get();
+			return created;
+		}
+
+		template <typename T>
+		T* FindRoot()
+		{
+			static_assert(std::is_base_of_v<Widget, T>, "T must inherit from Widget");
+
+			for (const auto& root : roots)
+			{
+				if (auto* result = dynamic_cast<T*>(root.get())) { return result; }
+			}
+
+			for (const auto& root : pending_roots)
+			{
+				if (auto* result = dynamic_cast<T*>(root.get())) { return result; }
+			}
+
+			return nullptr;
 		}
 
 		void Update();
@@ -369,6 +397,8 @@ namespace vr_gui
 		void PushActivatorOverride(ActivatorOverride&& a_data);
 		void RemoveActivatorOverride(Widget* a_owner);
 		void RemoveActivatorOverride(Widget* a_owner, bool a_isLeft);
+
+		bool IsMenuActionPressed(Hand& a_hand, MenuAction a_action);
 
 	private:
 		Controller() = default;
@@ -399,6 +429,7 @@ namespace vr_gui
 		bool IsValid(Widget* a_root, Widget* a_target) const;
 
 		std::vector<std::unique_ptr<Widget>> roots;
+		std::vector<std::unique_ptr<Widget>> pending_roots;
 		std::vector<Widget*>                 widgets_to_delete;
 		std::vector<ButtonEvent>             button_queue;
 		std::vector<ActivatorOverride>       activator_overrides;
@@ -415,6 +446,7 @@ namespace vr_gui
 		std::mutex button_queue_mutex;
 
 		std::chrono::steady_clock::time_point last_update_time{ std::chrono::steady_clock::now() };
+		bool                                  update_in_progress = false;
 
 		// element 0 = right hand, 1 = left hand
 		std::vector<Hand> hands;

@@ -4,8 +4,8 @@ namespace spellbook
 {
 	using namespace RE;
 	using namespace vr_gui;
-	using namespace vr3dui;
-
+	using namespace vr3dirp;
+	
 	class Spellbook;
 
 	class Spellbook : public Book

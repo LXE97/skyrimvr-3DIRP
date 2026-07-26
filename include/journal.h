@@ -2,7 +2,7 @@
 
 #include "book.h"
 
-namespace vr3dui
+namespace vr3dirp
 {
 	using namespace RE;
 	using namespace vr_gui;

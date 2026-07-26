@@ -17,6 +17,8 @@ namespace helper
 
 	typedef bool (*_DrawWeapon)(RE::Actor* actor, bool draw);
 
+	bool IsHandEmpty(bool a_isLeft);
+
 	inline void PlayerDrawWeapon(bool draw)
 	{
 		RE::Actor* actor = RE::PlayerCharacter::GetSingleton()->As<RE::Actor>();

@@ -2,6 +2,7 @@
 
 #include "book.h"
 #include "helper_math.h"
+#include "holster.h"
 #include "hooks.h"
 #include "journal.h"
 #include "menu_checker.h"
@@ -10,18 +11,25 @@
 #include "vr_gui.h"
 #include "vrinput.h"
 
-namespace vr3dui
+namespace vr3dirp
 {
 	using namespace RE;
 	using namespace art_addon;
 	using namespace vr_gui;
+
+	enum class BookType
+	{
+		kJournal = 0,
+		kSpellbook,
+		kNone
+	};
 
 	static void RegisterVRInputCallback();
 	static void PlayerUpdate();
 	static bool OnDebugButton(const vrinput::ModInputEvent& e);
 	static bool OnSecondaryDebugButton(const vrinput::ModInputEvent& e);
 	static bool OnDpad(const vrinput::ModInputEvent& e);
-	static void SummonBook(bool isLeft, Book** store);
+	static void SummonBook(bool isLeft, BookType a_type);
 
 	uint32_t      g_esp_index{};
 	PapyrusVRAPI* g_papyrusvr{};
@@ -32,20 +40,34 @@ namespace vr3dui
 
 	PlayerCharacter* pc{};
 
-	Book* book;
+	// settings
+	float shoulder_holster_radius = 20.f;
+	float belly_holster_radius = 6.f;
 
-	void VrikActionSummonBookLeft(int presscount) { SummonBook(true, &book); }
-
-	void VrikActionSummonBookRight(int presscount) { SummonBook(false, &book); }
-
-	void SummonBook(bool isLeft, Book** store)
+	void VrikActionSummonBookLeft(int)
 	{
-		if (!*store)
-		{
-			auto        hand_node = vrinput::GetHandNode(vrinput::Hand(isLeft), false);
-			NiTransform t{};
-			t.translate = { 10, 0, 0 };
+		// if (auto book = vr_gui::Controller::GetSingleton()->FindRoot<Book>()) { book->Close(); }
+		// else
+		// {
+			SummonBook(true, BookType::kNone);
+		
+	}
 
+	void VrikActionSummonBookRight(int)
+	{
+		// if (auto book = vr_gui::Controller::GetSingleton()->FindRoot<Book>()) { book->Close(); }
+		// else
+		// {
+			SummonBook(false, BookType::kNone);
+		
+	}
+
+	void SummonBook(bool isLeft, BookType a_type)
+	{
+		if (auto book = vr_gui::Controller::GetSingleton()->FindRoot<Book>()) { book->Close(); }
+		else
+		{
+			auto hand_node = vrinput::GetHandNode(vrinput::Hand(isLeft), false);
 			// TODO: store in settings json or skse cosave
 			NiTransform zero{};
 			NiTransform default_transform;
@@ -54,21 +76,52 @@ namespace vr3dui
 			default_transform.rotate = { { 0.839558f, -0.198012f, -0.493753f },
 				{ -0.528744f, -0.127261f, -0.825465f }, { 0.089592f, 0.956704f, -0.210660f } };
 
-			auto temp =
-				std::make_unique<Book>(isLeft, pc->AsReference(), hand_node, default_transform);
-			book = temp.get();
+			std::unique_ptr<Book> temp;
+
+			switch (a_type)
+			{
+			case BookType::kJournal:
+				break;
+
+			case BookType::kSpellbook:
+				break;
+
+			default:
+				temp =
+					std::make_unique<Book>(isLeft, pc->AsReference(), hand_node, default_transform);
+			}
+			auto* created = temp.get();
+			vr_gui::Controller::GetSingleton()->AddRoot(std::move(temp));
+		}
+	}
+
+	bool g_createHolstersPending = false;
+
+	void CreateHolsters()
+	{
+		auto belly_node = pc->Get3D()->GetObjectByName("NPC Spine1 [Spn1]");
+		if (belly_node)
+		{
+			NiTransform t{};
+			t.translate = { 0, 13, 0 };
+
+			auto  temp = std::make_unique<vr_gui::Holster>(belly_holster_radius, pc, belly_node, t,
+				vrinput::Hand::kBoth, HolsterCallbacks{ .primary = [](Hand& h) {
+					SummonBook(h.IsLeft(), BookType::kNone);
+				} });
+			auto* created = temp.get();
 			vr_gui::Controller::GetSingleton()->AddRoot(std::move(temp));
 		}
 		else
 		{
-			(*store)->Close();
-			*store = nullptr;
+			SKSE::log::trace("belly node not initialized");
 		}
 	}
 
 	void Init()
 	{
 		helper::InstallPlayerUpdateHook(PlayerUpdate);
+		g_createHolstersPending = true;
 
 		hooks::ModelReferenceEffect_SaveGameHook::Install();
 
@@ -85,20 +138,18 @@ namespace vr3dui
 			vrinput::Hand::kRight, vrinput::ActionType::kPress);
 		vrinput::AddCallback(OnDpad, vr::EVRButtonId::k_EButton_DPad_Up, vrinput::Hand::kRight,
 			vrinput::ActionType::kPress);
-		vrinput::AddCallback(OnDpad, vr::EVRButtonId::k_EButton_DPad_Down, vrinput::Hand::kRight,
-			vrinput::ActionType::kPress);
-		vrinput::AddCallback(OnDpad, vr::EVRButtonId::k_EButton_DPad_Left, vrinput::Hand::kRight,
-			vrinput::ActionType::kPress);
-		vrinput::AddCallback(OnDpad, vr::EVRButtonId::k_EButton_DPad_Right, vrinput::Hand::kRight,
-			vrinput::ActionType::kPress);
 	}
-
-	ArtAddonPtr handebug;
 
 	static void PlayerUpdate()
 	{
 		art_addon::ArtAddonManager::GetSingleton()->Update();
 		vr_gui::Controller::GetSingleton()->Update();
+
+		if (g_createHolstersPending)
+		{
+			CreateHolsters();
+			g_createHolstersPending = false;
+		}
 	}
 
 	void PreLoadGame() { vr_gui::Controller::GetSingleton()->Cleanup(); }
@@ -113,7 +164,13 @@ namespace vr3dui
 	{
 		static bool toggle = true;
 
-		if (e.button_state == vrinput::ButtonState::kButtonDown) { toggle ^= 1; }
+		if (e.button_state == vrinput::ButtonState::kButtonDown)
+		{
+			SKSE::log::trace("left hand empty : {}\nright hand empty: {}",
+				helper::IsHandEmpty(true), helper::IsHandEmpty(false));
+
+			toggle ^= 1;
+		}
 
 		return false;
 	}
@@ -122,7 +179,7 @@ namespace vr3dui
 	{
 		static bool toggle = true;
 
-		if (book) book->ShowHitboxes(toggle);
+		vr_gui::Controller::GetSingleton()->ShowHitboxes(toggle);
 		if (e.button_state == vrinput::ButtonState::kButtonDown) {}
 
 		toggle ^= 1;
