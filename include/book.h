@@ -89,6 +89,12 @@ namespace vr3dirp
 		bool HandStateFilter(Hand& a_hand) const override { return a_hand.IsLeft() != isLeft; }
 
 	protected:
+		enum class TurnDirection
+		{
+			kLeft,
+			kRight
+		};
+
 		static constexpr ni_animator::AnimationRange open{ 0.0f, 1.f, 1.f };
 		static constexpr ni_animator::AnimationRange close{ 3.f, 3.97f, 0.0f };
 		static constexpr ni_animator::AnimationRange flip_left{ 1.f, 2.f, 1.f };
@@ -101,6 +107,8 @@ namespace vr3dirp
 		Widget*                               right_page_parent{};
 
 		void AddChapterTab(std::size_t a_index);
+		void TurnToPage(
+			std::size_t a_chapter_index, std::size_t a_page_index, TurnDirection a_direction);
 
 		void DrawCurrentPage(bool a_left_page);
 
@@ -232,10 +240,10 @@ namespace vr3dirp
 		virtual bool TestOverlap(Hand& a_hand) const override;
 	};
 
-	class HandPointing : public Behavior
+	class HandInteractionMode : public Behavior
 	{
 	public:
-		HandPointing(Widget* a_parent) : Behavior(a_parent) {}
+		HandInteractionMode(Widget* a_parent) : Behavior(a_parent) {}
 
 		void OnHover(bool a_activate, Hand& a_hand) override
 		{
@@ -263,6 +271,9 @@ namespace vr3dirp
 					pc->DrawWeaponMagicHands(false);
 					force_sheathed = true;
 				}
+
+				smoothing_handle_l = Controller::GetSingleton()->GetHand(true)->RequestSmoothing();
+				smoothing_handle_r = Controller::GetSingleton()->GetHand(false)->RequestSmoothing();
 			}
 			else
 			{
@@ -273,6 +284,9 @@ namespace vr3dirp
 					pc->DrawWeaponMagicHands(true);
 					force_sheathed = false;
 				}
+
+				smoothing_handle_l.Release();
+				smoothing_handle_r.Release();
 			}
 
 			pointing_active = pending_active;
@@ -282,12 +296,14 @@ namespace vr3dirp
 	private:
 		static constexpr float kTransitionDelay = 0.2f;
 
-		ModeHandle hand_mode;
-		Hand*      hover_hand{};
-		bool       force_sheathed{ false };
-		bool       pending_active{ false };
-		bool       pointing_active{ false };
-		float      transition_elapsed{};
+		ModeHandle      hand_mode;
+		SmoothingHandle smoothing_handle_l;
+		SmoothingHandle smoothing_handle_r;
+		Hand*           hover_hand{};
+		bool            force_sheathed{ false };
+		bool            pending_active{ false };
+		bool            pointing_active{ false };
+		float           transition_elapsed{};
 	};
 
 	class BlockInputOnHover : public Behavior

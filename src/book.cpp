@@ -76,7 +76,7 @@ namespace vr3dirp
 			// Interaction Volume
 			t.translate = { -9, -2, 4 };
 			auto interaction_volume = AddChild<BasicHitbox>(t, NiPoint3(18, 14, 5));
-			interaction_volume->AddBehavior<HandPointing>();
+			interaction_volume->AddBehavior<HandInteractionMode>();
 			interaction_volume->AddBehavior<BlockInputOnHover>(InputBlock::kAll);
 			interaction_volume->SetPriority(90);
 
@@ -141,71 +141,73 @@ namespace vr3dirp
 
 	void Book::TurnPageLeft()
 	{
-		if (animator.QueuedCount() >= 1) { return; }
+		if (chapter_index >= chapters.size() || !chapters[chapter_index]) { return; }
 
-		if (chapters.empty() || chapter_index >= chapters.size()) { return; }
-
-		auto& chapter = *chapters[chapter_index];
-
-		if (page_index + 1 < chapter.pages.size()) { ++page_index; }
+		if (page_index + 1 < chapters[chapter_index]->pages.size())
+		{
+			TurnToPage(chapter_index, page_index + 1, TurnDirection::kLeft);
+		}
 		else if (chapter_index + 1 < chapters.size())
 		{
-			++chapter_index;
-			page_index = 0;
+			TurnToPage(chapter_index + 1, 0, TurnDirection::kLeft);
 		}
-		else
-		{
-			return;
-		}
-		ClearPageView();
-		DrawCurrentPage(false);
-		animator.Queue(flip_left, animation_speed, [this] {
-			if (!animator.HasQueued()) DrawCurrentPage(true);
-		});
 	}
 
 	void Book::TurnPageRight()
 	{
-		if (animator.QueuedCount() >= 1) { return; }
+		if (chapter_index >= chapters.size() || !chapters[chapter_index]) { return; }
 
-		if (chapters.empty() || chapter_index >= chapters.size()) { return; }
-
-		auto& chapter = *chapters[chapter_index];
-
-		if (page_index > 0) { --page_index; }
+		if (page_index > 0)
+		{
+			TurnToPage(chapter_index, page_index - 1, TurnDirection::kRight);
+		}
 		else if (chapter_index > 0)
 		{
-			--chapter_index;
-			page_index = chapters[chapter_index]->pages.size() - 1;
+			const auto previous_chapter = chapter_index - 1;
+			if (!chapters[previous_chapter] || chapters[previous_chapter]->pages.empty()) { return; }
+
+			TurnToPage(previous_chapter, chapters[previous_chapter]->pages.size() - 1,
+				TurnDirection::kRight);
 		}
-		else
-		{
-			return;
-		}
-		ClearPageView();
-		DrawCurrentPage(true);
-		animator.Queue(flip_right, animation_speed, [this] {
-			if (!animator.HasQueued()) DrawCurrentPage(false);
-		});
 	}
 
 	void Book::TurnToChapter(std::size_t a_index)
 	{
-		if (animator.QueuedCount() >= 2) { return; }
 		if (a_index >= chapters.size() || a_index == chapter_index) { return; }
 
-		bool turn_left = a_index > chapter_index;
+		TurnToPage(a_index, 0,
+			a_index > chapter_index ? TurnDirection::kLeft : TurnDirection::kRight);
+	}
 
-		const auto& animation = turn_left ? flip_left : flip_right;
+	void Book::TurnToPage(std::size_t a_chapter_index, std::size_t a_page_index,
+		TurnDirection a_direction)
+	{
+		if (a_chapter_index >= chapters.size() || !chapters[a_chapter_index] ||
+			a_page_index >= chapters[a_chapter_index]->pages.size() ||
+			!chapters[a_chapter_index]->pages[a_page_index] ||
+			(a_chapter_index == chapter_index && a_page_index == page_index))
+		{
+			return;
+		}
 
-		chapter_index = a_index;
-		page_index = 0;
+		chapter_index = a_chapter_index;
+		page_index = a_page_index;
 
+		const bool turn_left = a_direction == TurnDirection::kLeft;
 		ClearPageView();
 		DrawCurrentPage(!turn_left);
-		animator.Queue(animation, animation_speed, [this, turn_left] {
-			if (!animator.HasQueued()) DrawCurrentPage(turn_left);
-		});
+
+		const auto  queued = animator.QueuedCount();
+		const float anim_speed_adjust =
+			animation_speed * std::pow(1.5f, static_cast<float>(queued));
+		if (queued) { animator.SetSpeed(anim_speed_adjust); }
+		if (queued <= 1)
+		{
+			const auto& animation = turn_left ? flip_left : flip_right;
+			animator.Queue(animation, anim_speed_adjust, [this, turn_left] {
+				if (!animator.HasQueued()) DrawCurrentPage(turn_left);
+			});
+		}
 	}
 
 	void Book::AddChapter(std::unique_ptr<Chapter> a_chapter)

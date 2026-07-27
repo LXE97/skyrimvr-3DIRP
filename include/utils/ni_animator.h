@@ -28,7 +28,8 @@ namespace ni_animator
 	public:
 		using OnFinish = std::function<void()>;
 
-		void PlayImmediately(const AnimationRange& a_anim, float a_speed = 1.f, OnFinish a_on_finish = {});
+		void PlayImmediately(
+			const AnimationRange& a_anim, float a_speed = 1.f, OnFinish a_on_finish = {});
 		void Queue(const AnimationRange& a_anim, float a_speed = 1.f, OnFinish a_on_finish = {});
 
 		void Update(RE::NiAVObject* a_target, float a_delta);
@@ -37,10 +38,17 @@ namespace ni_animator
 		void ClearQueue();
 		void Clear();
 
-		[[nodiscard]] bool IsPlaying() const;
-		[[nodiscard]] bool HasQueued() const;
+		void SetSpeed(float a_new_speed)
+		{
+			if (current) { current->speed = a_new_speed; }
+		}
+
+		float GetSpeed() const { return current ? current->speed : 1.0f; }
+
+		[[nodiscard]] bool        IsPlaying() const;
+		[[nodiscard]] bool        HasQueued() const;
 		[[nodiscard]] std::size_t QueuedCount() const;
-		[[nodiscard]] bool IsBusy() const;
+		[[nodiscard]] bool        IsBusy() const;
 
 	private:
 		struct Entry

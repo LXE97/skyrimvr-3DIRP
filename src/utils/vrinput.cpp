@@ -5,11 +5,88 @@
 #include "menu_checker.h"
 #include "vr_gui_input_block.h"
 
+#include <atomic>
+#include <cmath>
 #include <xbyak/xbyak.h>
 #define PROCESSAXES 1
 namespace vrinput
 {
 	using namespace vr;
+
+	namespace
+	{
+		// Fraction of the new controller orientation applied each pose update. Lower values provide
+		// steadier pointing at the cost of more rotational lag.
+		constexpr float kRotationSmoothingFactor = 0.17f;
+		constexpr float kPositionSmoothingFactor = 0.17f;
+
+		struct PoseFilter
+		{
+			RE::NiQuaternion orientation{};
+			RE::NiPoint3      position{};
+			bool             initialized{ false };
+		};
+
+		std::array<std::atomic_bool, 2> smoothing{};
+
+		void SmoothPose(vr::TrackedDevicePose_t* a_poses, uint32_t a_pose_count,
+			vr::TrackedDeviceIndex_t a_device, PoseFilter& a_filter)
+		{
+			if (!a_poses || a_device >= a_pose_count)
+			{
+				a_filter.initialized = false;
+				return;
+			}
+
+			auto& pose = a_poses[a_device];
+			if (!pose.bDeviceIsConnected || !pose.bPoseIsValid)
+			{
+				a_filter.initialized = false;
+				return;
+			}
+
+			RE::NiMatrix3 measured_matrix;
+			for (std::size_t row = 0; row < 3; ++row)
+			{
+				for (std::size_t column = 0; column < 3; ++column)
+				{
+					measured_matrix.entry[row][column] = pose.mDeviceToAbsoluteTracking.m[row][column];
+				}
+			}
+			const RE::NiQuaternion measured{ measured_matrix };
+			const RE::NiPoint3 measured_position{ pose.mDeviceToAbsoluteTracking.m[0][3],
+				pose.mDeviceToAbsoluteTracking.m[1][3], pose.mDeviceToAbsoluteTracking.m[2][3] };
+			if (!a_filter.initialized)
+			{
+				a_filter.orientation = measured;
+				a_filter.position = measured_position;
+				a_filter.initialized = true;
+				return;
+			}
+
+			a_filter.orientation =
+				helper::nlerpQuat(kRotationSmoothingFactor, a_filter.orientation, measured);
+			a_filter.position.x +=
+				kPositionSmoothingFactor * (measured_position.x - a_filter.position.x);
+			a_filter.position.y +=
+				kPositionSmoothingFactor * (measured_position.y - a_filter.position.y);
+			a_filter.position.z +=
+				kPositionSmoothingFactor * (measured_position.z - a_filter.position.z);
+
+			const RE::NiMatrix3 filtered_matrix = a_filter.orientation.ToRotation();
+			for (std::size_t row = 0; row < 3; ++row)
+			{
+				for (std::size_t column = 0; column < 3; ++column)
+				{
+					pose.mDeviceToAbsoluteTracking.m[row][column] =
+						filtered_matrix.entry[row][column];
+				}
+			}
+			pose.mDeviceToAbsoluteTracking.m[0][3] = a_filter.position.x;
+			pose.mDeviceToAbsoluteTracking.m[1][3] = a_filter.position.y;
+			pose.mDeviceToAbsoluteTracking.m[2][3] = a_filter.position.z;
+		}
+	}
 
 	struct InputCallback
 	{
@@ -21,9 +98,8 @@ namespace vrinput
 		{ return (device == a_rhs.device) && (type == a_rhs.type) && (func == a_rhs.func); }
 	};
 
-	bool  smoothing = 0;
-	float joystick_dpad_threshold = 0.7f;
-	float joystick_dpad_threshold_negative = -0.7f;
+	constexpr float joystick_dpad_threshold = 0.7f;
+	constexpr float joystick_dpad_threshold_negative = -0.7f;
 
 	std::mutex               callback_lock;
 	vr::TrackedDeviceIndex_t g_leftcontroller;
@@ -47,8 +123,15 @@ namespace vrinput
 	std::vector<uint16_t>* g_haptic_keyframes_left = nullptr;
 	std::vector<uint16_t>* g_haptic_keyframes_right = nullptr;
 
-	void StartSmoothing() { smoothing = 1; }
-	void StopSmoothing() { smoothing = 0; }
+	void StartSmoothing(bool a_isLeft)
+	{
+		smoothing[static_cast<std::size_t>(a_isLeft)].store(true, std::memory_order_release);
+	}
+
+	void StopSmoothing(bool a_isLeft)
+	{
+		smoothing[static_cast<std::size_t>(a_isLeft)].store(false, std::memory_order_release);
+	}
 
 	ButtonState GetButtonState(
 		vr::EVRButtonId a_button_ID, Hand a_hand, ActionType a_touch_or_press)
@@ -425,6 +508,33 @@ namespace vrinput
 		uint32_t                                                      unGamePoseArrayCount)
 	{
 		using namespace PapyrusVR;
+		static std::array<PoseFilter, 2> render_filters;
+		static std::array<PoseFilter, 2> game_filters;
+		static std::array<bool, 2>           smoothing_was_enabled{};
+
+		for (std::size_t hand = 0; hand < smoothing.size(); ++hand)
+		{
+			const bool smoothing_enabled = smoothing[hand].load(std::memory_order_acquire);
+			if (!smoothing_enabled)
+			{
+				render_filters[hand] = {};
+				game_filters[hand] = {};
+				smoothing_was_enabled[hand] = false;
+				continue;
+			}
+
+			if (!smoothing_was_enabled[hand])
+			{
+				render_filters[hand] = {};
+				game_filters[hand] = {};
+			}
+			smoothing_was_enabled[hand] = true;
+
+			const auto device = hand == static_cast<std::size_t>(Hand::kLeft) ?
+				g_leftcontroller : g_rightcontroller;
+			SmoothPose(pRenderPoseArray, unRenderPoseArrayCount, device, render_filters[hand]);
+			SmoothPose(pGamePoseArray, unGamePoseArrayCount, device, game_filters[hand]);
+		}
 
 		if (g_haptic_keyframes_left)
 		{

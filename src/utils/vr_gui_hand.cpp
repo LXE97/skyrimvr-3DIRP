@@ -67,6 +67,18 @@ namespace vr_gui
 		return ModeHandle{ this, id };
 	}
 
+	SmoothingHandle Hand::RequestSmoothing()
+	{
+		if (smoothing_requests++ == 0) { vrinput::StartSmoothing(isLeft); }
+		return SmoothingHandle{ this };
+	}
+
+	void Hand::ReleaseSmoothing()
+	{
+		if (smoothing_requests == 0) { return; }
+		if (--smoothing_requests == 0) { vrinput::StopSmoothing(isLeft); }
+	}
+
 	void Hand::ReleaseMode(std::uint64_t a_id)
 	{
 		std::erase_if(
@@ -166,6 +178,15 @@ namespace vr_gui
 			hand->ReleaseMode(id);
 			hand = nullptr;
 			id = 0;
+		}
+	}
+
+	void SmoothingHandle::Release()
+	{
+		if (hand)
+		{
+			hand->ReleaseSmoothing();
+			hand = nullptr;
 		}
 	}
 }

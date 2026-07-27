@@ -51,6 +51,9 @@ namespace helper
 
 	void slerpQuat(float interp, NiQuaternion& q1, NiQuaternion& q2, NiMatrix3& out);
 
+	NiQuaternion nlerpQuat(
+		float interp, const NiQuaternion& from, const NiQuaternion& to);
+
 	RE::NiPoint2 Rotate2D(RE::NiPoint2 v, float angle);
 
 	bool IntersectSphereSphere(

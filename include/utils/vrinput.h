@@ -63,8 +63,8 @@ namespace vrinput
 	*/
 	typedef bool (*InputCallbackFunc)(const ModInputEvent& e);
 
-	void StartSmoothing();
-	void StopSmoothing();
+	void StartSmoothing(bool a_isLeft);
+	void StopSmoothing(bool a_isLeft);
 
 	/* returns the state of the specified button's action type */
 	ButtonState GetButtonState(
