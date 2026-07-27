@@ -672,7 +672,16 @@ namespace vr_gui
 		return false;
 	}
 
-	void Widget::OnClick(bool a_activate, Hand& a_hand, MenuAction a_action) {}
+	void Widget::OnClick(bool a_activate, Hand& a_hand, MenuAction a_action)
+	{
+		for (auto& behavior : behaviors)
+		{
+			if (!behavior->IsMarkedForRemoval())
+			{
+				behavior->OnClick(a_activate, a_hand, a_action);
+			}
+		}
+	}
 
 	void Widget::OnHoverImpl(bool activate, Hand& hand)
 	{

@@ -1,5 +1,7 @@
 #include "book.h"
 
+#include "helper_game.h"
+
 namespace vr3dirp
 {
 	using namespace art_addon;
@@ -47,12 +49,15 @@ namespace vr3dirp
 			}
 		}
 
+		hand_mode = Controller::GetSingleton()->GetHand(a_isLeft)->RequestMode(
+			Hand::Mode::kFist, Hand::ModePriority::kPassive);
+
 		local.scale /= a_root->world.scale;
 
 		// Block inputs on the book hand for as long as it exists
 		block_handle = InputBlockManager::GetSingleton()->Acquire(a_isLeft,
 			InputBlock::kPrimary | InputBlock::kSecondary | InputBlock::kHiggs |
-				//InputBlock::kVrikGestures |
+				InputBlock::kVrikGestures |
 				(!a_isLeft ? InputBlock::kActivatePickLength : InputBlock::kNone));
 
 		AddModel(kModelPath, false, [this](ArtAddon* a) {
@@ -80,6 +85,8 @@ namespace vr3dirp
 			t.translate = { 0.1f, 0, -0.1f };
 			tab_container =
 				AddChild<Widget>(t, NiPoint3(1.0, layout.kPageHeight * 0.5f, 0.5), chapter_parent);
+			tab_container->SetPriority(10);
+			tab_container->AddBehavior<ExclusiveHoverGroup>();
 
 			for (std::size_t i = 0; i < chapters.size(); ++i) AddChapterTab(i);
 
@@ -223,9 +230,44 @@ namespace vr3dirp
 		transform.translate.x -= (a_index % 2) * 0.3;
 		transform.translate.z -= 0.1 * a_index;
 
-		auto* tab = tab_container->AddChild<Widget>(transform, NiPoint3(1.0, 0.4, 0.5));
+		auto* tab = tab_container->AddChild<Widget>(transform, NiPoint3(1.0, 0.3, 0.25));
 		tab->AddModel(chapters[a_index]->model_path);
+		tab->SetPriority(tab_container->GetPriority() + 1);
+		tab->AddBehavior<SelectionHighlight>(
+			tab_container->GetBehavior<ExclusiveHoverGroup>(),
+			[this, a_index] { TurnToChapter(a_index); },
+			[this, a_index] { return GetChapterIndex() == a_index; });
+
 		chapters[a_index]->tab = tab;
+	}
+
+	void SelectionHighlight::Update(float)
+	{
+		if (!parent) { return; }
+
+		auto*      model = parent->Get3D();
+		const bool selected = is_selected && is_selected();
+		const bool should_highlight = selected ||
+			(hover_group &&
+				(hover_group->IsExclusivelyHovered(parent, false) ||
+					hover_group->IsExclusivelyHovered(parent, true)));
+
+		// AddModel is asynchronous, so also apply the current state when its node first appears.
+		if (model != highlighted_model || should_highlight != highlighted)
+		{
+			if (model) { helper::SetGlowMult(model, should_highlight ? 0.9f : 0.0f); }
+			highlighted_model = model;
+			highlighted = should_highlight;
+		}
+	}
+
+	void SelectionHighlight::OnClick(bool a_activate, Hand& a_hand, MenuAction a_action)
+	{
+		if (!a_activate || a_action != MenuAction::kPrimary) { return; }
+		if (hover_group) { hover_group->Update(0.0f); }
+		if (hover_group && !hover_group->IsExclusivelyHovered(parent, a_hand.IsLeft())) { return; }
+
+		if (on_activate) on_activate();
 	}
 
 	void Book::DrawCurrentPage(bool a_left_page)

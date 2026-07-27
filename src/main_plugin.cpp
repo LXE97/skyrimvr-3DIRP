@@ -1,6 +1,8 @@
 #include "main_plugin.h"
 
+#include "art_addon.h"
 #include "book.h"
+#include "helper_game.h"
 #include "helper_math.h"
 #include "holster.h"
 #include "hooks.h"
@@ -30,6 +32,7 @@ namespace vr3dirp
 	static bool OnSecondaryDebugButton(const vrinput::ModInputEvent& e);
 	static bool OnDpad(const vrinput::ModInputEvent& e);
 	static void SummonBook(bool isLeft, BookType a_type);
+	static void UpdateHandDebugModels();
 
 	uint32_t      g_esp_index{};
 	PapyrusVRAPI* g_papyrusvr{};
@@ -40,9 +43,15 @@ namespace vr3dirp
 
 	PlayerCharacter* pc{};
 
+	ArtAddonPtr g_left_hand_center{};
+	ArtAddonPtr g_left_hand_extents{};
+	ArtAddonPtr g_right_hand_center{};
+	ArtAddonPtr g_right_hand_extents{};
+	static bool show_hands{};
+
 	// settings
-	float shoulder_holster_radius = 20.f;
-	float belly_holster_radius = 6.f;
+	float shoulder_holster_radius = 10.f;
+	float belly_holster_radius = 9.f;
 
 	void VrikActionSummonBookLeft(int) { SummonBook(true, BookType::kNone); }
 
@@ -89,7 +98,7 @@ namespace vr3dirp
 		if (belly_node)
 		{
 			NiTransform t{};
-			t.translate = { 0, 13, 0 };
+			t.translate = { 0, 13, -3 };
 
 			auto  temp = std::make_unique<vr_gui::Holster>(belly_holster_radius, pc, belly_node, t,
 				vrinput::Hand::kBoth, HolsterCallbacks{ .primary = [](Hand& h) {
@@ -101,6 +110,20 @@ namespace vr3dirp
 		else
 		{
 			SKSE::log::trace("belly node not initialized");
+		}
+
+		auto head_node = pc->Get3D()->GetObjectByName("NPC Head [Head]");
+		if (head_node)
+		{
+			NiTransform t{};
+			t.translate = { -20, 0, 0 };
+
+			auto temp = std::make_unique<vr_gui::Holster>(shoulder_holster_radius, pc, head_node, t,
+				vrinput::Hand::kLeft, HolsterCallbacks{ .primary = [](Hand& h) {
+					SummonBook(h.IsLeft(), BookType::kNone);
+				} });
+			auto* created = temp.get();
+			vr_gui::Controller::GetSingleton()->AddRoot(std::move(temp));
 		}
 	}
 
@@ -131,6 +154,8 @@ namespace vr3dirp
 		art_addon::ArtAddonManager::GetSingleton()->Update();
 		vr_gui::Controller::GetSingleton()->Update();
 
+		UpdateHandDebugModels();
+
 		if (g_createHolstersPending)
 		{
 			CreateHolsters();
@@ -138,7 +163,11 @@ namespace vr3dirp
 		}
 	}
 
-	void PreLoadGame() { vr_gui::Controller::GetSingleton()->Cleanup(); }
+	void PreLoadGame()
+	{
+		ShowHands(false);
+		vr_gui::Controller::GetSingleton()->Cleanup();
+	}
 
 	void OnGameLoad()
 	{
@@ -146,15 +175,75 @@ namespace vr3dirp
 		pc = PlayerCharacter::GetSingleton();
 	}
 
-	static bool OnDebugButton(const vrinput::ModInputEvent& e)
+	void ShowHands(bool a_show)
 	{
-		static bool toggle = true;
+		show_hands = a_show;
 
-		if (e.button_state == vrinput::ButtonState::kButtonDown)
+		if (!a_show)
 		{
-			toggle ^= 1;
+			g_left_hand_center.reset();
+			g_left_hand_extents.reset();
+			g_right_hand_center.reset();
+			g_right_hand_extents.reset();
+			return;
 		}
 
+		auto* player = PlayerCharacter::GetSingleton();
+		auto* player_root = player ? player->Get3D() : nullptr;
+		if (!player || !player_root) { return; }
+
+		NiTransform local{};
+		if (!g_left_hand_center)
+		{
+			g_left_hand_center = ArtAddon::Make("DebugSphere.nif", player, player_root, local);
+		}
+		if (!g_left_hand_extents)
+		{
+			g_left_hand_extents = ArtAddon::Make("DrawExtents.nif", player, player_root, local);
+		}
+		if (!g_right_hand_center)
+		{
+			g_right_hand_center = ArtAddon::Make("DebugSphere.nif", player, player_root, local);
+		}
+		if (!g_right_hand_extents)
+		{
+			g_right_hand_extents = ArtAddon::Make("DrawExtents.nif", player, player_root, local);
+		}
+
+		UpdateHandDebugModels();
+	}
+
+	static void UpdateHandDebugModels()
+	{
+		auto* controller = Controller::GetSingleton();
+
+		auto update_hand = [controller](
+							   bool a_isLeft, ArtAddonPtr& a_center, ArtAddonPtr& a_extents) {
+			auto* hand = controller->GetHand(a_isLeft);
+
+			if (a_center && a_center->Get3D())
+			{
+				auto sphere_world = hand->GetTransform();
+				sphere_world.scale *= hand->GetRadius();
+				a_center->SetWorldTransform(sphere_world);
+			}
+
+			if (a_extents && a_extents->Get3D())
+			{
+				a_extents->SetWorldTransform(hand->GetBoxTransform());
+				helper::DrawBox(a_extents.get(), *hand->GetExtents());
+				NiUpdateData context{};
+				a_extents->Get3D()->Update(context);
+			}
+		};
+
+		update_hand(true, g_left_hand_center, g_left_hand_extents);
+		update_hand(false, g_right_hand_center, g_right_hand_extents);
+	}
+
+	static bool OnDebugButton(const vrinput::ModInputEvent& e)
+	{
+		if (e.button_state == vrinput::ButtonState::kButtonDown) {}
 		return false;
 	}
 
@@ -163,6 +252,7 @@ namespace vr3dirp
 		static bool toggle = true;
 
 		vr_gui::Controller::GetSingleton()->ShowHitboxes(toggle);
+		ShowHands(toggle);
 		if (e.button_state == vrinput::ButtonState::kButtonDown) {}
 
 		toggle ^= 1;

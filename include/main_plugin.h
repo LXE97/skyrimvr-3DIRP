@@ -20,4 +20,6 @@ namespace vr3dirp
 	void OnGameLoad();
 
 	void PreLoadGame();
+
+	void ShowHands(bool a_show);
 }

@@ -51,6 +51,8 @@ namespace vr_gui
 
 		virtual void OnHover(bool activate, Hand& hand) {};
 
+		virtual void OnClick(bool activate, Hand& hand, MenuAction action) {};
+
 		virtual void OnDetach() {};
 
 		void Remove()

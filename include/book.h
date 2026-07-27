@@ -1,5 +1,6 @@
 #pragma once
 
+#include "exclusive_hover_group.h"
 #include "ni_animator.h"
 #include "vr_gui.h"
 #include "vr_gui_input_block.h"
@@ -17,6 +18,7 @@ namespace vr3dirp
 	class Chapter;
 	class GrabNode;
 	class BasicHitbox;
+	class SelectionHighlight;
 
 	class Book : public Widget
 	{
@@ -123,6 +125,8 @@ namespace vr3dirp
 		float                secondary_double_tap_threshold = 1.0f;
 
 		RE::SpellItem* stored_spell{};
+
+		ModeHandle hand_mode;
 	};
 
 	class Page
@@ -148,6 +152,31 @@ namespace vr3dirp
 		std::vector<std::unique_ptr<Page>> pages;
 		Widget*                            tab{};
 		std::string                        model_path;
+	};
+
+	class SelectionHighlight : public Behavior
+	{
+	public:
+		using IsSelected = std::function<bool()>;
+		using OnActivate = std::function<void()>;
+
+		SelectionHighlight(Widget* a_parent, ExclusiveHoverGroup* a_hover_group,
+			OnActivate a_on_activate = {}, IsSelected a_is_selected = {}) :
+			Behavior(a_parent),
+			hover_group(a_hover_group),
+			is_selected(std::move(a_is_selected)),
+			on_activate(std::move(a_on_activate))
+		{}
+
+		void Update(float a_delta) override;
+		void OnClick(bool a_activate, Hand& a_hand, MenuAction a_action) override;
+
+	private:
+		ExclusiveHoverGroup* hover_group{};
+		NiAVObject*          highlighted_model{};
+		bool                 highlighted{};
+		IsSelected           is_selected{};
+		OnActivate           on_activate{};
 	};
 
 	class GrabNode : public Widget
