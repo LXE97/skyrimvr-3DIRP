@@ -26,6 +26,11 @@ namespace vr3dirp
 		if (animator.HasQueued()) { animator.ClearQueue(); }
 		animator.PlayImmediately(close, animation_speed * 1.2,
 			[this]() { Controller::GetSingleton()->MarkForDelete(this); });
+
+		RE::BSSoundHandle sound;
+		auto              world_pos = GetWorld().translate;
+		helper::InitializeSound(sound, kBookCloseSd);
+		helper::PlaySound(sound, 1, world_pos, Get3D());
 	}
 
 	Book::Book(
@@ -122,6 +127,11 @@ namespace vr3dirp
 
 			animator.PlayImmediately(open, animation_speed, [this]() { DrawCurrentPage(true); });
 
+			RE::BSSoundHandle sound;
+			auto              world_pos = GetWorld().translate;
+			helper::InitializeSound(sound, kBookOpenSd);
+			helper::PlaySound(sound, 1, world_pos, Get3D());
+
 			DrawCurrentPage(false);
 		});
 
@@ -157,14 +167,14 @@ namespace vr3dirp
 	{
 		if (chapter_index >= chapters.size() || !chapters[chapter_index]) { return; }
 
-		if (page_index > 0)
-		{
-			TurnToPage(chapter_index, page_index - 1, TurnDirection::kRight);
-		}
+		if (page_index > 0) { TurnToPage(chapter_index, page_index - 1, TurnDirection::kRight); }
 		else if (chapter_index > 0)
 		{
 			const auto previous_chapter = chapter_index - 1;
-			if (!chapters[previous_chapter] || chapters[previous_chapter]->pages.empty()) { return; }
+			if (!chapters[previous_chapter] || chapters[previous_chapter]->pages.empty())
+			{
+				return;
+			}
 
 			TurnToPage(previous_chapter, chapters[previous_chapter]->pages.size() - 1,
 				TurnDirection::kRight);
@@ -175,12 +185,12 @@ namespace vr3dirp
 	{
 		if (a_index >= chapters.size() || a_index == chapter_index) { return; }
 
-		TurnToPage(a_index, 0,
-			a_index > chapter_index ? TurnDirection::kLeft : TurnDirection::kRight);
+		TurnToPage(
+			a_index, 0, a_index > chapter_index ? TurnDirection::kLeft : TurnDirection::kRight);
 	}
 
-	void Book::TurnToPage(std::size_t a_chapter_index, std::size_t a_page_index,
-		TurnDirection a_direction)
+	void Book::TurnToPage(
+		std::size_t a_chapter_index, std::size_t a_page_index, TurnDirection a_direction)
 	{
 		if (a_chapter_index >= chapters.size() || !chapters[a_chapter_index] ||
 			a_page_index >= chapters[a_chapter_index]->pages.size() ||
@@ -207,6 +217,11 @@ namespace vr3dirp
 			animator.Queue(animation, anim_speed_adjust, [this, turn_left] {
 				if (!animator.HasQueued()) DrawCurrentPage(turn_left);
 			});
+
+			RE::BSSoundHandle sound;
+			auto              world_pos = GetWorld().translate;
+			helper::InitializeSound(sound, turn_left ? kBookFlipLeftSnd : kBookFlipRightSnd);
+			helper::PlaySound(sound, 1, world_pos, Get3D());
 		}
 	}
 

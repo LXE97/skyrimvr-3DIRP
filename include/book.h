@@ -66,6 +66,11 @@ namespace vr3dirp
 		static constexpr const char*      kLeftParent = "Book CoverPage Turn04";
 		static constexpr float            kDefaultWindowRadius = 40.f;
 
+		static constexpr const char* kBookOpenSd = "ITMBookOpenSD";
+		static constexpr const char* kBookCloseSd = "ITMBookCloseSD";
+		static constexpr const char* kBookFlipLeftSnd = "ITMBookPageTurnForwardSD";
+		static constexpr const char* kBookFlipRightSnd = "ITMBookPageTurnBackwardSD";
+
 		void AddChapter(std::unique_ptr<Chapter> a_chapter);
 
 		// Advance through pages
