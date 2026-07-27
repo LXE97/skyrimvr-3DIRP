@@ -9,14 +9,15 @@ namespace vr3dirp
 
 	Book::~Book()
 	{
-		if (stored_spell)
+		if (auto* actor = GetObjectReference()->As<RE::Actor>())
 		{
-			auto* actor = GetObjectReference()->As<RE::Actor>();
-			auto* equip_manager = RE::ActorEquipManager::GetSingleton();
-
-			if (actor && equip_manager)
+			if (stored_spell && helper::IsHandEmpty(isLeft))
 			{
-				equip_manager->EquipSpell(actor, stored_spell, helper::GetHandEquipSlot(isLeft));
+				if (auto* equip_manager = RE::ActorEquipManager::GetSingleton())
+				{
+					equip_manager->EquipSpell(
+						actor, stored_spell, helper::GetHandEquipSlot(isLeft));
+				}
 			}
 		}
 	}
@@ -83,6 +84,7 @@ namespace vr3dirp
 			auto interaction_volume = AddChild<BasicHitbox>(t, NiPoint3(18, 14, 5));
 			interaction_volume->AddBehavior<HandInteractionMode>();
 			interaction_volume->AddBehavior<BlockInputOnHover>(InputBlock::kAll);
+			interaction_volume->AddBehavior<BookPageTurn>();
 			interaction_volume->SetPriority(90);
 
 			// Chapter tabs
@@ -456,28 +458,6 @@ namespace vr3dirp
 				t.translate, a_hand.GetRadius() * t.scale, w, extents * w.scale);
 		}
 		return false;
-	}
-
-	void BasicHitbox::OnClick(bool a_activate, Hand& a_hand, MenuAction a_action)
-	{
-		if (a_activate && a_action == MenuAction::kScrollLeft)
-		{
-			dynamic_cast<Book*>(parent)->TurnPageLeft();
-		}
-		else if (a_activate && a_action == MenuAction::kScrollRight)
-		{
-			dynamic_cast<Book*>(parent)->TurnPageRight();
-		}
-		else if (a_activate && a_action == MenuAction::kScrollUp)
-		{
-			auto book = dynamic_cast<Book*>(parent);
-			book->TurnToChapter(book->GetChapterIndex() - 1);
-		}
-		else if (a_activate && a_action == MenuAction::kScrollDown)
-		{
-			auto book = dynamic_cast<Book*>(parent);
-			book->TurnToChapter(book->GetChapterIndex() + 1);
-		}
 	}
 
 	void Book::DrawExtents(bool show) {}

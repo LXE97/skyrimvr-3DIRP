@@ -101,10 +101,9 @@ namespace vr3dirp
 			t.translate = { 0, 13, -3 };
 
 			auto  temp = std::make_unique<vr_gui::Holster>(belly_holster_radius, pc, belly_node, t,
-				vrinput::Hand::kBoth, HolsterCallbacks{ .primary = [](Hand& h) {
+				vrinput::Hand::kBoth, HolsterCallbacks{ .both = [](Hand& h) {
 					SummonBook(h.IsLeft(), BookType::kNone);
 				} });
-			auto* created = temp.get();
 			vr_gui::Controller::GetSingleton()->AddRoot(std::move(temp));
 		}
 		else
@@ -122,8 +121,16 @@ namespace vr3dirp
 				vrinput::Hand::kLeft, HolsterCallbacks{ .primary = [](Hand& h) {
 					SummonBook(h.IsLeft(), BookType::kNone);
 				} });
-			auto* created = temp.get();
+
 			vr_gui::Controller::GetSingleton()->AddRoot(std::move(temp));
+
+			t.translate = { 20, 0, 0 };
+			auto temp_right = std::make_unique<vr_gui::Holster>(shoulder_holster_radius, pc, head_node, t,
+				vrinput::Hand::kRight, HolsterCallbacks{ .primary = [](Hand& h) {
+					SummonBook(h.IsLeft(), BookType::kNone);
+				} });
+			vr_gui::Controller::GetSingleton()->AddRoot(std::move(temp_right));
+
 		}
 	}
 

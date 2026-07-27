@@ -236,13 +236,36 @@ namespace vr3dirp
 	class BasicHitbox : public Widget
 	{
 	public:
-		BasicHitbox(Widget* a_parent, NiTransform a_local, NiPoint3 a_extents) :
-			Widget(a_parent, a_local, a_extents)
-		{}
-
-		void OnClick(bool a_activate, Hand& a_hand, MenuAction a_action) override;
+		using Widget::Widget;
 
 		virtual bool TestOverlap(Hand& a_hand) const override;
+	};
+
+	class BookPageTurn : public Behavior
+	{
+	public:
+		using Behavior::Behavior;
+
+		void OnClick(bool a_activate, Hand& a_hand, MenuAction a_action) override
+		{
+			if (auto book = dynamic_cast<Book*>(parent->GetRoot()); book && a_activate)
+			{
+				switch (a_action)
+				{
+				case MenuAction::kScrollLeft:
+					book->TurnPageLeft();
+					break;
+				case MenuAction::kScrollRight:
+					book->TurnPageRight();
+					break;
+				case MenuAction::kScrollUp:
+					book->TurnToChapter(book->GetChapterIndex() - 1);
+					break;
+				case MenuAction::kScrollDown:
+					book->TurnToChapter(book->GetChapterIndex() + 1);
+				}
+			}
+		}
 	};
 
 	class HandInteractionMode : public Behavior
