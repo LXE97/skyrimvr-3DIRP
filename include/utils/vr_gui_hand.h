@@ -26,12 +26,12 @@ namespace vr_gui
 			kFist
 		};
 
-        enum class ModePriority
-        {
-            kPassive,
-            kGrab,
-            kForce
-        };
+		enum class ModePriority
+		{
+			kPassive,
+			kGrab,
+			kForce
+		};
 
 		Hand(bool a_left) : isLeft(a_left) {}
 
@@ -64,7 +64,6 @@ namespace vr_gui
 		Mode current_mode{ Mode::kNormal };
 
 		bool         isLeft = false;
-		NiAVObject*  node{};
 		NiTransform* transform{};
 		float        radius = 6.f;
 		State        state = State::kReady;

@@ -3,6 +3,21 @@
 namespace vr3dirp
 {
 	using namespace art_addon;
+	static constexpr float kHiddenSpellScale = 0.001f;
+
+	Book::~Book()
+	{
+		if (stored_spell)
+		{
+			auto* actor = GetObjectReference()->As<RE::Actor>();
+			auto* equip_manager = RE::ActorEquipManager::GetSingleton();
+
+			if (actor && equip_manager)
+			{
+				equip_manager->EquipSpell(actor, stored_spell, helper::GetHandEquipSlot(isLeft));
+			}
+		}
+	}
 
 	void Book::Close()
 	{
@@ -21,6 +36,16 @@ namespace vr3dirp
 		secondary_pressed_during_creation =
 			vrinput::GetButtonState(settings.secondary, vrinput::Hand(a_isLeft),
 				vrinput::ActionType::kPress) == vrinput::ButtonState::kButtonDown;
+
+		auto* pc = RE::PlayerCharacter::GetSingleton();
+
+		if (auto equipped = pc->GetEquippedObject(a_isLeft); equipped && pc->IsWeaponDrawn())
+		{
+			if ((stored_spell = equipped->As<RE::SpellItem>()))
+			{
+				helper::UnequipSpell(pc, stored_spell, a_isLeft);
+			}
+		}
 
 		local.scale /= a_root->world.scale;
 

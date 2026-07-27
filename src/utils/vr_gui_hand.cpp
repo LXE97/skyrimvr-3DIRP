@@ -30,18 +30,10 @@ namespace vr_gui
 		// check player 3d loaded
 		if (auto pc = RE::PlayerCharacter::GetSingleton()->Get3D(false); pc)
 		{
-			// link transforms
-			if (auto hand_node = pc->GetObjectByName(vrinput::kControllerNodeName[isLeft]);
-				hand_node)
-			{
-				node = hand_node;
-				transform = &node->world;
-				initialized = true;
-				ApplyMode(Mode::kNormal);
-				return true;
-			}
+			ApplyMode(Mode::kNormal);
+			initialized = true;
+			return true;
 		}
-		node = nullptr;
 		transform = nullptr;
 		initialized = false;
 		return false;
@@ -108,6 +100,11 @@ namespace vr_gui
 		switch (a_mode)
 		{
 		case Mode::kNormal:
+			if (auto node = RE::PlayerCharacter::GetSingleton()->Get3D()->GetObjectByName(
+					isLeft ? "NPC L Hand [LHnd]" : "NPC R Hand [RHnd]"))
+			{
+				transform = &(node->world);
+			}
 			radius = 6.f;
 			extents = { 3, 1, 5 };
 			offset.rotate = NiMatrix3();
@@ -117,6 +114,11 @@ namespace vr_gui
 			break;
 
 		case Mode::kOpen:
+			if (auto node = RE::PlayerCharacter::GetSingleton()->Get3D()->GetObjectByName(
+					isLeft ? "NPC L Hand [LHnd]" : "NPC R Hand [RHnd]"))
+			{
+				transform = &(node->world);
+			}
 			radius = 6.f;
 			extents = { 3, 1, 5 };
 			offset.translate = isLeft ? NiPoint3{ 0, 0.5, 5 } : NiPoint3{ 0, -0.5, 5 };
@@ -126,6 +128,11 @@ namespace vr_gui
 			break;
 
 		case Mode::kFist:
+			if (auto node = RE::PlayerCharacter::GetSingleton()->Get3D()->GetObjectByName(
+					isLeft ? "NPC L Hand [LHnd]" : "NPC R Hand [RHnd]"))
+			{
+				transform = &(node->world);
+			}
 			radius = 6.f;
 			extents = { 3, 1, 5 };
 			offset.translate = isLeft ? NiPoint3{ 0, 0.5, 5 } : NiPoint3{ 0, -0.5, 5 };
@@ -135,12 +142,18 @@ namespace vr_gui
 			break;
 
 		case Mode::kPointing:
-			radius = 7.f;
-			extents = { 0.7, 0.7, 3.5 };
-			offset.translate = isLeft ? NiPoint3{ 0, 0.5, 7.5 } : NiPoint3{ 0, -0.5, 7.5 };
+			if (auto node = RE::PlayerCharacter::GetSingleton()->Get3D()->GetObjectByName(
+					isLeft ? "NPC L Finger12 [LF12]" : "NPC R Finger12 [RF12]"))
+			{
+				transform = &(node->world);
+			}
+			radius = 7.2f;
+			extents = { 0.7, 0.7, 1.4 };
+			offset.translate = NiPoint3{ 0, 0, -5.5 };
 			offset.rotate = NiMatrix3();
-			offset_box.translate = isLeft ? NiPoint3{ -2.5, -1.6, 12 } : NiPoint3{ 2.5, -1.6, 12 };
-			offset_box.rotate.SetEulerAnglesXYZ(-0.3141593, isLeft ? 0.1396263 : -0.1396263, 0);
+			offset_box.translate = NiPoint3{ 0, 0, 1.2 };
+			//offset_box.translate = isLeft ? NiPoint3{ -2.5, -1.6, 12 } : NiPoint3{ 2.5, -1.6, 12 };
+			//offset_box.rotate.SetEulerAnglesXYZ(-0.3141593, isLeft ? 0.1396263 : -0.1396263, 0);
 			g_vrikInterface->setFingerRange(isLeft, 0.1, 0.1, 1, 1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1);
 			break;
 		}

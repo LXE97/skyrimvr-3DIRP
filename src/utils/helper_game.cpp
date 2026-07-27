@@ -511,8 +511,7 @@ namespace helper
 				main_hand_weapon->IsTwoHandedSword() || main_hand_weapon->IsTwoHandedAxe();
 
 			if (is_two_handed &&
-				((is_bow && !equipment_left && !has_equipped_ammo) ||
-					(!is_bow && equipment_left)))
+				((is_bow && !equipment_left && !has_equipped_ammo) || (!is_bow && equipment_left)))
 			{
 				return true;
 			}
@@ -899,4 +898,85 @@ namespace helper
 		a_radiusOut = a_extentsOut.Length();
 	}
 
+#pragma push_macro("GetObject")
+#undef GetObject
+
+	RE::BGSEquipSlot* GetHandEquipSlot(bool a_isLeft)
+	{
+		auto* default_objects = RE::BGSDefaultObjectManager::GetSingleton();
+		return default_objects ? default_objects->GetObject<RE::BGSEquipSlot>(a_isLeft ?
+										 RE::DEFAULT_OBJECT::kLeftHandEquip :
+										 RE::DEFAULT_OBJECT::kRightHandEquip) :
+								 nullptr;
+	}
+
+#pragma pop_macro("GetObject")
+
+	/* adapted from Shizof's WeaponThrowVR and SpellWheelVR*/
+	void UnequipSpell(RE::Actor* a_actor, RE::SpellItem* a_spell, bool a_isLeft)
+	{
+		using func_t = void (*)(RE::BSScript::IVirtualMachine*, std::uint32_t, RE::Actor*,
+			RE::SpellItem*, std::int32_t);
+
+		static REL::Relocation<func_t> func{ REL::Offset(0x984D00) };
+
+		auto* skyrim_vm = RE::SkyrimVM::GetSingleton();
+		if (skyrim_vm && skyrim_vm->impl)
+		{
+			func(skyrim_vm->impl.get(), 0, a_actor, a_spell, a_isLeft ? 0 : 1);
+		}
+	}
+
+	// Writes information about a node to the log file
+	void logNode(int depth, NiAVObject* node)
+	{
+		if (!node) { return; }
+
+		const auto* rtti = node->GetRTTI();
+		const auto* type_name = rtti ? rtti->GetName() : nullptr;
+		const auto* node_name = node->name.c_str();
+		const auto  indentation = std::string(static_cast<std::size_t>(std::max(depth, 0)), '.');
+
+		SKSE::log::trace("{}: {}{} (RTTI: {})", depth, indentation,
+			node_name && node_name[0] ? node_name : "<unnamed>",
+			type_name ? type_name : "<unknown>");
+	}
+
+	// Lists all parents of a bone to the log file
+	void logParents(NiAVObject* bone)
+	{
+		NiNode* node = bone ? bone->AsNode() : nullptr;
+		int     depth = 1;
+		while (node)
+		{
+			logNode(depth, node);
+			node = node->parent;
+			++depth;
+		}
+	}
+
+	// Lists all children of a bone to the log file, filtering by RTTI type name
+	void logChildren(NiAVObject* bone, int depth, int maxDepth, const char* filter)
+	{
+		if (!bone) return;
+
+		if (filter && filter[0])
+		{
+			const auto* rtti = bone->GetRTTI();
+			const auto* type_name = rtti ? rtti->GetName() : nullptr;
+			if (!type_name || std::strcmp(type_name, filter) != 0) { return; }
+		}
+
+		logNode(depth, bone);
+		NiNode* node = bone->AsNode();
+		if (!node) return;
+
+		if (depth < maxDepth || maxDepth < 0)
+		{
+			for (const auto& child : node->GetChildren())
+			{
+				logChildren(child.get(), depth + 1, maxDepth, filter);
+			}
+		}
+	}
 }

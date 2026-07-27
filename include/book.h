@@ -23,6 +23,7 @@ namespace vr3dirp
 	public:
 		Book(bool a_isLeft, TESObjectREFR* a_objectReference, NiAVObject* a_root,
 			NiTransform a_local);
+		~Book() override;
 
 		struct Layout
 		{
@@ -102,6 +103,7 @@ namespace vr3dirp
 		void DrawCurrentPage(bool a_left_page);
 
 		void ClearPageView();
+		void RestoreSpellVisual();
 
 		GrabNode* grab_node;
 
@@ -119,6 +121,8 @@ namespace vr3dirp
 		bool                 secondary_pressed_during_creation{};
 		std::optional<float> secondary_press_elapsed{};
 		float                secondary_double_tap_threshold = 1.0f;
+
+		RE::SpellItem* stored_spell{};
 	};
 
 	class Page
@@ -206,34 +210,55 @@ namespace vr3dirp
 
 		void OnHover(bool a_activate, Hand& a_hand) override
 		{
-			auto* pc = RE::PlayerCharacter::GetSingleton();
-			if (a_activate)
-			{
-				hand_mode = a_hand.RequestMode(Hand::Mode::kPointing, Hand::ModePriority::kPassive);
+			hover_hand = std::addressof(a_hand);
+			pending_active = a_activate;
+			transition_elapsed = 0.0f;
+		}
 
-				if (auto* equipped = pc->GetEquippedObject(a_hand.IsLeft());
+		void Update(float a_delta) override
+		{
+			if (!hover_hand || pending_active == pointing_active) { return; }
+
+			transition_elapsed += a_delta;
+			if (transition_elapsed < kTransitionDelay) { return; }
+
+			auto* pc = RE::PlayerCharacter::GetSingleton();
+			if (pending_active)
+			{
+				hand_mode =
+					hover_hand->RequestMode(Hand::Mode::kPointing, Hand::ModePriority::kPassive);
+
+				if (auto* equipped = pc->GetEquippedObject(hover_hand->IsLeft());
 					pc->IsWeaponDrawn() && equipped && equipped->As<RE::SpellItem>())
 				{
 					pc->DrawWeaponMagicHands(false);
 					force_sheathed = true;
 				}
-
 			}
 			else
 			{
 				hand_mode.Release();
-				if (auto* equipped = pc->GetEquippedObject(a_hand.IsLeft());
+				if (auto* equipped = pc->GetEquippedObject(hover_hand->IsLeft());
 					equipped && equipped->As<RE::SpellItem>() && force_sheathed)
 				{
 					pc->DrawWeaponMagicHands(true);
 					force_sheathed = false;
 				}
 			}
+
+			pointing_active = pending_active;
+			transition_elapsed = 0.0f;
 		}
 
 	private:
+		static constexpr float kTransitionDelay = 0.2f;
+
 		ModeHandle hand_mode;
+		Hand*      hover_hand{};
 		bool       force_sheathed{ false };
+		bool       pending_active{ false };
+		bool       pointing_active{ false };
+		float      transition_elapsed{};
 	};
 
 	class BlockInputOnHover : public Behavior

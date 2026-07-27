@@ -137,6 +137,9 @@ namespace helper
 		return nullptr;
 	}
 
+	void UnequipSpell(RE::Actor* a_actor, RE::SpellItem* a_spell, bool a_isLeft);
+RE::BGSEquipSlot* GetHandEquipSlot(bool a_isLeft);
+
 	RE::TESForm* GetForm(const RE::FormID a_lower_id, std::string a_mod_name);
 
 	const char* GetObjectModelPath(RE::TESBoundObject* a_obj);
@@ -188,4 +191,9 @@ namespace helper
 
 	void CalculateBoundsDirect(RE::NiAVObject* a_root, float& a_radiusOut,
 		RE::NiPoint3& a_centerOut, RE::NiPoint3& a_extentsOut);
+
+	void logNode(int a_depth, RE::NiAVObject* a_node);
+	void logParents(RE::NiAVObject* a_node);
+	void logChildren(
+		RE::NiAVObject* a_node, int a_depth, int a_maxDepth, const char* a_filter = nullptr);
 }

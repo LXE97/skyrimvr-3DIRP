@@ -44,23 +44,9 @@ namespace vr3dirp
 	float shoulder_holster_radius = 20.f;
 	float belly_holster_radius = 6.f;
 
-	void VrikActionSummonBookLeft(int)
-	{
-		// if (auto book = vr_gui::Controller::GetSingleton()->FindRoot<Book>()) { book->Close(); }
-		// else
-		// {
-			SummonBook(true, BookType::kNone);
-		
-	}
+	void VrikActionSummonBookLeft(int) { SummonBook(true, BookType::kNone); }
 
-	void VrikActionSummonBookRight(int)
-	{
-		// if (auto book = vr_gui::Controller::GetSingleton()->FindRoot<Book>()) { book->Close(); }
-		// else
-		// {
-			SummonBook(false, BookType::kNone);
-		
-	}
+	void VrikActionSummonBookRight(int) { SummonBook(false, BookType::kNone); }
 
 	void SummonBook(bool isLeft, BookType a_type)
 	{
@@ -166,9 +152,6 @@ namespace vr3dirp
 
 		if (e.button_state == vrinput::ButtonState::kButtonDown)
 		{
-			SKSE::log::trace("left hand empty : {}\nright hand empty: {}",
-				helper::IsHandEmpty(true), helper::IsHandEmpty(false));
-
 			toggle ^= 1;
 		}
 

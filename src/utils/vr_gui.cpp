@@ -11,6 +11,7 @@ namespace vr_gui
 
 	void Controller::Cleanup()
 	{
+		SKSE::log::trace("vr gui controller cleanup");
 		roots.clear();
 		pending_roots.clear();
 		activator_overrides.clear();
@@ -25,10 +26,10 @@ namespace vr_gui
 		{
 			for (auto hand : { vrinput::Hand::kRight, vrinput::Hand::kLeft })
 			{
-				vrinput::RemoveCallback(InputEventHandlerStatic, settings.primary, hand,
-					vrinput::ActionType::kPress);
-				vrinput::RemoveCallback(InputEventHandlerStatic, settings.secondary, hand,
-					vrinput::ActionType::kPress);
+				vrinput::RemoveCallback(
+					InputEventHandlerStatic, settings.primary, hand, vrinput::ActionType::kPress);
+				vrinput::RemoveCallback(
+					InputEventHandlerStatic, settings.secondary, hand, vrinput::ActionType::kPress);
 			}
 		}
 
@@ -38,10 +39,10 @@ namespace vr_gui
 		{
 			for (auto hand : { vrinput::Hand::kRight, vrinput::Hand::kLeft })
 			{
-				vrinput::AddCallback(InputEventHandlerStatic, settings.primary, hand,
-					vrinput::ActionType::kPress);
-				vrinput::AddCallback(InputEventHandlerStatic, settings.secondary, hand,
-					vrinput::ActionType::kPress);
+				vrinput::AddCallback(
+					InputEventHandlerStatic, settings.primary, hand, vrinput::ActionType::kPress);
+				vrinput::AddCallback(
+					InputEventHandlerStatic, settings.secondary, hand, vrinput::ActionType::kPress);
 			}
 		}
 	}
