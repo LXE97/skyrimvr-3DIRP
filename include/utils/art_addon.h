@@ -131,7 +131,7 @@ namespace art_addon
 	class AddonTextBox
 	{
 	public:
-		static constexpr float kLineSpacing = 1.1f;
+		static constexpr float kLineSpacing = 0.6f;
 		AddonTextBox(std::string_view a_string, float a_spacing, RE::TESObjectREFR* a_target,
 			RE::NiAVObject* a_attach_to, const RE::NiTransform& a_local, std::string font_path);
 		AddonTextBox(std::string_view a_string, float a_spacing, RE::NiAVObject* a_attach_to,

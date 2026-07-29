@@ -15,6 +15,9 @@ namespace vr_gui
 	const RE::FormID  kActivatorID = 0xD98;
 	const RE::FormID  kMarkerModspaceID = 0xD99;
 
+	int FormatParagraph(
+		std::string& a_text, float a_char_scale, float a_char_spacing, float a_max_width);
+
 	using namespace RE;
 	class Widget;
 	class Hand;
@@ -84,6 +87,7 @@ namespace vr_gui
 			Widget(a_parent, std::move(a_local), a_halfextents,
 				helper::ComputeRadius(a_halfextents), a_transformParentNode)
 		{
+			hit_test_enabled = a_halfextents != NiPoint3{};
 			base_radius = radius;
 			base_extents = extents;
 		}
@@ -194,6 +198,8 @@ namespace vr_gui
 		void         MoveTo(NiPoint3 a_translateLocal);
 		virtual void Resize(float a_scale);
 		void         ClearChildren();
+		void         ClearText() { text_boxes.clear(); };
+		void         ClearEffects() { visual_effects.clear(); };
 		void         AddModel(const std::string_view a_path, bool a_temporaryEffect = false,
 			art_addon::ArtAddon::OnInitialized a_callback = nullptr);
 		art_addon::AddonTextBox* AddText(
@@ -350,10 +356,7 @@ namespace vr_gui
 		Widget* AddRoot(std::unique_ptr<Widget> a_root)
 		{
 			auto* created = a_root.get();
-			if (update_in_progress)
-			{
-				pending_roots.emplace_back(std::move(a_root));
-			}
+			if (update_in_progress) { pending_roots.emplace_back(std::move(a_root)); }
 			else
 			{
 				roots.emplace_back(std::move(a_root));

@@ -23,30 +23,35 @@ namespace vr3dirp
 	class Book : public Widget
 	{
 	public:
-		Book(bool a_isLeft, TESObjectREFR* a_objectReference, NiAVObject* a_root,
-			NiTransform a_local);
+		Book(std::string_view a_model_path, bool a_isLeft, TESObjectREFR* a_objectReference,
+			NiAVObject* a_root, NiTransform a_local);
 		~Book() override;
 
 		struct Layout
 		{
-			const NiPoint3 kLeftPageOrigin = { 3, 10.4, 0.02 };
-			const NiPoint3 kRightPageOrigin = { 9.2, 0.0, 1.21 };
+			const NiPoint3 kLeftPageOrigin = { -3.8, 0.0, -0.03 };
+			const NiPoint3 kRightPageOrigin = { 9.05, -0.2, 1.25 };
 			const NiPoint3 kTabOffset = { 0.0f, 9.5f, 1.1f };
 
-			static constexpr float kRightPageWidth = 15.5;
-			static constexpr float kLeftPageWidth = 13.7;
-			static constexpr float kPageHeight = 10.4 * 2;
+			static constexpr float kRightPageWidth = 16;
+			static constexpr float kLeftPageWidth = 6.94 * 2;
+			static constexpr float kRightPageHeight = 11.9 * 2;
+			static constexpr float kLeftPageHeight = 11.69 * 2;
 
-			float tab_spacing = 1.8f;
-			float top_margin = 0.0f;
-			float bottom_margin = 0.0f;
-			float horizontal_margin = 2.0f;
+			static constexpr float tab_spacing = 1.8f;
+			static constexpr float top_margin = 1.0f;
+			static constexpr float bottom_margin = 0.0f;
+			static constexpr float horizontal_margin = 0.9f;
 
-			float quest_line_spacing = 1.5f;
-			float body_text_scale = 1.5f;
-			float heading_text_scale = 2.0f;
-			float body_character_spacing = -0.1f;
-			float page_number_character_spacing = -0.6f;
+			static constexpr float body_text_scale = 1.4f;
+			static constexpr float heading_text_scale = 1.0f;
+			static constexpr float body_character_spacing = -0.15f;
+			static constexpr float page_number_character_spacing = -0.15f;
+
+			static constexpr float quest_line_spacing =
+				0.6f + art_addon::AddonTextBox::kLineSpacing * body_text_scale;
+			static constexpr float objective_spacing =
+				0.2f + art_addon::AddonTextBox::kLineSpacing * body_text_scale;
 
 			std::string_view body_font_model_path = "3DIRP/char_2048.nif";
 			std::string_view page_number_font_model_path = "3DIRP/char_2048.nif";
@@ -100,10 +105,10 @@ namespace vr3dirp
 			kRight
 		};
 
-		static constexpr ni_animator::AnimationRange open{ 0.0f, 1.f, 1.f };
+		static constexpr ni_animator::AnimationRange open{ 0.0f, 0.98f, 0.98f };
 		static constexpr ni_animator::AnimationRange close{ 3.f, 3.97f, 0.0f };
-		static constexpr ni_animator::AnimationRange flip_left{ 1.f, 2.f, 1.f };
-		static constexpr ni_animator::AnimationRange flip_right{ 2.f, 3.f, 1.f };
+		static constexpr ni_animator::AnimationRange flip_left{ 0.98f, 2.f, 0.98f };
+		static constexpr ni_animator::AnimationRange flip_right{ 2.f, 3.f, 0.98f };
 
 		std::vector<std::unique_ptr<Chapter>> chapters;
 		std::size_t                           chapter_index{};
@@ -165,31 +170,6 @@ namespace vr3dirp
 		std::vector<std::unique_ptr<Page>> pages;
 		Widget*                            tab{};
 		std::string                        model_path;
-	};
-
-	class SelectionHighlight : public Behavior
-	{
-	public:
-		using IsSelected = std::function<bool()>;
-		using OnActivate = std::function<void()>;
-
-		SelectionHighlight(Widget* a_parent, ExclusiveHoverGroup* a_hover_group,
-			OnActivate a_on_activate = {}, IsSelected a_is_selected = {}) :
-			Behavior(a_parent),
-			hover_group(a_hover_group),
-			is_selected(std::move(a_is_selected)),
-			on_activate(std::move(a_on_activate))
-		{}
-
-		void Update(float a_delta) override;
-		void OnClick(bool a_activate, Hand& a_hand, MenuAction a_action) override;
-
-	private:
-		ExclusiveHoverGroup* hover_group{};
-		NiAVObject*          highlighted_model{};
-		bool                 highlighted{};
-		IsSelected           is_selected{};
-		OnActivate           on_activate{};
 	};
 
 	class GrabNode : public Widget
@@ -359,6 +339,34 @@ namespace vr3dirp
 	private:
 		InputBlock                      blocks;
 		std::array<InputBlockHandle, 2> handles;
+	};
+
+	class SelectionHighlight : public Behavior
+	{
+	public:
+		using OnHighlight = std::function<void(bool)>;
+		using OnActivate = std::function<void()>;
+		using IsSelected = std::function<bool()>;
+
+		SelectionHighlight(Widget* a_parent, ExclusiveHoverGroup* a_hover_group,
+			OnHighlight a_on_highlight, OnActivate a_on_activate = {},
+			IsSelected a_is_selected = {}) :
+			Behavior(a_parent),
+			hover_group(a_hover_group),
+			on_highlight(std::move(a_on_highlight)),
+			is_selected(std::move(a_is_selected)),
+			on_activate(std::move(a_on_activate))
+		{}
+
+		void Update(float a_delta) override;
+		void OnClick(bool a_activate, Hand& a_hand, MenuAction a_action) override;
+
+	private:
+		ExclusiveHoverGroup* hover_group{};
+		bool                 highlighted{};
+		IsSelected           is_selected{};
+		OnActivate           on_activate{};
+		OnHighlight          on_highlight{};
 	};
 
 }

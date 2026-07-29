@@ -73,6 +73,7 @@ namespace vr3dirp
 
 	private:
 		std::vector<JournalQuestData> quests;
+		std::size_t                   selected_quest_index{};
 	};
 
 	class Journal : public Book

@@ -34,8 +34,8 @@ namespace vr3dirp
 		helper::PlaySound(sound, 1, world_pos, Get3D());
 	}
 
-	Book::Book(
-		bool a_isLeft, TESObjectREFR* a_objectReference, NiAVObject* a_root, NiTransform a_local) :
+	Book::Book(std::string_view a_model_path, bool a_isLeft, TESObjectREFR* a_objectReference,
+		NiAVObject* a_root, NiTransform a_local) :
 		Widget(kDefaultWindowRadius, a_objectReference, a_root, a_local),
 		isLeft(a_isLeft)
 	{
@@ -66,7 +66,7 @@ namespace vr3dirp
 				InputBlock::kVrikGestures |
 				(!a_isLeft ? InputBlock::kActivatePickLength : InputBlock::kNone));
 
-		AddModel(kModelPath, false, [this](ArtAddon* a) {
+		AddModel(a_model_path, false, [this](ArtAddon* a) {
 			ni_animator::SetControllerFlags(Get3D(), true, false, false, false, true);
 			// Construct widget layout
 			auto* right_parent = Get3D()->GetObjectByName(kRightParent);
@@ -90,8 +90,8 @@ namespace vr3dirp
 			// Chapter tabs
 			auto chapter_parent = Get3D()->GetObjectByName(kChapterParent);
 			t.translate = { 0.1f, 0, -0.1f };
-			tab_container =
-				AddChild<Widget>(t, NiPoint3(1.0, layout.kPageHeight * 0.5f, 0.5), chapter_parent);
+			tab_container = AddChild<Widget>(
+				t, NiPoint3(1.0, layout.kRightPageHeight * 0.5f, 0.5), chapter_parent);
 			tab_container->SetPriority(10);
 			tab_container->AddBehavior<ExclusiveHoverGroup>();
 
@@ -100,11 +100,11 @@ namespace vr3dirp
 			// Page Content anchors
 			t.translate = layout.kRightPageOrigin;
 			right_page_parent = AddChild<Widget>(t,
-				NiPoint3(layout.kRightPageWidth * 0.5f, layout.kPageHeight * 0.5f, 1),
+				NiPoint3(layout.kRightPageWidth * 0.5f, layout.kRightPageHeight * 0.5f, 1),
 				right_parent);
-			right_page_parent->SetHitTestEnabled(false);
+			right_page_parent->AddBehavior<ExclusiveHoverGroup>();
 
-			t.translate = { -layout.kLeftPageWidth / 2 + layout.kLeftPageOrigin.x, 0, 0 };
+			t.translate = layout.kLeftPageOrigin;
 
 			// left parent is upside down
 			t.rotate = {
@@ -114,8 +114,9 @@ namespace vr3dirp
 			};
 
 			left_page_parent = AddChild<Widget>(t,
-				NiPoint3(layout.kLeftPageWidth * 0.5f, layout.kPageHeight * 0.5f, 1), left_parent);
-			left_page_parent->SetHitTestEnabled(false);
+				NiPoint3(layout.kLeftPageWidth * 0.5f, layout.kLeftPageHeight * 0.5f, 1),
+				left_parent);
+			left_page_parent->AddBehavior<ExclusiveHoverGroup>();
 
 			// Grab Node
 			t.translate = { 7, 14, -1 };
@@ -134,21 +135,10 @@ namespace vr3dirp
 			helper::InitializeSound(sound, kBookOpenSd);
 			helper::PlaySound(sound, 1, world_pos, Get3D());
 
+			AddChapter(std::make_unique<Chapter>("3DIRP/Chapters/All.nif"));
+
 			DrawCurrentPage(false);
 		});
-
-		AddChapter(std::make_unique<Chapter>("3DIRP/Chapters/All.nif"));
-		AddChapter(std::make_unique<Chapter>("3DIRP/Chapters/All.nif"));
-		AddChapter(std::make_unique<Chapter>("3DIRP/Chapters/All.nif"));
-		AddChapter(std::make_unique<Chapter>("3DIRP/Chapters/All.nif"));
-		AddChapter(std::make_unique<Chapter>("3DIRP/Chapters/All.nif"));
-		AddChapter(std::make_unique<Chapter>("3DIRP/Chapters/All.nif"));
-		AddChapter(std::make_unique<Chapter>("3DIRP/Chapters/All.nif"));
-		AddChapter(std::make_unique<Chapter>("3DIRP/Chapters/All.nif"));
-		AddChapter(std::make_unique<Chapter>("3DIRP/Chapters/All.nif"));
-		AddChapter(std::make_unique<Chapter>("3DIRP/Chapters/All.nif"));
-		AddChapter(std::make_unique<Chapter>("3DIRP/Chapters/All.nif"));
-		AddChapter(std::make_unique<Chapter>("3DIRP/Chapters/All.nif"));
 	}
 
 	void Book::TurnPageLeft()
@@ -250,10 +240,14 @@ namespace vr3dirp
 		transform.translate.z -= 0.1 * a_index;
 
 		auto* tab = tab_container->AddChild<Widget>(transform, NiPoint3(1.0, 0.3, 0.25));
-		tab->AddModel(chapters[a_index]->model_path);
+		tab->AddModel(chapters[a_index]->model_path, false, [this, a_index](ArtAddon* a_model) {
+			helper::SetGlowMult(
+				a_model ? a_model->Get3D() : nullptr, chapter_index == a_index ? 0.9f : 0.0f);
+		});
 		tab->SetPriority(tab_container->GetPriority() + 1);
 		tab->AddBehavior<SelectionHighlight>(
 			tab_container->GetBehavior<ExclusiveHoverGroup>(),
+			[tab](bool highlight) { helper::SetGlowMult(tab->Get3D(), highlight ? 0.9f : 0.0f); },
 			[this, a_index] { TurnToChapter(a_index); },
 			[this, a_index] { return GetChapterIndex() == a_index; });
 
@@ -264,18 +258,15 @@ namespace vr3dirp
 	{
 		if (!parent) { return; }
 
-		auto*      model = parent->Get3D();
 		const bool selected = is_selected && is_selected();
 		const bool should_highlight = selected ||
 			(hover_group &&
 				(hover_group->IsExclusivelyHovered(parent, false) ||
 					hover_group->IsExclusivelyHovered(parent, true)));
 
-		// AddModel is asynchronous, so also apply the current state when its node first appears.
-		if (model != highlighted_model || should_highlight != highlighted)
+		if (should_highlight != highlighted)
 		{
-			if (model) { helper::SetGlowMult(model, should_highlight ? 0.9f : 0.0f); }
-			highlighted_model = model;
+			if (on_highlight) { on_highlight(should_highlight); }
 			highlighted = should_highlight;
 		}
 	}
@@ -300,15 +291,18 @@ namespace vr3dirp
 
 		pages[page_index]->Draw(context, a_left_page);
 
-		// Display page numbers
-		std::string page_str = std::to_string(page_index + 1);
-		page_str.append(" / ").append(std::to_string(pages.size()));
-		NiTransform t;
-		t.translate = { layout.kRightPageWidth * 0.5f - 0.5f, 0.5f - layout.kPageHeight * 0.5f,
-			0.0f };
-		auto* page_number = right_page_parent->AddChild<Widget>(t, NiPoint3{});
-		page_number->AddText(
-			page_str, layout.page_number_character_spacing, layout.page_number_font_model_path);
+		// Display page numbers on right side only
+		if (!a_left_page)
+		{
+			std::string page_str = std::to_string(page_index + 1);
+			page_str.append("/").append(std::to_string(pages.size()));
+			NiTransform t;
+			t.translate = { layout.kRightPageWidth * 0.5f - 2.5f,
+				0.5f - layout.kRightPageHeight * 0.5f, 0.0f };
+			auto* page_number = right_page_parent->AddChild<Widget>(t, NiPoint3{});
+			page_number->AddText(
+				page_str, layout.page_number_character_spacing, layout.page_number_font_model_path);
+		}
 	}
 
 	void Book::ClearPageView()
@@ -320,9 +314,51 @@ namespace vr3dirp
 	void Page::Draw(Book::PageContext a_context, bool a_left_page)
 	{
 		if (a_left_page)
-			a_context.left_page.AddModel("HelperSphere.nif");
+		{
+			//a_context.left_page.AddModel("HelperSphere.nif");
+			NiTransform top_left_corner{};
+			top_left_corner.translate = { -a_context.layout.kLeftPageWidth * 0.5f,
+				a_context.layout.kLeftPageHeight * 0.5f, 0 };
+			auto* text = a_context.left_page.AddChild<Widget>(top_left_corner, NiPoint3());
+			text->AddText(
+				"Accusamus magnam neque est libero. Ipsam quia aut in \n"
+				"recusandae assumenda consequatur illo. Muae nostrum\n"
+				"praesentium illo id magni.\n Dolorem et similique saepe ut\n"
+				"voluptatum exercitationem sit.aut et culpa quidem."
+				"Inventore alias at quidem dolorem\n aut et culpa quidem.\n"
+				"Ut non est dicta. A qui molestiae sit reprehenderit voluptatem\n"
+				"at mollitia. Werum possimus\n consequuntur architecto. Officia\n"
+				"ipsum soluta cum suscipit.\n\n"
+				"Hic ex sed cupiditate voluptatum.\n Earum officia eaque quis in\n"
+				"perferendis et dolorem sint.\n Et vero temporibus sed. Wpsum\n"
+				"ea ex blanditiis totam \ndoloremque similique.\n"
+				"at mollitia. Werum possimus consequuntur architecto. Officia\n"
+				"Hic ex sed cupiditate voluptatum. Earum officia eaque quis",
+				-0.3, a_context.layout.body_font_model_path);
+		}
 		else
-			a_context.right_page.AddModel("HelperSphere.nif");
+		{
+			//a_context.right_page.AddModel("HelperSphere.nif");
+			NiTransform top_left_corner{};
+			top_left_corner.translate = { -a_context.layout.kRightPageWidth * 0.5f,
+				a_context.layout.kRightPageHeight * 0.5f, 0 };
+			auto* text = a_context.right_page.AddChild<Widget>(top_left_corner, NiPoint3());
+			text->AddText(
+				"Accusamus magnam neque est libero. Ipsam quia aut in \n"
+				"recusandae assumenda consequatur illo. Muae nostrum\n"
+				"praesentium illo id magni.\n Dolorem et similique saepe ut\n"
+				"voluptatum exercitationem sit.aut et culpa quidem."
+				"Inventore alias at quidem dolorem\n aut et culpa quidem.\n"
+				"Ut non est dicta. A qui molestiae sit reprehenderit voluptatem\n"
+				"at mollitia. Werum possimus\n consequuntur architecto. Officia\n"
+				"ipsum soluta cum suscipit.\n\n"
+				"Hic ex sed cupiditate voluptatum.\n Earum officia eaque quis in\n"
+				"perferendis et dolorem sint.\n Et vero temporibus sed. Wpsum\n"
+				"ea ex blanditiis totam \ndoloremque similique.\n"
+				"at mollitia. Werum possimus consequuntur architecto. Officia\n"
+				"Hic ex sed cupiditate voluptatum. Earum officia eaque quis",
+				-0.2, a_context.layout.body_font_model_path);
+		}
 	}
 
 	void Book::Update(float a_delta)
@@ -386,6 +422,7 @@ namespace vr3dirp
 			}
 			else
 			{
+				if (isGrabbed) { helper::PrintTransform(parent->GetTransform()); }
 				isGrabButtonHeld = false;
 				grabHoldTime = 0.0f;
 				grabHand = nullptr;
@@ -461,5 +498,4 @@ namespace vr3dirp
 	}
 
 	void Book::DrawExtents(bool show) {}
-
 }
