@@ -1,5 +1,7 @@
 #include "journal.h"
 
+#include "text_manager.h"
+
 namespace vr3dirp
 {
 	namespace
@@ -150,6 +152,9 @@ namespace vr3dirp
 				// Get selected quest from hover group
 				const auto& quest = quests[selected_quest_index];
 
+				NiTransform zero{};
+				auto textmanager = page_anchor.AddChild<TextManager>(zero, "3DIRP/charx256.nif");
+
 				RE::BSString log_text{};
 				quest.owner->GetJournalTextForInstance(log_text, quest.owner->currentInstanceID);
 				std::string formatted_str = log_text.c_str();
@@ -165,7 +170,7 @@ namespace vr3dirp
 				page_cursor.scale = L.body_text_scale;
 
 				auto* log = page_anchor.AddChild<Widget>(page_cursor, NiPoint3{});
-				log->AddText(formatted_str, L.body_character_spacing, L.body_font_model_path);
+				textmanager->AddText(log, formatted_str, L.body_character_spacing);
 
 				page_cursor.translate.y -=
 					log_lines * art_addon::AddonTextBox::kLineSpacing * L.body_text_scale + 1;
@@ -178,7 +183,7 @@ namespace vr3dirp
 					int   lines = FormatParagraph(temp, L.body_text_scale, L.body_character_spacing,
 						L.kLeftPageWidth - L.horizontal_margin);
 					auto* objective_text = page_anchor.AddChild<Widget>(page_cursor, NiPoint3{});
-					objective_text->AddText(temp, L.body_character_spacing, L.body_font_model_path);
+					textmanager->AddText(objective_text, temp, L.body_character_spacing);
 					page_cursor.translate.y -= lines * L.objective_spacing;
 				}
 
@@ -190,28 +195,16 @@ namespace vr3dirp
 					int   lines = FormatParagraph(temp, L.body_text_scale, L.body_character_spacing,
 						L.kLeftPageWidth - L.horizontal_margin);
 					auto* objective_text = page_anchor.AddChild<Widget>(page_cursor, NiPoint3{});
-					objective_text->AddText(temp, L.body_character_spacing, L.body_font_model_path);
+					textmanager->AddText(objective_text, temp, L.body_character_spacing);
 					page_cursor.translate.y -= lines * L.objective_spacing;
 				}
-
-				// for (auto& obj : quest.current_objectives)
-				// {
-				// 	auto* objective_text = page_anchor.AddChild<Widget>(page_cursor, NiPoint3{});
-				// 	objective_text->AddText(
-				// 		obj->displayText, L.body_character_spacing, L.body_font_model_path);
-				// 	page_cursor.translate.y -= L.quest_line_spacing + L.body_text_scale;
-				// }
 			}
-
-			// draw title of quest
-			// get quest log entry/description
-			// draw description
-			// get objectives
-			// draw objectives
 		}
 		else
 		{
 			auto&       page_anchor = a_context.right_page;
+			NiTransform zero{};
+			auto        textmanager = page_anchor.AddChild<TextManager>(zero, "3DIRP/charx256.nif");
 			NiTransform page_cursor{};
 			NiTransform line_cursor{};
 			const float page_half_width = L.kRightPageWidth * 0.5f;
@@ -235,13 +228,12 @@ namespace vr3dirp
 
 				line_cursor.scale = L.body_text_scale;
 				auto* tracker = line->AddChild<Widget>(line_cursor, NiPoint3{});
-				tracker->AddText(quest.tracked ? ">" : "0", 0, L.body_font_model_path);
+				textmanager->AddText(tracker, quest.tracked ? ">" : "0", 0);
 
 				line_cursor.translate.x += L.body_text_scale + L.body_character_spacing;
 
 				auto* name = line->AddChild<Widget>(line_cursor, NiPoint3{});
-				name->AddText(quest_name, L.body_character_spacing, L.body_font_model_path);
-
+				textmanager->AddText(name, quest_name, L.body_character_spacing);
 				page_cursor.translate.y -= quest_lines * L.quest_line_spacing;
 
 				// on hovered/highlighted: show visual and set selected quest index
@@ -263,14 +255,12 @@ namespace vr3dirp
 							indicator->MoveTo(offset);
 						}
 					},
-					[this, a_context, tracker] {
+					[this, a_context, tracker, textmanager] {
 						auto& quest = quests[selected_quest_index];
 						quest.tracked ^= 1;
 						helper::SetQuestTracked(quest.owner, quest.tracked);
-						tracker->ClearText();
-						tracker->AddText(
-							quest.tracked ? ">" : "0", 0, a_context.layout.body_font_model_path);
-					},
+						textmanager->SetCharacter(tracker, 0, quest.tracked ? '>' : '0');
+										},
 					[this, i] { return selected_quest_index == i; });
 
 				if (selected_quest_index == i)

@@ -84,16 +84,15 @@ namespace vr3dirp
 				{ -0.003148, 0.996287, 0.027915 },
 			};
 
-			auto& t = isLeft? default_transform : default_transform_right;
+			auto& t = isLeft ? default_transform : default_transform_right;
 
 			std::unique_ptr<Book> temp;
 
 			switch (a_type)
 			{
 			case BookType::kJournal:
-			t.scale *= 0.9f;
-				temp = std::make_unique<Journal>(
-					isLeft, pc->AsReference(), hand_node, t);
+				t.scale *= 0.9f;
+				temp = std::make_unique<Journal>(isLeft, pc->AsReference(), hand_node, t);
 
 				break;
 
@@ -277,6 +276,7 @@ namespace vr3dirp
 
 		vr_gui::Controller::GetSingleton()->ShowHitboxes(toggle);
 		ShowHands(toggle);
+
 		if (e.button_state == vrinput::ButtonState::kButtonDown) {}
 
 		toggle ^= 1;
