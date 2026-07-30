@@ -19,7 +19,8 @@ namespace vr_gui
 				if (!child->IsEnabled() || !child->IsHovered(is_left)) { continue; }
 
 				const auto offset = child->GetWorld().translate - hand->GetBoxTransform().translate;
-				const float score = offset.Dot(offset);
+				float score = offset.Dot(offset);
+				if (child.get() == active[is_left]) { score *= positional_hysteresis_factor; }
 				if (score < best_score || (score == best_score && child.get() == active[is_left]))
 				{
 					best_score = score;

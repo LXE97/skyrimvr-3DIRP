@@ -2,6 +2,7 @@
 
 #include "vr_gui.h"
 
+#include <algorithm>
 #include <array>
 
 namespace vr_gui
@@ -11,7 +12,13 @@ namespace vr_gui
 	class ExclusiveHoverGroup : public Behavior
 	{
 	public:
-		explicit ExclusiveHoverGroup(Widget* a_parent) : Behavior(a_parent) {}
+		static constexpr float kDefaultPositionalHysteresisFactor = 0.97f;
+
+		explicit ExclusiveHoverGroup(Widget* a_parent,
+			float a_positional_hysteresis_factor = kDefaultPositionalHysteresisFactor) :
+			Behavior(a_parent),
+			positional_hysteresis_factor(std::clamp(a_positional_hysteresis_factor, 0.0f, 1.0f))
+		{}
 
 		void Update(float a_delta) override;
 		void OnClick(bool a_activate, Hand& a_hand, MenuAction a_action) override;
@@ -23,5 +30,8 @@ namespace vr_gui
 
 	private:
 		std::array<Widget*, 2> active{};
+		// Biases the current selection's squared distance. Lower values require a challenger
+		// to be proportionally closer before it can replace the current selection.
+		float positional_hysteresis_factor;
 	};
 }

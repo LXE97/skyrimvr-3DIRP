@@ -15,8 +15,8 @@ namespace art_addon
 	static constexpr int kMaxPerFrame = 20;
 
 	std::shared_ptr<ArtAddon> ArtAddon::Make(std::string_view a_model_path, TESObjectREFR* a_target,
-		NiAVObject* a_attach_node, const NiTransform& a_local,
-		OnInitialized a_callback, bool a_do_deep_clone)
+		NiAVObject* a_attach_node, const NiTransform& a_local, OnInitialized a_callback,
+		bool a_do_deep_clone)
 	{
 		auto manager = ArtAddonManager::GetSingleton();
 		auto art_object = manager->GetArtForm(a_model_path);
@@ -90,9 +90,10 @@ namespace art_addon
 								// the id is not unique to this mod but the ArtObject is
 								if (addon->art_object == a_modelEffect->artObject)
 								{
+									RE::NiPointer<RE::NiObject> copied;
+
 									if (addon->deep_clone)
 									{
-										RE::NiPointer<RE::NiObject> copied;
 										a_modelEffect->Get3D()->CreateDeepCopy(copied);
 										addon->root3D = static_cast<RE::NiAVObject*>(copied.get());
 									}

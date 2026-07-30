@@ -82,7 +82,7 @@ namespace vr3dirp
 		// Reverse through pages
 		void TurnPageRight();
 
-		void TurnToChapter(std::size_t a_index);
+		void TurnToChapter(int a_index);
 
 		std::size_t GetChapterIndex() const { return chapter_index; }
 		std::size_t GetPageIndex() const { return page_index; }
@@ -238,10 +238,10 @@ namespace vr3dirp
 					book->TurnPageRight();
 					break;
 				case MenuAction::kScrollUp:
-					book->TurnToChapter(book->GetChapterIndex() - 1);
+					book->TurnToChapter((int)book->GetChapterIndex() - 1);
 					break;
 				case MenuAction::kScrollDown:
-					book->TurnToChapter(book->GetChapterIndex() + 1);
+					book->TurnToChapter((int)book->GetChapterIndex() + 1);
 				}
 			}
 		}

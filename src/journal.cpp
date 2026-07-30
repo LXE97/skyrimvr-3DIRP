@@ -12,7 +12,7 @@ namespace vr3dirp
 			//if (a_quest.failed) return 'x';
 			if (a_quest.completed) return '/';
 			if (a_quest.tracked) return '>';
-			return ' ';
+			return 0x7F;
 		}
 
 		std::vector<QuestType> GetPlayerQuestTypes()
@@ -117,7 +117,7 @@ namespace vr3dirp
 		for (auto& quest : quests)
 		{
 			// Use exactly the same string and width as Draw().
-			std::string quest_name = std::string(1, GetStatusSymbol(quest)) + ' ';
+			std::string quest_name = std::string(1, GetStatusSymbol(quest)) + (char)0x7F;
 			quest_name.append(quest.owner->GetFullName());
 
 			const int quest_lines = std::max(1,
@@ -238,10 +238,11 @@ namespace vr3dirp
 
 			page_cursor.translate.y = L.kRightPageHeight * 0.5f - L.top_margin;
 			page_cursor.translate.x = { -page_half_width + L.horizontal_margin };
-			page_cursor.scale = L.body_text_scale;
 
 			auto* indicator = page_anchor.AddChild<Widget>(page_cursor, NiPoint3());
 
+			page_cursor.scale = L.body_text_scale;
+			
 			for (std::size_t i = 0; i < quests.size(); ++i)
 			{
 				const auto& quest = quests[i];
@@ -265,21 +266,25 @@ namespace vr3dirp
 						{
 							selected_quest_index = i;
 							a_context.left_page.ClearChildren();
-							Draw(a_context, true);
+
 							auto&    L = a_context.layout;
 							NiPoint3 offset = { L.kRightPageWidth * -0.5f + L.horizontal_margin +
 									(L.body_text_scale + L.body_character_spacing) * 3 + 2.5f,
-								line->GetTransform().translate.y - L.body_text_scale * 0.5f + 0.1f,
-								0 };
+								line->GetTransform().translate.y - L.body_text_scale * 0.3f, 0 };
 							indicator->MoveTo(offset);
+
+							if (!a_context.left_page.GetChildren().empty()) Draw(a_context, true);
 						}
 					},
 					// on click/activate: toggle quest tracked status
 					[this, a_context, line, textmanager] {
 						auto& quest = quests[selected_quest_index];
-						quest.tracked ^= 1;
-						helper::SetQuestTracked(quest.owner, quest.tracked);
-						textmanager->SetCharacter(line, 0, '7');
+						if (!quest.completed)
+						{
+							quest.tracked ^= 1;
+							helper::SetQuestTracked(quest.owner, quest.tracked);
+							textmanager->SetCharacter(line, 0, quest.tracked ? '>' : 0x7F);
+						}
 					},
 					// IsSelected: check selected quest index
 					[this, i] { return selected_quest_index == i; });
@@ -291,7 +296,7 @@ namespace vr3dirp
 				{
 					NiPoint3 offset = { L.kRightPageWidth * -0.5f + L.horizontal_margin +
 							(L.body_text_scale + L.body_character_spacing) * 3 + 2.5f,
-						line->GetTransform().translate.y - L.body_text_scale * 0.5f + 0.1f, 0 };
+						line->GetTransform().translate.y - L.body_text_scale * 0.3f, 0 };
 					indicator->MoveTo(offset);
 				}
 			}

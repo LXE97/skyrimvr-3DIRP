@@ -135,8 +135,6 @@ namespace vr3dirp
 			helper::InitializeSound(sound, kBookOpenSd);
 			helper::PlaySound(sound, 1, world_pos, Get3D());
 
-			AddChapter(std::make_unique<Chapter>("3DIRP/Chapters/All.nif"));
-
 			DrawCurrentPage(false);
 		});
 	}
@@ -173,12 +171,15 @@ namespace vr3dirp
 		}
 	}
 
-	void Book::TurnToChapter(std::size_t a_index)
+	void Book::TurnToChapter(int a_index)
 	{
-		if (a_index >= chapters.size() || a_index == chapter_index) { return; }
-
-		TurnToPage(
-			a_index, 0, a_index > chapter_index ? TurnDirection::kLeft : TurnDirection::kRight);
+		SKSE::log::trace("{}", a_index);
+		if (a_index == (int)chapter_index) { return; }
+		if (a_index >= (int)chapters.size()) a_index = 0;
+		if (a_index < 0) a_index = (int)chapters.size() - 1;
+		SKSE::log::trace("  {}", a_index);
+		TurnToPage(a_index, 0,
+			a_index > (int)chapter_index ? TurnDirection::kLeft : TurnDirection::kRight);
 	}
 
 	void Book::TurnToPage(
@@ -248,7 +249,7 @@ namespace vr3dirp
 		tab->AddBehavior<SelectionHighlight>(
 			tab_container->GetBehavior<ExclusiveHoverGroup>(),
 			[tab](bool highlight) { helper::SetGlowMult(tab->Get3D(), highlight ? 0.9f : 0.0f); },
-			[this, a_index] { TurnToChapter(a_index); },
+			[this, a_index] { TurnToChapter((int)a_index); },
 			[this, a_index] { return GetChapterIndex() == a_index; });
 
 		chapters[a_index]->tab = tab;
@@ -313,14 +314,9 @@ namespace vr3dirp
 
 	void Page::Draw(Book::PageContext a_context, bool a_left_page)
 	{
-		if (a_left_page)
-		{
-			
-		}
+		if (a_left_page) {}
 		else
-		{
-			
-		}
+		{}
 	}
 
 	void Book::Update(float a_delta)

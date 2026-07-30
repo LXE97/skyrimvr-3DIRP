@@ -37,7 +37,8 @@ namespace art_addon
 		 */
 		[[nodiscard]] static ArtAddonPtr Make(std::string_view a_model_path,
 			RE::TESObjectREFR* a_target, RE::NiAVObject* a_attach_node,
-			const RE::NiTransform& a_local, OnInitialized a_callback = nullptr, bool a_do_deep_clone = false);
+			const RE::NiTransform& a_local, OnInitialized a_callback = nullptr,
+			bool a_do_deep_clone = false);
 
 		~ArtAddon()
 		{
@@ -67,7 +68,7 @@ namespace art_addon
 		RE::NiAVObject*                attach_node = nullptr;
 		RE::NiTransform                local;
 		std::function<void(ArtAddon*)> callback;
-		bool deep_clone{false};
+		bool                           deep_clone = false;
 	};
 
 	class ArtAddonManager
