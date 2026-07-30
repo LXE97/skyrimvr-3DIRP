@@ -45,11 +45,11 @@ namespace vr_gui
 			RE::BSGeometry*           geometry{};
 			std::vector<std::uint8_t> source_vertices;
 			std::vector<std::uint8_t> vertices;
-			std::uint32_t              vertex_size{};
-			std::uint32_t              position_offset{};
-			std::uint32_t              uv_offset{};
-			std::size_t                used_quads{};
-			bool                       ready{};
+			std::uint32_t             vertex_size{};
+			std::uint32_t             position_offset{};
+			std::uint32_t             uv_offset{};
+			std::size_t               used_quads{};
+			bool                      ready{};
 		};
 
 		struct LifetimeToken
@@ -62,9 +62,9 @@ namespace vr_gui
 		void SetCharacterUV(PoolModel& a_model, std::size_t a_quadIndex, char a_character);
 		bool UploadVertices(PoolModel& a_model);
 
-		std::shared_ptr<LifetimeToken> token = std::make_shared<LifetimeToken>();
-		std::string                    model_path;
-		std::vector<PoolModel>         models;
+		std::shared_ptr<LifetimeToken>            token = std::make_shared<LifetimeToken>();
+		std::string                               model_path;
+		std::vector<PoolModel>                    models;
 		std::vector<std::unique_ptr<PendingText>> managed_text;
 		std::deque<PendingText*>                  pending_text;
 	};

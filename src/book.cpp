@@ -315,49 +315,11 @@ namespace vr3dirp
 	{
 		if (a_left_page)
 		{
-			//a_context.left_page.AddModel("HelperSphere.nif");
-			NiTransform top_left_corner{};
-			top_left_corner.translate = { -a_context.layout.kLeftPageWidth * 0.5f,
-				a_context.layout.kLeftPageHeight * 0.5f, 0 };
-			auto* text = a_context.left_page.AddChild<Widget>(top_left_corner, NiPoint3());
-			text->AddText(
-				"Accusamus magnam neque est libero. Ipsam quia aut in \n"
-				"recusandae assumenda consequatur illo. Muae nostrum\n"
-				"praesentium illo id magni.\n Dolorem et similique saepe ut\n"
-				"voluptatum exercitationem sit.aut et culpa quidem."
-				"Inventore alias at quidem dolorem\n aut et culpa quidem.\n"
-				"Ut non est dicta. A qui molestiae sit reprehenderit voluptatem\n"
-				"at mollitia. Werum possimus\n consequuntur architecto. Officia\n"
-				"ipsum soluta cum suscipit.\n\n"
-				"Hic ex sed cupiditate voluptatum.\n Earum officia eaque quis in\n"
-				"perferendis et dolorem sint.\n Et vero temporibus sed. Wpsum\n"
-				"ea ex blanditiis totam \ndoloremque similique.\n"
-				"at mollitia. Werum possimus consequuntur architecto. Officia\n"
-				"Hic ex sed cupiditate voluptatum. Earum officia eaque quis",
-				-0.3, a_context.layout.body_font_model_path);
+			
 		}
 		else
 		{
-			//a_context.right_page.AddModel("HelperSphere.nif");
-			NiTransform top_left_corner{};
-			top_left_corner.translate = { -a_context.layout.kRightPageWidth * 0.5f,
-				a_context.layout.kRightPageHeight * 0.5f, 0 };
-			auto* text = a_context.right_page.AddChild<Widget>(top_left_corner, NiPoint3());
-			text->AddText(
-				"Accusamus magnam neque est libero. Ipsam quia aut in \n"
-				"recusandae assumenda consequatur illo. Muae nostrum\n"
-				"praesentium illo id magni.\n Dolorem et similique saepe ut\n"
-				"voluptatum exercitationem sit.aut et culpa quidem."
-				"Inventore alias at quidem dolorem\n aut et culpa quidem.\n"
-				"Ut non est dicta. A qui molestiae sit reprehenderit voluptatem\n"
-				"at mollitia. Werum possimus\n consequuntur architecto. Officia\n"
-				"ipsum soluta cum suscipit.\n\n"
-				"Hic ex sed cupiditate voluptatum.\n Earum officia eaque quis in\n"
-				"perferendis et dolorem sint.\n Et vero temporibus sed. Wpsum\n"
-				"ea ex blanditiis totam \ndoloremque similique.\n"
-				"at mollitia. Werum possimus consequuntur architecto. Officia\n"
-				"Hic ex sed cupiditate voluptatum. Earum officia eaque quis",
-				-0.2, a_context.layout.body_font_model_path);
+			
 		}
 	}
 

@@ -10,6 +10,7 @@
 #include "menu_checker.h"
 #include "mod_event_sink.hpp"
 #include "settings.h"
+#include "text_manager.h"
 #include "vr_gui.h"
 #include "vrinput.h"
 
@@ -176,7 +177,7 @@ namespace vr3dirp
 		art_addon::ArtAddonManager::GetSingleton()->Update();
 		vr_gui::Controller::GetSingleton()->Update();
 
-		UpdateHandDebugModels();
+		//UpdateHandDebugModels();
 
 		if (g_createHolstersPending && pc->Get3D())
 		{
@@ -196,6 +197,7 @@ namespace vr3dirp
 	{
 		vr_gui::Controller::GetSingleton()->Init();
 		pc = PlayerCharacter::GetSingleton();
+		art_addon::ArtAddonManager::GetSingleton()->OnGameLoad();
 	}
 
 	void ShowHands(bool a_show)
@@ -266,7 +268,12 @@ namespace vr3dirp
 
 	static bool OnDebugButton(const vrinput::ModInputEvent& e)
 	{
-		if (e.button_state == vrinput::ButtonState::kButtonDown) {}
+		static bool toggle = true;
+
+		if (e.button_state == vrinput::ButtonState::kButtonDown)
+		{
+			toggle ^= 1;
+		}
 		return false;
 	}
 
@@ -274,12 +281,14 @@ namespace vr3dirp
 	{
 		static bool toggle = true;
 
-		vr_gui::Controller::GetSingleton()->ShowHitboxes(toggle);
-		ShowHands(toggle);
+		//vr_gui::Controller::GetSingleton()->ShowHitboxes(toggle);
+		//ShowHands(toggle);
 
-		if (e.button_state == vrinput::ButtonState::kButtonDown) {}
+		if (e.button_state == vrinput::ButtonState::kButtonDown)
+		{
+			toggle ^= 1;
+		}
 
-		toggle ^= 1;
 		return false;
 	}
 

@@ -4,16 +4,12 @@ namespace vr_gui
 {
 	using namespace RE;
 
-	TextManager::TextManager(
-		Widget* a_parent, NiTransform a_local, std::string_view a_modelPath) :
+	TextManager::TextManager(Widget* a_parent, NiTransform a_local, std::string_view a_modelPath) :
 		Widget(a_parent, std::move(a_local), NiPoint3{}),
 		model_path(a_modelPath)
-	{
-		CreateModel();
-	}
+	{ CreateModel(); }
 
-	void TextManager::AddText(
-		const Widget* a_owner, std::string_view a_text, float a_spacing)
+	void TextManager::AddText(const Widget* a_owner, std::string_view a_text, float a_spacing)
 	{
 		if (!a_owner || a_text.empty()) { return; }
 
@@ -29,8 +25,7 @@ namespace vr_gui
 		ProcessQueue();
 	}
 
-	bool TextManager::SetCharacter(
-		const Widget* a_owner, std::size_t a_index, char a_character)
+	bool TextManager::SetCharacter(const Widget* a_owner, std::size_t a_index, char a_character)
 	{
 		if (!a_owner || a_character == '\n' || a_character == ' ') { return false; }
 
@@ -68,15 +63,14 @@ namespace vr_gui
 		models.emplace_back();
 
 		std::weak_ptr<LifetimeToken> weak_token = token;
-		const auto transform = target->world.Invert() * GetWorld();
+		const auto                   transform = target->world.Invert() * GetWorld();
 		models.back().addon = art_addon::ArtAddon::Make(model_path, object, target, transform,
 			[weak_token, this, model_index](art_addon::ArtAddon* a_model) {
 				if (weak_token.lock()) { OnModelInitialized(model_index, a_model); }
-			});
+			}, true);
 	}
 
-	void TextManager::OnModelInitialized(
-		std::size_t a_modelIndex, art_addon::ArtAddon* a_model)
+	void TextManager::OnModelInitialized(std::size_t a_modelIndex, art_addon::ArtAddon* a_model)
 	{
 		if (a_modelIndex >= models.size() || !a_model || !a_model->Get3D()) { return; }
 
@@ -92,7 +86,7 @@ namespace vr_gui
 		}
 
 		const auto vertex_count = trishape->GetTrishapeRuntimeData().vertexCount;
-		auto* geometry_data = geometry->GetGeometryRuntimeData().rendererData;
+		auto*      geometry_data = geometry->GetGeometryRuntimeData().rendererData;
 		if (!geometry_data || !geometry_data->rawVertexData ||
 			vertex_count < kQuadsPerModel * kVerticesPerQuad)
 		{
@@ -148,9 +142,12 @@ namespace vr_gui
 			}
 
 			auto& pool = models.back();
-			if (!pool.ready) { return; }
+			if (!pool.ready)
+			{
+				return;
+			}
 
-			bool modified = false;
+			bool  modified = false;
 			auto& text = *pending_text.front();
 			while (text.next_character < text.text.size())
 			{
@@ -165,8 +162,7 @@ namespace vr_gui
 				if (character == ' ')
 				{
 					++text.next_character;
-					text.cursor.translate.x +=
-						art_addon::NifChar::kCharacterWidth + text.spacing;
+					text.cursor.translate.x += art_addon::NifChar::kCharacterWidth + text.spacing;
 					continue;
 				}
 
@@ -207,21 +203,19 @@ namespace vr_gui
 			auto* position = reinterpret_cast<NiPoint3*>(
 				a_model.vertices.data() + byte_offset + a_model.position_offset);
 			*position = glyph_transform * *source_position;
-
 		}
 
 		SetCharacterUV(a_model, a_model.used_quads, a_character);
 	}
 
-	void TextManager::SetCharacterUV(
-		PoolModel& a_model, std::size_t a_quadIndex, char a_character)
+	void TextManager::SetCharacterUV(PoolModel& a_model, std::size_t a_quadIndex, char a_character)
 	{
 		const auto uv_offset = art_addon::NifChar::AsciiToXY(a_character);
 		const auto first_vertex = a_quadIndex * kVerticesPerQuad;
 
 		for (std::size_t i = 0; i < kVerticesPerQuad; ++i)
 		{
-			const auto byte_offset = (first_vertex + i) * a_model.vertex_size;
+			const auto  byte_offset = (first_vertex + i) * a_model.vertex_size;
 			const auto* source_uv = reinterpret_cast<const std::uint16_t*>(
 				a_model.source_vertices.data() + byte_offset + a_model.uv_offset);
 			auto* uv = reinterpret_cast<std::uint16_t*>(

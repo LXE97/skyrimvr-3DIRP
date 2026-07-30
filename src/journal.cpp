@@ -6,6 +6,15 @@ namespace vr3dirp
 {
 	namespace
 	{
+
+		char GetStatusSymbol(const JournalQuestData& a_quest)
+		{
+			//if (a_quest.failed) return 'x';
+			if (a_quest.completed) return '/';
+			if (a_quest.tracked) return '>';
+			return ' ';
+		}
+
 		std::vector<QuestType> GetPlayerQuestTypes()
 		{
 			std::vector<QuestType> seen;
@@ -18,8 +27,13 @@ namespace vr3dirp
 
 					if (!quest) { continue; }
 
-					const auto type = quest->GetType();
-					if (std::ranges::find(seen, type) == seen.end()) { seen.push_back(type); }
+					if (obj->state == QUEST_OBJECTIVE_STATE::kFailedDisplayed ||
+						obj->state == QUEST_OBJECTIVE_STATE::kCompletedDisplayed ||
+						obj->state == QUEST_OBJECTIVE_STATE::kDisplayed)
+					{
+						const auto type = quest->GetType();
+						if (std::ranges::find(seen, type) == seen.end()) { seen.push_back(type); }
+					}
 				}
 			}
 
@@ -45,34 +59,36 @@ namespace vr3dirp
 
 				const auto state = instance.InstanceState;
 
-				if (state != QUEST_OBJECTIVE_STATE::kDisplayed &&
-					state != QUEST_OBJECTIVE_STATE::kCompletedDisplayed)
+				if (objective->state == QUEST_OBJECTIVE_STATE::kFailedDisplayed ||
+					objective->state == QUEST_OBJECTIVE_STATE::kCompletedDisplayed ||
+					objective->state == QUEST_OBJECTIVE_STATE::kDisplayed)
 				{
-					continue;
-				}
+					auto it = std::ranges::find(result, quest, &JournalQuestData::owner);
 
-				auto it = std::ranges::find(result, quest, &JournalQuestData::owner);
+					if (it == result.end())
+					{
+						result.emplace_back();
+						it = std::prev(result.end());
 
-				if (it == result.end())
-				{
-					result.emplace_back();
-					it = std::prev(result.end());
+						it->owner = quest;
+						it->tracked = quest->IsActive();
+						it->completed = quest->IsCompleted();
+					}
 
-					it->owner = quest;
-					it->tracked = quest->IsActive();
-					it->completed = quest->IsCompleted();
-				}
-
-				if (state == QUEST_OBJECTIVE_STATE::kDisplayed)
-				{
-					it->current_objectives.push_back(objective);
-				}
-				else
-				{
-					it->completed_objectives.push_back(objective);
+					if (state == QUEST_OBJECTIVE_STATE::kDisplayed)
+					{
+						it->current_objectives.push_back(objective);
+					}
+					else if (state == QUEST_OBJECTIVE_STATE::kFailedDisplayed)
+					{
+						it->failed_objectives.push_back(objective);
+					}
+					else
+					{
+						it->completed_objectives.push_back(objective);
+					}
 				}
 			}
-
 			return result;
 		}
 	}
@@ -88,48 +104,46 @@ namespace vr3dirp
 				std::string_view{ a_rhs.owner->GetFullName() };
 		});
 
-		const auto line_height = a_layout.quest_line_spacing;
-		const int  lines_per_page =
-			std::max(1, static_cast<int>(a_layout.kRightPageHeight / line_height));
+		const float line_height = art_addon::AddonTextBox::kLineSpacing * a_layout.body_text_scale;
 
-		int              total_quest_lines = 0;
-		std::vector<int> quest_line_counts;
-		quest_line_counts.reserve(quests.size());
-
-		for (const auto& questinfo : quests)
-		{
-			std::string title = questinfo.owner->GetFullName();
-			const int   lines = std::max(1,
-				FormatParagraph(title, a_layout.body_text_scale, a_layout.body_character_spacing,
-					a_layout.kRightPageWidth - a_layout.horizontal_margin -
-						a_layout.body_text_scale - a_layout.body_character_spacing));
-
-			total_quest_lines += lines;
-			quest_line_counts.push_back(lines);
-		}
-
-		const auto page_count =
-			std::max(1, (total_quest_lines + lines_per_page - 1) / lines_per_page);
+		const float available_height =
+			a_layout.kRightPageHeight - a_layout.top_margin - a_layout.bottom_margin;
 
 		pages.clear();
-		pages.reserve(static_cast<std::size_t>(page_count));
 
 		std::vector<JournalQuestData> page_quests;
-		int                           page_lines = 0;
+		float                         used_height = 0.0f;
 
-		for (std::size_t i = 0; i < quests.size(); ++i)
+		for (auto& quest : quests)
 		{
-			const int quest_lines = quest_line_counts[i];
+			// Use exactly the same string and width as Draw().
+			std::string quest_name = std::string(1, GetStatusSymbol(quest)) + ' ';
+			quest_name.append(quest.owner->GetFullName());
 
-			if (!page_quests.empty() && page_lines + quest_lines > lines_per_page)
+			const int quest_lines = std::max(1,
+				FormatParagraph(quest_name, a_layout.body_text_scale,
+					a_layout.body_character_spacing,
+					a_layout.kRightPageWidth - a_layout.horizontal_margin));
+
+			const float text_height = line_height * static_cast<float>(quest_lines);
+
+			// A gap is needed before this item only when another item
+			// already occupies the page.
+			const float required_height =
+				text_height + (page_quests.empty() ? 0.0f : a_layout.quest_line_spacing);
+
+			if (!page_quests.empty() && used_height + required_height > available_height)
 			{
 				pages.emplace_back(std::make_unique<QuestPage>(std::move(page_quests)));
+
 				page_quests.clear();
-				page_lines = 0;
+				used_height = 0.0f;
 			}
 
-			page_quests.emplace_back(std::move(quests[i]));
-			page_lines += quest_lines;
+			if (!page_quests.empty()) { used_height += a_layout.quest_line_spacing; }
+
+			used_height += text_height;
+			page_quests.emplace_back(std::move(quest));
 		}
 
 		if (!page_quests.empty() || pages.empty())
@@ -153,7 +167,7 @@ namespace vr3dirp
 				const auto& quest = quests[selected_quest_index];
 
 				NiTransform zero{};
-				auto textmanager = page_anchor.AddChild<TextManager>(zero, "3DIRP/charx256.nif");
+				auto textmanager = page_anchor.AddChild<TextManager>(zero, "3DIRP/charx256_0.nif");
 
 				RE::BSString log_text{};
 				quest.owner->GetJournalTextForInstance(log_text, quest.owner->currentInstanceID);
@@ -187,6 +201,18 @@ namespace vr3dirp
 					page_cursor.translate.y -= lines * L.objective_spacing;
 				}
 
+				for (auto& obj : quest.failed_objectives)
+				{
+					if (page_cursor.translate.y < L.kRightPageHeight * -0.5f) { return; }
+					std::string temp = "x ";
+					temp.append(obj->displayText.c_str());
+					int   lines = FormatParagraph(temp, L.body_text_scale, L.body_character_spacing,
+						L.kLeftPageWidth - L.horizontal_margin);
+					auto* objective_text = page_anchor.AddChild<Widget>(page_cursor, NiPoint3{});
+					textmanager->AddText(objective_text, temp, L.body_character_spacing);
+					page_cursor.translate.y -= lines * L.objective_spacing;
+				}
+
 				for (auto& obj : quest.completed_objectives)
 				{
 					if (page_cursor.translate.y < L.kRightPageHeight * -0.5f) { return; }
@@ -200,47 +226,40 @@ namespace vr3dirp
 				}
 			}
 		}
-		else
+		else if (!a_left_page)
 		{
 			auto&       page_anchor = a_context.right_page;
 			NiTransform zero{};
-			auto        textmanager = page_anchor.AddChild<TextManager>(zero, "3DIRP/charx256.nif");
+			auto textmanager = page_anchor.AddChild<TextManager>(zero, "3DIRP/charx256_0.nif");
 			NiTransform page_cursor{};
-			NiTransform line_cursor{};
+
 			const float page_half_width = L.kRightPageWidth * 0.5f;
+			const float line_height = art_addon::AddonTextBox::kLineSpacing * L.body_text_scale;
 
 			page_cursor.translate.y = L.kRightPageHeight * 0.5f - L.top_margin;
+			page_cursor.translate.x = { -page_half_width + L.horizontal_margin };
+			page_cursor.scale = L.body_text_scale;
+
 			auto* indicator = page_anchor.AddChild<Widget>(page_cursor, NiPoint3());
 
 			for (std::size_t i = 0; i < quests.size(); ++i)
 			{
 				const auto& quest = quests[i];
-				std::string quest_name = quest.owner->GetFullName();
-				const int   quest_lines = std::max(1,
-					FormatParagraph(quest_name, L.body_text_scale, L.body_character_spacing,
-						L.kRightPageWidth));
+				std::string quest_name = std::string(1, GetStatusSymbol(quest)) + ' ';
+				quest_name.append(quest.owner->GetFullName());
 
-				line_cursor.translate.x = { -page_half_width + L.horizontal_margin };
+				const int quest_lines = FormatParagraph(quest_name, L.body_text_scale,
+					L.body_character_spacing, L.kRightPageWidth - L.horizontal_margin);
 
 				auto* line = page_anchor.AddChild<Widget>(
 					page_cursor, NiPoint3(page_half_width, L.body_text_scale * 0.5f, 0.5f));
 				line->SetPriority(page_anchor.GetPriority() + 1);
 
-				line_cursor.scale = L.body_text_scale;
-				auto* tracker = line->AddChild<Widget>(line_cursor, NiPoint3{});
-				textmanager->AddText(tracker, quest.tracked ? ">" : "0", 0);
+				textmanager->AddText(line, quest_name, L.body_character_spacing);
 
-				line_cursor.translate.x += L.body_text_scale + L.body_character_spacing;
-
-				auto* name = line->AddChild<Widget>(line_cursor, NiPoint3{});
-				textmanager->AddText(name, quest_name, L.body_character_spacing);
-				page_cursor.translate.y -= quest_lines * L.quest_line_spacing;
-
-				// on hovered/highlighted: show visual and set selected quest index
-				// on click/activate: draw quest info on other page
-				// IsSelected: check selected quest index
 				line->AddBehavior<SelectionHighlight>(
 					page_anchor.GetBehavior<ExclusiveHoverGroup>(),
+					// on hovered/highlighted: show visual and set selected quest index
 					[this, line, indicator, i, a_context](bool highlight) {
 						if (highlight)
 						{
@@ -255,13 +274,18 @@ namespace vr3dirp
 							indicator->MoveTo(offset);
 						}
 					},
-					[this, a_context, tracker, textmanager] {
+					// on click/activate: toggle quest tracked status
+					[this, a_context, line, textmanager] {
 						auto& quest = quests[selected_quest_index];
 						quest.tracked ^= 1;
 						helper::SetQuestTracked(quest.owner, quest.tracked);
-						textmanager->SetCharacter(tracker, 0, quest.tracked ? '>' : '0');
-										},
+						textmanager->SetCharacter(line, 0, '7');
+					},
+					// IsSelected: check selected quest index
 					[this, i] { return selected_quest_index == i; });
+
+				page_cursor.translate.y -=
+					line_height * static_cast<float>(quest_lines) + L.quest_line_spacing;
 
 				if (selected_quest_index == i)
 				{
@@ -270,8 +294,8 @@ namespace vr3dirp
 						line->GetTransform().translate.y - L.body_text_scale * 0.5f + 0.1f, 0 };
 					indicator->MoveTo(offset);
 				}
-				indicator->AddModel("3DIRP/QuestIndicator.nif");
 			}
+			indicator->AddModel("3DIRP/QuestIndicator.nif");
 		}
 	}
 

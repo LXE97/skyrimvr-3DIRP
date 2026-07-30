@@ -36,6 +36,7 @@ namespace vr3dirp
 		RE::TESQuest*                       owner;
 		std::vector<RE::BGSQuestObjective*> current_objectives;
 		std::vector<RE::BGSQuestObjective*> completed_objectives;
+		std::vector<RE::BGSQuestObjective*> failed_objectives;
 
 		bool tracked{ false };
 		bool completed{ false };

@@ -43,13 +43,12 @@ namespace vr3dirp
 			static constexpr float bottom_margin = 0.0f;
 			static constexpr float horizontal_margin = 0.9f;
 
-			static constexpr float body_text_scale = 1.4f;
+			static constexpr float body_text_scale = 1.7f;
 			static constexpr float heading_text_scale = 1.0f;
 			static constexpr float body_character_spacing = -0.15f;
 			static constexpr float page_number_character_spacing = -0.15f;
 
-			static constexpr float quest_line_spacing =
-				0.6f + art_addon::AddonTextBox::kLineSpacing * body_text_scale;
+			static constexpr float quest_line_spacing = 0.6f;
 			static constexpr float objective_spacing =
 				0.2f + art_addon::AddonTextBox::kLineSpacing * body_text_scale;
 
