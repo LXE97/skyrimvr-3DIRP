@@ -177,7 +177,7 @@ namespace vr3dirp
 		art_addon::ArtAddonManager::GetSingleton()->Update();
 		vr_gui::Controller::GetSingleton()->Update();
 
-		//UpdateHandDebugModels();
+		UpdateHandDebugModels();
 
 		if (g_createHolstersPending && pc->Get3D())
 		{
@@ -188,7 +188,7 @@ namespace vr3dirp
 
 	void PreLoadGame()
 	{
-		//ShowHands(false);
+		ShowHands(false);
 		vr_gui::Controller::GetSingleton()->Cleanup();
 		g_createHolstersPending = true;
 	}
@@ -197,7 +197,7 @@ namespace vr3dirp
 	{
 		vr_gui::Controller::GetSingleton()->Init();
 		pc = PlayerCharacter::GetSingleton();
-		art_addon::ArtAddonManager::GetSingleton()->OnGameLoad();
+		//art_addon::ArtAddonManager::GetSingleton()->OnGameLoad();
 	}
 
 	void ShowHands(bool a_show)
@@ -272,6 +272,16 @@ namespace vr3dirp
 
 		if (e.button_state == vrinput::ButtonState::kButtonDown)
 		{
+			auto handroot =
+				RE::PlayerCharacter::GetSingleton()->Get3D()->GetObjectByName("NPC R Hand [RHnd]");
+
+			auto finger = RE::PlayerCharacter::GetSingleton()->Get3D()->GetObjectByName(
+				"NPC R Finger12 [RF12]");
+
+			SKSE::log::trace("hands");
+			auto diff = handroot->world.Invert() * finger->world;
+			helper::PrintVec(diff.translate);
+
 			toggle ^= 1;
 		}
 		return false;
@@ -281,13 +291,10 @@ namespace vr3dirp
 	{
 		static bool toggle = true;
 
-		//vr_gui::Controller::GetSingleton()->ShowHitboxes(toggle);
-		//ShowHands(toggle);
+		vr_gui::Controller::GetSingleton()->ShowHitboxes(toggle);
+		ShowHands(toggle);
 
-		if (e.button_state == vrinput::ButtonState::kButtonDown)
-		{
-			toggle ^= 1;
-		}
+		if (e.button_state == vrinput::ButtonState::kButtonDown) { toggle ^= 1; }
 
 		return false;
 	}

@@ -228,21 +228,23 @@ namespace vr3dirp
 		}
 		else if (!a_left_page)
 		{
-			auto&       page_anchor = a_context.right_page;
+			auto& page_anchor = a_context.right_page;
+
 			NiTransform zero{};
-			auto textmanager = page_anchor.AddChild<TextManager>(zero, "3DIRP/charx256_0.nif");
 			NiTransform page_cursor{};
+			NiTransform line_cursor{};
+
+			auto textmanager = page_anchor.AddChild<TextManager>(zero, "3DIRP/charx256_0.nif");
 
 			const float page_half_width = L.kRightPageWidth * 0.5f;
 			const float line_height = art_addon::AddonTextBox::kLineSpacing * L.body_text_scale;
 
 			page_cursor.translate.y = L.kRightPageHeight * 0.5f - L.top_margin;
-			page_cursor.translate.x = { -page_half_width + L.horizontal_margin };
+			line_cursor.scale = L.body_text_scale;
+			line_cursor.translate.x = { -page_half_width + L.horizontal_margin };
 
 			auto* indicator = page_anchor.AddChild<Widget>(page_cursor, NiPoint3());
 
-			page_cursor.scale = L.body_text_scale;
-			
 			for (std::size_t i = 0; i < quests.size(); ++i)
 			{
 				const auto& quest = quests[i];
@@ -255,8 +257,9 @@ namespace vr3dirp
 				auto* line = page_anchor.AddChild<Widget>(
 					page_cursor, NiPoint3(page_half_width, L.body_text_scale * 0.5f, 0.5f));
 				line->SetPriority(page_anchor.GetPriority() + 1);
+				auto* line_text = line->AddChild<Widget>(line_cursor, NiPoint3());
 
-				textmanager->AddText(line, quest_name, L.body_character_spacing);
+				textmanager->AddText(line_text, quest_name, L.body_character_spacing);
 
 				line->AddBehavior<SelectionHighlight>(
 					page_anchor.GetBehavior<ExclusiveHoverGroup>(),
@@ -277,13 +280,13 @@ namespace vr3dirp
 						}
 					},
 					// on click/activate: toggle quest tracked status
-					[this, a_context, line, textmanager] {
+					[this, a_context, line_text, textmanager] {
 						auto& quest = quests[selected_quest_index];
 						if (!quest.completed)
 						{
 							quest.tracked ^= 1;
 							helper::SetQuestTracked(quest.owner, quest.tracked);
-							textmanager->SetCharacter(line, 0, quest.tracked ? '>' : 0x7F);
+							textmanager->SetCharacter(line_text, 0, quest.tracked ? '>' : 0x7F);
 						}
 					},
 					// IsSelected: check selected quest index
@@ -294,13 +297,24 @@ namespace vr3dirp
 
 				if (selected_quest_index == i)
 				{
-					NiPoint3 offset = { L.kRightPageWidth * -0.5f + L.horizontal_margin +
-							(L.body_text_scale + L.body_character_spacing) * 3 + 2.5f,
+					NiPoint3 offset = { 0,
 						line->GetTransform().translate.y - L.body_text_scale * 0.3f, 0 };
 					indicator->MoveTo(offset);
 				}
 			}
 			indicator->AddModel("3DIRP/QuestIndicator.nif");
+
+			// Display page numbers on right side only
+			if (!a_left_page)
+			{
+				std::string page_str = std::to_string(a_context.page_index + 1);
+				page_str.append("/").append(std::to_string(a_context.num_pages));
+				NiTransform t;
+				t.translate = { L.kRightPageWidth * 0.5f - 1.5f, 0.5f - L.kRightPageHeight * 0.5f,
+					0.0f };
+				auto* page_number = page_anchor.AddChild<Widget>(t, NiPoint3{});
+				textmanager->AddText(page_number, page_str, L.body_character_spacing);
+			}
 		}
 	}
 

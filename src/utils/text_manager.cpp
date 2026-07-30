@@ -1,3 +1,5 @@
+/* Credit to https://github.com/adamhynek/ for vertex buffer editing */
+
 #include "text_manager.h"
 
 namespace vr_gui
@@ -17,7 +19,7 @@ namespace vr_gui
 		text->owner = a_owner;
 		text->text = a_text;
 		text->spacing = a_spacing;
-		text->transform = a_owner->GetTransform();
+		text->transform = GetWorld().Invert() * a_owner->GetWorld();
 		text->glyph_locations.resize(text->text.size());
 
 		pending_text.push_back(text.get());

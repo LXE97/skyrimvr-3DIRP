@@ -53,7 +53,6 @@ namespace vr3dirp
 				0.2f + art_addon::AddonTextBox::kLineSpacing * body_text_scale;
 
 			std::string_view body_font_model_path = "3DIRP/char_2048.nif";
-			std::string_view page_number_font_model_path = "3DIRP/char_2048.nif";
 		};
 
 		struct PageContext
@@ -61,6 +60,8 @@ namespace vr3dirp
 			const Layout& layout;
 			Widget&       left_page;
 			Widget&       right_page;
+			int           page_index;
+			int           num_pages;
 		};
 
 		static constexpr std::string_view kModelPath = "3DIRP/custom.nif";

@@ -173,11 +173,9 @@ namespace vr3dirp
 
 	void Book::TurnToChapter(int a_index)
 	{
-		SKSE::log::trace("{}", a_index);
 		if (a_index == (int)chapter_index) { return; }
 		if (a_index >= (int)chapters.size()) a_index = 0;
 		if (a_index < 0) a_index = (int)chapters.size() - 1;
-		SKSE::log::trace("  {}", a_index);
 		TurnToPage(a_index, 0,
 			a_index > (int)chapter_index ? TurnDirection::kLeft : TurnDirection::kRight);
 	}
@@ -200,22 +198,23 @@ namespace vr3dirp
 		ClearPageView();
 		DrawCurrentPage(!turn_left);
 
-		const auto  queued = animator.QueuedCount();
-		const float anim_speed_adjust =
-			animation_speed * std::pow(1.5f, static_cast<float>(queued));
-		if (queued) { animator.SetSpeed(anim_speed_adjust); }
-		if (queued <= 1)
+		float anim_speed_adjust = animation_speed;
+		if (animator.IsBusy())
 		{
-			const auto& animation = turn_left ? flip_left : flip_right;
-			animator.Queue(animation, anim_speed_adjust, [this, turn_left] {
-				if (!animator.HasQueued()) DrawCurrentPage(turn_left);
-			});
-
-			RE::BSSoundHandle sound;
-			auto              world_pos = GetWorld().translate;
-			helper::InitializeSound(sound, turn_left ? kBookFlipLeftSnd : kBookFlipRightSnd);
-			helper::PlaySound(sound, 1, world_pos, Get3D());
+			anim_speed_adjust *= 1.2f;
+			animator.SetSpeed(anim_speed_adjust);
 		}
+
+		animator.ClearQueue();
+
+		const auto& animation = turn_left ? flip_left : flip_right;
+		animator.Queue(
+			animation, anim_speed_adjust, [this, turn_left] { DrawCurrentPage(turn_left); });
+
+		RE::BSSoundHandle sound;
+		auto              world_pos = GetWorld().translate;
+		helper::InitializeSound(sound, turn_left ? kBookFlipLeftSnd : kBookFlipRightSnd);
+		helper::PlaySound(sound, 1, world_pos, Get3D());
 	}
 
 	void Book::AddChapter(std::unique_ptr<Chapter> a_chapter)
@@ -288,22 +287,9 @@ namespace vr3dirp
 		auto& pages = chapters[chapter_index]->pages;
 		if (page_index >= pages.size() || !pages[page_index]) { return; }
 
-		PageContext context{ layout, *left_page_parent, *right_page_parent };
+		PageContext context{ layout, *left_page_parent, *right_page_parent, (int)page_index, (int)pages.size() };
 
 		pages[page_index]->Draw(context, a_left_page);
-
-		// Display page numbers on right side only
-		if (!a_left_page)
-		{
-			std::string page_str = std::to_string(page_index + 1);
-			page_str.append("/").append(std::to_string(pages.size()));
-			NiTransform t;
-			t.translate = { layout.kRightPageWidth * 0.5f - 2.5f,
-				0.5f - layout.kRightPageHeight * 0.5f, 0.0f };
-			auto* page_number = right_page_parent->AddChild<Widget>(t, NiPoint3{});
-			page_number->AddText(
-				page_str, layout.page_number_character_spacing, layout.page_number_font_model_path);
-		}
 	}
 
 	void Book::ClearPageView()

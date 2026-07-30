@@ -159,9 +159,10 @@ namespace vr_gui
 			{
 				transform = &(node->world);
 			}
-			radius = 7.9f;
-			extents = { 0.7, 0.7, 1.4 };
-			offset.translate = NiPoint3{ 0, -2, -5.5 };
+			radius = 11.2f;
+			extents = { 0.7, 0.7, 1 };
+			//offset.translate = NiPoint3{ 0, -2, -5.5 };
+			offset.translate = {-2.5, 1, -8.4};
 			offset.rotate = NiMatrix3();
 			offset_box.translate = NiPoint3{ 0, 0, 1 };
 			//offset_box.translate = isLeft ? NiPoint3{ -2.5, -1.6, 12 } : NiPoint3{ 2.5, -1.6, 12 };
