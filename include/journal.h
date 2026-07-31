@@ -7,6 +7,9 @@ namespace vr3dirp
 	using namespace RE;
 	using namespace vr_gui;
 	using QuestType = RE::QUEST_DATA::Type;
+	using HiddenQuestSet = std::unordered_set<RE::FormID>;
+
+	class Journal;
 
 	struct QuestTypeInfo
 	{
@@ -54,27 +57,64 @@ namespace vr3dirp
 	class QuestChapter : public Chapter
 	{
 	public:
-		QuestChapter(std::optional<QuestType> a_type) :
+		QuestChapter(std::optional<QuestType> a_type, Journal& a_journal) :
 			Chapter(std::string{
 				a_type ? GetQuestTypeInfo(*a_type).chapter_model_path : "3DIRP/Chapters/All.nif" }),
-			type(a_type)
+			type(a_type),
+			journal(a_journal)
 		{}
 
 		void MakePages(const Book::Layout& a_layout) override;
 
 		std::optional<QuestType> type;
+
+	private:
+		Journal& journal;
 	};
 
 	class QuestPage : public Page
 	{
 	public:
-		explicit QuestPage(std::vector<JournalQuestData> a_quests) : quests(std::move(a_quests)) {}
+		QuestPage(std::vector<JournalQuestData> a_quests, Journal& a_journal) :
+			quests(std::move(a_quests)),
+			journal(a_journal)
+		{}
 
 		void Draw(Book::PageContext a_context, bool a_left_page) override;
+		void HideQuest(const JournalQuestData& a_quest, Book::PageContext a_context);
 
 	private:
+		bool IsHidden(const JournalQuestData& a_quest) const;
+
 		std::vector<JournalQuestData> quests;
+		Journal&                      journal;
 		std::size_t                   selected_quest_index{};
+	};
+
+	class HoldToActivate : public Behavior
+	{
+	public:
+		using OnActivate = std::function<void()>;
+
+		HoldToActivate(Widget* a_parent, OnActivate a_onActivate,
+			MenuAction a_action = MenuAction::kSecondary) :
+			Behavior(a_parent),
+			onActivate(std::move(a_onActivate)),
+			action(a_action)
+		{}
+
+		void OnClick(bool a_activate, Hand& a_hand, MenuAction a_action) override;
+		void OnHover(bool a_activate, Hand& a_hand) override;
+		void Update(float a_delta) override;
+
+	private:
+		static constexpr float kHoldTime = 1.0f;
+
+		OnActivate onActivate;
+		MenuAction action;
+		float      elapsed{};
+		bool       buttonHeld{};
+		bool       armed{};
 	};
 
 	class Journal : public Book
@@ -85,7 +125,13 @@ namespace vr3dirp
 		Journal(bool a_isLeft, TESObjectREFR* a_objectReference, NiAVObject* a_root,
 			NiTransform a_local);
 
+		bool IsQuestHidden(const RE::TESQuest* a_quest) const;
+		bool HideQuest(const RE::TESQuest* a_quest);
+
+		const HiddenQuestSet& GetHiddenQuests() const { return hiddenQuests; }
+
 	private:
+		HiddenQuestSet hiddenQuests;
 	};
 
 }

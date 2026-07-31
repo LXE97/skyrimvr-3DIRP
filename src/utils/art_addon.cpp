@@ -126,7 +126,8 @@ namespace art_addon
 								if (it != artobject_cache.end())
 								{  // the artAddon was deleted before initialization finished
 									a_modelEffect->lifetime = 0;
-									SKSE::log::trace("deleting MRE {} (orphaned)", id);
+									SKSE::log::trace("deleting MRE {} for {} (orphaned)", id,
+										 a_modelEffect->artObject->GetModel());
 								}
 							}
 							// finished with this ArtAddon, no longer need to track it

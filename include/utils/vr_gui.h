@@ -398,6 +398,7 @@ namespace vr_gui
 		void ShowHitboxes(bool a_show);
 
 		void MarkForDelete(Widget* a_widget);
+		void QueuePostUpdate(std::function<void()> a_action);
 
 		void PushActivatorOverride(ActivatorOverride&& a_data);
 		void RemoveActivatorOverride(Widget* a_owner);
@@ -416,6 +417,7 @@ namespace vr_gui
 		void HandleInput();
 		void HandleEvents(const std::vector<ButtonEvent>& a_events);
 		void HandleDeletionQueue();
+		void HandlePostUpdateQueue();
 
 		bool        InputEventHandler(const vrinput::ModInputEvent& e);
 		static bool InputEventHandlerStatic(const vrinput::ModInputEvent& e);
@@ -436,6 +438,7 @@ namespace vr_gui
 		std::vector<std::unique_ptr<Widget>> roots;
 		std::vector<std::unique_ptr<Widget>> pending_roots;
 		std::vector<Widget*>                 widgets_to_delete;
+		std::vector<std::function<void()>>   post_update_queue;
 		std::vector<ButtonEvent>             button_queue;
 		std::vector<ActivatorOverride>       activator_overrides;
 

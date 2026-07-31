@@ -134,7 +134,7 @@ namespace vr3dirp
 
 			if (!page_quests.empty() && used_height + required_height > available_height)
 			{
-				pages.emplace_back(std::make_unique<QuestPage>(std::move(page_quests)));
+				pages.emplace_back(std::make_unique<QuestPage>(std::move(page_quests), journal));
 
 				page_quests.clear();
 				used_height = 0.0f;
@@ -148,7 +148,7 @@ namespace vr3dirp
 
 		if (!page_quests.empty() || pages.empty())
 		{
-			pages.emplace_back(std::make_unique<QuestPage>(std::move(page_quests)));
+			pages.emplace_back(std::make_unique<QuestPage>(std::move(page_quests), journal));
 		}
 	}
 
@@ -161,13 +161,18 @@ namespace vr3dirp
 		if (a_left_page)
 		{
 			auto& page_anchor = a_context.left_page;
-			if (selected_quest_index <= quests.size())
+			if (selected_quest_index < quests.size() && !IsHidden(quests[selected_quest_index]))
 			{
 				// Get selected quest from hover group
 				const auto& quest = quests[selected_quest_index];
 
 				NiTransform zero{};
 				auto textmanager = page_anchor.AddChild<TextManager>(zero, "3DIRP/charx256_0.nif");
+
+				auto* hide_button = page_anchor.AddChild<Widget>(
+					zero, NiPoint3(L.kLeftPageWidth * 0.5f, L.kLeftPageHeight * 0.5f, 0.5f));
+				hide_button->AddBehavior<HoldToActivate>(
+					[this, quest, a_context] { HideQuest(quest, a_context); });
 
 				RE::BSString log_text{};
 				quest.owner->GetJournalTextForInstance(log_text, quest.owner->currentInstanceID);
@@ -248,6 +253,8 @@ namespace vr3dirp
 			for (std::size_t i = 0; i < quests.size(); ++i)
 			{
 				const auto& quest = quests[i];
+				if (IsHidden(quest)) { continue; }
+
 				std::string quest_name = std::string(1, GetStatusSymbol(quest)) + ' ';
 				quest_name.append(quest.owner->GetFullName());
 
@@ -318,6 +325,72 @@ namespace vr3dirp
 		}
 	}
 
+	bool QuestPage::IsHidden(const JournalQuestData& a_quest) const
+	{
+		return journal.IsQuestHidden(a_quest.owner);
+	}
+
+	void QuestPage::HideQuest(const JournalQuestData& a_quest, Book::PageContext a_context)
+	{
+		if (!a_quest.owner) { return; }
+		auto hidden = std::ranges::find(quests, a_quest.owner, &JournalQuestData::owner);
+		if (hidden == quests.end()) { return; }
+		if (!journal.HideQuest(a_quest.owner)) { return; }
+
+		auto next_visible = std::ranges::find_if(
+			std::next(hidden), quests.end(), [this](const auto& a_entry) { return !IsHidden(a_entry); });
+
+		if (next_visible == quests.end())
+		{
+			next_visible = std::ranges::find_if(
+				quests.begin(), hidden, [this](const auto& a_entry) { return !IsHidden(a_entry); });
+		}
+
+		const bool has_visible_quest = next_visible != quests.end();
+		if (has_visible_quest)
+		{
+			selected_quest_index =
+				static_cast<std::size_t>(std::distance(quests.begin(), next_visible));
+		}
+
+		Controller::GetSingleton()->QueuePostUpdate([this, a_context, has_visible_quest] {
+			a_context.left_page.ClearChildren();
+			a_context.right_page.ClearChildren();
+
+			Draw(a_context, false);
+			if (has_visible_quest) { Draw(a_context, true); }
+		});
+	}
+
+	void HoldToActivate::OnClick(bool a_activate, Hand&, MenuAction a_action)
+	{
+		if (a_action != action) { return; }
+
+		buttonHeld = a_activate;
+		elapsed = 0.0f;
+		armed = a_activate;
+	}
+
+	void HoldToActivate::OnHover(bool a_activate, Hand&)
+	{
+		if (a_activate) { return; }
+
+		buttonHeld = false;
+		elapsed = 0.0f;
+		armed = false;
+	}
+
+	void HoldToActivate::Update(float a_delta)
+	{
+		if (!buttonHeld || !armed) { return; }
+
+		elapsed += a_delta;
+		if (elapsed < kHoldTime) { return; }
+
+		armed = false;
+		if (onActivate) { onActivate(); }
+	}
+
 	Journal::Journal(
 		bool a_isLeft, TESObjectREFR* a_objectReference, NiAVObject* a_root, NiTransform a_local) :
 		Book(Journal::kModelPath, a_isLeft, a_objectReference, a_root, a_local)
@@ -327,8 +400,21 @@ namespace vr3dirp
 		std::ranges::sort(
 			seen_types, {}, [](QuestType a_type) { return GetQuestTypeInfo(a_type).priority; });
 
-		AddChapter(std::make_unique<QuestChapter>(std::nullopt));
-		for (auto type : seen_types) { AddChapter(std::make_unique<QuestChapter>(type)); }
+		AddChapter(std::make_unique<QuestChapter>(std::nullopt, *this));
+		for (auto type : seen_types)
+		{
+			AddChapter(std::make_unique<QuestChapter>(type, *this));
+		}
+	}
+
+	bool Journal::IsQuestHidden(const RE::TESQuest* a_quest) const
+	{
+		return a_quest && hiddenQuests.contains(a_quest->GetFormID());
+	}
+
+	bool Journal::HideQuest(const RE::TESQuest* a_quest)
+	{
+		return a_quest && hiddenQuests.insert(a_quest->GetFormID()).second;
 	}
 
 }

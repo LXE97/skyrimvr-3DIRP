@@ -73,6 +73,7 @@ namespace vr_gui
 		pending_roots.clear();
 		activator_overrides.clear();
 		widgets_to_delete.clear();
+		post_update_queue.clear();
 		hovered_map.clear();
 		update_in_progress = false;
 	}
@@ -108,12 +109,7 @@ namespace vr_gui
 	{
 		SKSE::log::trace("Controller init");
 
-		roots.clear();
-		pending_roots.clear();
-		activator_overrides.clear();
-		widgets_to_delete.clear();
-		hovered_map.clear();
-		update_in_progress = false;
+		Cleanup();
 
 		// create right (0) and left hands
 		hands = { Hand(false), Hand(true) };
@@ -202,6 +198,8 @@ namespace vr_gui
 			}
 		}
 
+		HandlePostUpdateQueue();
+
 		std::vector<ButtonEvent> pending;
 		{
 			std::scoped_lock lock(button_queue_mutex);
@@ -212,6 +210,7 @@ namespace vr_gui
 		{
 			HandleInput();
 			HandleEvents(pending);
+			HandlePostUpdateQueue();
 		}
 		else
 		{
@@ -286,6 +285,19 @@ namespace vr_gui
 			w->SetEnabled(false);
 			widgets_to_delete.push_back(w);
 		}
+	}
+
+	void Controller::QueuePostUpdate(std::function<void()> a_action)
+	{
+		if (a_action) { post_update_queue.emplace_back(std::move(a_action)); }
+	}
+
+	void Controller::HandlePostUpdateQueue()
+	{
+		auto pending = std::move(post_update_queue);
+		post_update_queue.clear();
+
+		for (auto& action : pending) { action(); }
 	}
 
 	void Controller::HandleDeletionQueue()
