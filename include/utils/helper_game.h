@@ -122,6 +122,8 @@ namespace helper
 
 	std::filesystem::path GetGamePath();
 	float                 ReadFloatFromIni(std::ifstream& a_file, std::string a_setting);
+	bool                  WriteFloatToIni(const std::filesystem::path& a_path,
+		std::string_view a_setting, float a_value);
 	int                   ReadIntFromIni(std::ifstream& a_file, std::string a_setting);
 	std::string           ReadStringFromIni(std::ifstream& a_file, std::string a_setting);
 	bool                  ReadConfig(const char* a_ini_path);

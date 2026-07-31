@@ -20,17 +20,45 @@ namespace vr3dirp
 	class BasicHitbox;
 	class SelectionHighlight;
 
+	struct BookSettings
+	{
+		float font_size = 1.f;
+		float book_scale = 1.0f;
+		float text_z_offset = 1.25f;
+		float horizontal_margin = 0.9f;
+		float top_margin = 1.0f;
+
+		float right_offset_x = 8.862305f;
+		float right_offset_y = 4.031250f;
+		float right_offset_z = 12.304688f;
+		float right_rotate_w = 0.569704532f;
+		float right_rotate_x = 0.552828061f;
+		float right_rotate_y = 0.424522750f;
+		float right_rotate_z = 0.435428886f;
+
+		float left_offset_x = 10.912109f;
+		float left_offset_y = -11.599609f;
+		float left_offset_z = 6.068359f;
+		float left_rotate_w = 0.655093787f;
+		float left_rotate_x = 0.717480487f;
+		float left_rotate_y = -0.110829458f;
+		float left_rotate_z = -0.209262307f;
+	};
+
 	class Book : public Widget
 	{
+		friend class GrabNode;
+
 	public:
 		Book(std::string_view a_model_path, bool a_isLeft, TESObjectREFR* a_objectReference,
-			NiAVObject* a_root, NiTransform a_local);
+			NiAVObject* a_root, BookSettings& a_settings,
+			std::optional<float> a_scale_override = std::nullopt);
 		~Book() override;
 
 		struct Layout
 		{
 			const NiPoint3 kLeftPageOrigin = { -3.8, 0.0, -0.03 };
-			const NiPoint3 kRightPageOrigin = { 9.05, -0.2, 1.25 };
+			NiPoint3       kRightPageOrigin = { 9.05, -0.2, 1.25 };
 			const NiPoint3 kTabOffset = { 0.0f, 9.5f, 1.1f };
 
 			static constexpr float kRightPageWidth = 16;
@@ -39,17 +67,17 @@ namespace vr3dirp
 			static constexpr float kLeftPageHeight = 11.69 * 2;
 
 			static constexpr float tab_spacing = 1.8f;
-			static constexpr float top_margin = 1.0f;
 			static constexpr float bottom_margin = 0.0f;
-			static constexpr float horizontal_margin = 0.9f;
+			float                  top_margin = 1.0f;
+			float                  horizontal_margin = 0.9f;
 
-			static constexpr float body_text_scale = 1.7f;
-			static constexpr float heading_text_scale = 1.0f;
+			float                  body_text_scale = 1.7f;
+			float                  heading_text_scale = 1.0f;
 			static constexpr float body_character_spacing = -0.15f;
 			static constexpr float page_number_character_spacing = -0.15f;
 
-			static constexpr float quest_line_spacing = 0.6f;
-			static constexpr float objective_spacing =
+			float quest_line_spacing = 0.6f;
+			float objective_spacing =
 				0.2f + art_addon::AddonTextBox::kLineSpacing * body_text_scale;
 
 			std::string_view body_font_model_path = "3DIRP/char_2048.nif";
@@ -129,8 +157,9 @@ namespace vr3dirp
 
 		ni_animator::NiAnimator animator{};
 
-		bool   isLeft;
-		Layout layout;
+		BookSettings& settings;
+		bool          isLeft;
+		Layout        layout;
 
 		float animation_speed = 2;
 

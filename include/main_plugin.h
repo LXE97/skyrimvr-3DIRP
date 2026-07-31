@@ -21,5 +21,7 @@ namespace vr3dirp
 
 	void PreLoadGame();
 
+	void OnSaveGame();
+
 	void ShowHands(bool a_show);
 }

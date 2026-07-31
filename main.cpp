@@ -91,6 +91,8 @@ void MessageListener(SKSE::MessagingInterface::Message* message)
 	case SKSE::MessagingInterface::kNewGame:
 		if (!g_plugin_error) { vr3dirp::OnGameLoad(); }
 		break;
+	case SKSE::MessagingInterface::kSaveGame:
+		if (!g_plugin_error) { vr3dirp::OnSaveGame(); }
 	default:
 		break;
 	}

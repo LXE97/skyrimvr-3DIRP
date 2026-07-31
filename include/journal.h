@@ -9,6 +9,13 @@ namespace vr3dirp
 	using QuestType = RE::QUEST_DATA::Type;
 	using HiddenQuestSet = std::unordered_set<RE::FormID>;
 
+	struct JournalSettings : BookSettings
+	{
+		float       journal_scale = 0.9f;
+		float       quest_line_spacing = 0.6f;
+		std::string hidden_quests = "3372b";
+	};
+
 	class Journal;
 
 	struct QuestTypeInfo
@@ -113,7 +120,7 @@ namespace vr3dirp
 		OnActivate onActivate;
 		MenuAction action;
 		float      elapsed{};
-		bool       buttonHeld{};
+		bool       button_held{};
 		bool       armed{};
 	};
 
@@ -123,15 +130,16 @@ namespace vr3dirp
 		static constexpr std::string_view kModelPath = "3DIRP/journal.nif";
 
 		Journal(bool a_isLeft, TESObjectREFR* a_objectReference, NiAVObject* a_root,
-			NiTransform a_local);
+			JournalSettings& a_settings);
 
 		bool IsQuestHidden(const RE::TESQuest* a_quest) const;
 		bool HideQuest(const RE::TESQuest* a_quest);
 
-		const HiddenQuestSet& GetHiddenQuests() const { return hiddenQuests; }
+		const HiddenQuestSet& GetHiddenQuests() const { return hidden_quests; }
 
 	private:
-		HiddenQuestSet hiddenQuests;
+		JournalSettings& journal_settings;
+		HiddenQuestSet   hidden_quests;
 	};
 
 }

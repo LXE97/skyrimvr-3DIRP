@@ -337,6 +337,11 @@ namespace helper
 		return result;
 	}
 
+	NiQuaternion Mat2Quat(const NiMatrix3& a_matrix)
+	{
+		return NiQuaternion(a_matrix);
+	}
+
 	void Quat2Mat(NiMatrix3& matrix, NiQuaternion& quaternion)
 	{
 		float xx = quaternion.x * quaternion.x;

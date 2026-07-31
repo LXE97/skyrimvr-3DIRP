@@ -7,6 +7,49 @@ namespace vr3dirp
 	using namespace art_addon;
 	static constexpr float kHiddenSpellScale = 0.001f;
 
+	namespace
+	{
+		NiTransform MakeBookLocalTransform(
+			bool a_isLeft, const BookSettings& a_settings, float a_scale)
+		{
+			NiTransform result{};
+			result.scale = a_scale;
+
+			NiQuaternion rotation;
+			if (a_isLeft)
+			{
+				result.translate = { a_settings.left_offset_x, a_settings.left_offset_y,
+					a_settings.left_offset_z };
+				rotation = { a_settings.left_rotate_w, a_settings.left_rotate_x,
+					a_settings.left_rotate_y, a_settings.left_rotate_z };
+			}
+			else
+			{
+				result.translate = { a_settings.right_offset_x, a_settings.right_offset_y,
+					a_settings.right_offset_z };
+				rotation = { a_settings.right_rotate_w, a_settings.right_rotate_x,
+					a_settings.right_rotate_y, a_settings.right_rotate_z };
+			}
+
+			const float length_squared = rotation.Dot(rotation);
+			if (length_squared > 0.0f)
+			{
+				const float inverse_length = 1.0f / std::sqrt(length_squared);
+				rotation.w *= inverse_length;
+				rotation.x *= inverse_length;
+				rotation.y *= inverse_length;
+				rotation.z *= inverse_length;
+			}
+			else
+			{
+				rotation = { 1.0f, 0.0f, 0.0f, 0.0f };
+			}
+
+			result.rotate = rotation.ToRotation();
+			return result;
+		}
+	}
+
 	Book::~Book()
 	{
 		if (auto* actor = GetObjectReference()->As<RE::Actor>())
@@ -35,14 +78,25 @@ namespace vr3dirp
 	}
 
 	Book::Book(std::string_view a_model_path, bool a_isLeft, TESObjectREFR* a_objectReference,
-		NiAVObject* a_root, NiTransform a_local) :
-		Widget(kDefaultWindowRadius, a_objectReference, a_root, a_local),
+		NiAVObject* a_root, BookSettings& a_settings, std::optional<float> a_scale_override) :
+		Widget(kDefaultWindowRadius, a_objectReference, a_root,
+			MakeBookLocalTransform(
+				a_isLeft, a_settings, a_scale_override.value_or(a_settings.book_scale))),
+		settings(a_settings),
 		isLeft(a_isLeft)
 	{
+		layout.kRightPageOrigin.z = settings.text_z_offset;
+		layout.top_margin = settings.top_margin;
+		layout.horizontal_margin = settings.horizontal_margin;
+		layout.body_text_scale *= settings.font_size;
+		layout.heading_text_scale *= settings.font_size;
+		layout.objective_spacing =
+			0.2f + art_addon::AddonTextBox::kLineSpacing * layout.body_text_scale;
+
 		// store state of dismissal button when summoned to avoid instant closing
-		const auto settings = Controller::GetSingleton()->GetSettings();
+		const auto vrgui_settings = Controller::GetSingleton()->GetSettings();
 		secondary_pressed_during_creation =
-			vrinput::GetButtonState(settings.secondary, vrinput::Hand(a_isLeft),
+			vrinput::GetButtonState(vrgui_settings.secondary, vrinput::Hand(a_isLeft),
 				vrinput::ActionType::kPress) == vrinput::ButtonState::kButtonDown;
 
 		auto* pc = RE::PlayerCharacter::GetSingleton();
@@ -119,13 +173,18 @@ namespace vr3dirp
 			left_page_parent->AddBehavior<ExclusiveHoverGroup>();
 
 			// Grab Node
-			t.translate = { 7, 14, -1 };
+			if (isLeft) { t.translate = { 7, 16, -4 }; }
+			else
+			{
+				t.translate = { -23, 16, -4 };
+			}
+
 			t.rotate = {
 				{ 1.0000000, 0.0000000, 0.0000000 },
 				{ 0.0000000, -1.0000000, 0.0000000 },
 				{ 0.0000000, 0.0000000, -1.0000000 },
 			};
-			grab_node = AddChild<GrabNode>(t, NiPoint3(3, 3, 3));
+			grab_node = AddChild<GrabNode>(t, NiPoint3(2, 2, 4));
 			grab_node->SetPriority(5);
 
 			animator.PlayImmediately(open, animation_speed, [this]() { DrawCurrentPage(true); });
@@ -287,7 +346,8 @@ namespace vr3dirp
 		auto& pages = chapters[chapter_index]->pages;
 		if (page_index >= pages.size() || !pages[page_index]) { return; }
 
-		PageContext context{ layout, *left_page_parent, *right_page_parent, (int)page_index, (int)pages.size() };
+		PageContext context{ layout, *left_page_parent, *right_page_parent, (int)page_index,
+			(int)pages.size() };
 
 		pages[page_index]->Draw(context, a_left_page);
 	}
@@ -317,10 +377,10 @@ namespace vr3dirp
 			}
 		}
 
-		const auto settings = Controller::GetSingleton()->GetSettings();
+		const auto vrgui_settings = Controller::GetSingleton()->GetSettings();
 
 		const bool secondary_pressed =
-			vrinput::GetButtonState(settings.secondary, vrinput::Hand(isLeft),
+			vrinput::GetButtonState(vrgui_settings.secondary, vrinput::Hand(isLeft),
 				vrinput::ActionType::kPress) == vrinput::ButtonState::kButtonDown;
 
 		if (secondary_pressed && !secondary_pressed_during_creation)
@@ -366,7 +426,37 @@ namespace vr3dirp
 			}
 			else
 			{
-				if (isGrabbed) { helper::PrintTransform(parent->GetTransform()); }
+				if (isGrabbed)
+				{
+					auto*      book = static_cast<Book*>(GetRoot());
+					const auto transform = book->GetTransform();
+					const auto quat = helper::Mat2Quat(transform.rotate);
+
+					if (book->isLeft)
+					{
+						book->settings.left_offset_x = transform.translate.x;
+						book->settings.left_offset_y = transform.translate.y;
+						book->settings.left_offset_z = transform.translate.z;
+
+						book->settings.left_rotate_w = quat.w;
+						book->settings.left_rotate_x = quat.x;
+						book->settings.left_rotate_y = quat.y;
+						book->settings.left_rotate_z = quat.z;
+					}
+					else
+					{
+						book->settings.right_offset_x = transform.translate.x;
+						book->settings.right_offset_y = transform.translate.y;
+						book->settings.right_offset_z = transform.translate.z;
+
+						book->settings.right_rotate_w = quat.w;
+						book->settings.right_rotate_x = quat.x;
+						book->settings.right_rotate_y = quat.y;
+						book->settings.right_rotate_z = quat.z;
+					}
+
+					helper::PrintTransform(parent->GetTransform());
+				}
 				isGrabButtonHeld = false;
 				grabHoldTime = 0.0f;
 				grabHand = nullptr;

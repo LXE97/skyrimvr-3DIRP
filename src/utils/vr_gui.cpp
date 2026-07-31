@@ -896,8 +896,16 @@ namespace vr_gui
 		if (!object || !target) { return; }
 
 		const auto transform = target->world.Invert() * GetWorld();
-		auto       addon =
-			art_addon::ArtAddon::Make(a_path, object, target, transform, std::move(a_callback));
+		auto addon = art_addon::ArtAddon::Make(a_path, object, target, transform,
+			[this, callback = std::move(a_callback)](art_addon::ArtAddon* a_addon) {
+				if (IsHidden() && a_addon && a_addon->Get3D())
+				{
+					a_addon->Get3D()->SetAppCulled(true);
+				}
+
+				if (callback) { callback(a_addon); }
+			});
+
 		if (a_temporaryEffect) { visual_effects.emplace_back(std::move(addon)); }
 		else
 		{
