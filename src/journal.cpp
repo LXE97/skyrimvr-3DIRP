@@ -6,6 +6,52 @@ namespace vr3dirp
 {
 	namespace
 	{
+		void ParseQuestString(
+			std::string& a_text, RE::TESQuest* a_quest, std::uint32_t a_instanceID)
+		{
+			constexpr std::string_view kAlias = "Alias=";
+			constexpr std::string_view kAliasShortName = "Alias.ShortName=";
+			constexpr std::string_view kGlobal = "Global=";
+
+			std::size_t search_pos = 0;
+			while (true)
+			{
+				const auto tag_begin = a_text.find('<', search_pos);
+				if (tag_begin == std::string::npos) { break; }
+
+				const auto tag_end = a_text.find('>', tag_begin + 1);
+				if (tag_end == std::string::npos) { break; }
+
+				const std::string_view tag{
+					a_text.data() + tag_begin + 1, tag_end - tag_begin - 1 };
+				std::string replacement;
+
+				if (tag.starts_with(kAliasShortName) && tag.size() > kAliasShortName.size())
+				{
+					replacement = helper::ResolveAliasName(a_quest, a_instanceID,
+						tag.substr(kAliasShortName.size()), true);
+				}
+				else if (tag.starts_with(kAlias) && tag.size() > kAlias.size())
+				{
+					replacement = helper::ResolveAliasName(
+						a_quest, a_instanceID, tag.substr(kAlias.size()), false);
+				}
+				else if (tag.starts_with(kGlobal) && tag.size() > kGlobal.size())
+				{
+					replacement = helper::ResolveGlobalValue(
+						a_quest, a_instanceID, tag.substr(kGlobal.size()));
+				}
+
+				if (replacement.empty())
+				{
+					search_pos = tag_end + 1;
+					continue;
+				}
+
+				a_text.replace(tag_begin, tag_end - tag_begin + 1, replacement);
+				search_pos = tag_begin + replacement.size();
+			}
+		}
 
 		char GetStatusSymbol(const JournalQuestData& a_quest)
 		{
@@ -77,15 +123,15 @@ namespace vr3dirp
 
 					if (state == QUEST_OBJECTIVE_STATE::kDisplayed)
 					{
-						it->current_objectives.push_back(objective);
+						it->current_objectives.push_back(instance);
 					}
 					else if (state == QUEST_OBJECTIVE_STATE::kFailedDisplayed)
 					{
-						it->failed_objectives.push_back(objective);
+						it->failed_objectives.push_back(instance);
 					}
 					else
 					{
-						it->completed_objectives.push_back(objective);
+						it->completed_objectives.push_back(instance);
 					}
 				}
 			}
@@ -194,11 +240,14 @@ namespace vr3dirp
 				page_cursor.translate.y -=
 					log_lines * art_addon::AddonTextBox::kLineSpacing * L.body_text_scale + 1;
 
-				for (auto& obj : quest.current_objectives)
+				for (const auto& instance : quest.current_objectives)
 				{
 					if (page_cursor.translate.y < L.kRightPageHeight * -0.5f) { return; }
+					auto* objective = instance.Objective;
+					if (!objective) { continue; }
 					std::string temp = "0 ";
-					temp.append(obj->displayText.c_str());
+					temp.append(objective->displayText.c_str());
+					ParseQuestString(temp, objective->ownerQuest, instance.instanceID);
 					int   lines = FormatParagraph(temp, L.body_text_scale, L.body_character_spacing,
 						L.kLeftPageWidth - L.horizontal_margin);
 					auto* objective_text = page_anchor.AddChild<Widget>(page_cursor, NiPoint3{});
@@ -206,11 +255,14 @@ namespace vr3dirp
 					page_cursor.translate.y -= lines * L.objective_spacing;
 				}
 
-				for (auto& obj : quest.failed_objectives)
+				for (const auto& instance : quest.failed_objectives)
 				{
 					if (page_cursor.translate.y < L.kRightPageHeight * -0.5f) { return; }
+					auto* objective = instance.Objective;
+					if (!objective) { continue; }
 					std::string temp = "x ";
-					temp.append(obj->displayText.c_str());
+					temp.append(objective->displayText.c_str());
+					ParseQuestString(temp, objective->ownerQuest, instance.instanceID);
 					int   lines = FormatParagraph(temp, L.body_text_scale, L.body_character_spacing,
 						L.kLeftPageWidth - L.horizontal_margin);
 					auto* objective_text = page_anchor.AddChild<Widget>(page_cursor, NiPoint3{});
@@ -218,11 +270,14 @@ namespace vr3dirp
 					page_cursor.translate.y -= lines * L.objective_spacing;
 				}
 
-				for (auto& obj : quest.completed_objectives)
+				for (const auto& instance : quest.completed_objectives)
 				{
 					if (page_cursor.translate.y < L.kRightPageHeight * -0.5f) { return; }
+					auto* objective = instance.Objective;
+					if (!objective) { continue; }
 					std::string temp = "- ";
-					temp.append(obj->displayText.c_str());
+					temp.append(objective->displayText.c_str());
+					ParseQuestString(temp, objective->ownerQuest, instance.instanceID);
 					int   lines = FormatParagraph(temp, L.body_text_scale, L.body_character_spacing,
 						L.kLeftPageWidth - L.horizontal_margin);
 					auto* objective_text = page_anchor.AddChild<Widget>(page_cursor, NiPoint3{});

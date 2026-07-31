@@ -137,8 +137,8 @@ namespace helper
 		return nullptr;
 	}
 
-	void UnequipSpell(RE::Actor* a_actor, RE::SpellItem* a_spell, bool a_isLeft);
-RE::BGSEquipSlot* GetHandEquipSlot(bool a_isLeft);
+	void              UnequipSpell(RE::Actor* a_actor, RE::SpellItem* a_spell, bool a_isLeft);
+	RE::BGSEquipSlot* GetHandEquipSlot(bool a_isLeft);
 
 	RE::TESForm* GetForm(const RE::FormID a_lower_id, std::string a_mod_name);
 
@@ -196,4 +196,27 @@ RE::BGSEquipSlot* GetHandEquipSlot(bool a_isLeft);
 	void logParents(RE::NiAVObject* a_node);
 	void logChildren(
 		RE::NiAVObject* a_node, int a_depth, int a_maxDepth, const char* a_filter = nullptr);
+
+	/* Quest related functions */
+	const RE::BGSQuestInstanceText* FindQuestInstanceText(
+		const RE::TESQuest* a_quest, std::uint32_t a_instanceID);
+
+	RE::BGSBaseAlias* FindQuestAlias(const RE::TESQuest* a_quest, std::string_view a_aliasName);
+
+	RE::TESForm* FindStoredAliasNameForm(
+		const RE::TESQuest* a_quest, std::uint32_t a_instanceID, const RE::BGSBaseAlias* a_alias);
+
+	std::string ResolveReferenceName(RE::TESObjectREFR* a_reference, bool a_shortName);
+
+	std::string ResolveAliasName(const RE::TESQuest* a_quest, std::uint32_t a_instanceID,
+		std::string_view a_aliasName, bool a_shortName);
+
+	const RE::TESGlobal* FindTextGlobal(const RE::TESQuest* a_quest, std::string_view a_editorID);
+
+	std::optional<float> GetStoredGlobalValue(
+		const RE::TESQuest* a_quest, std::uint32_t a_instanceID, const RE::TESGlobal* a_global);
+
+	std::string ResolveGlobalValue(
+		const RE::TESQuest* a_quest, std::uint32_t a_instanceID, std::string_view a_editorID);
+
 }

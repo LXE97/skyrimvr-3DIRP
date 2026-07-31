@@ -36,10 +36,10 @@ namespace vr3dirp
 
 	struct JournalQuestData
 	{
-		RE::TESQuest*                       owner;
-		std::vector<RE::BGSQuestObjective*> current_objectives;
-		std::vector<RE::BGSQuestObjective*> completed_objectives;
-		std::vector<RE::BGSQuestObjective*> failed_objectives;
+		RE::TESQuest*                                owner;
+		std::vector<RE::BGSInstancedQuestObjective> current_objectives;
+		std::vector<RE::BGSInstancedQuestObjective> completed_objectives;
+		std::vector<RE::BGSInstancedQuestObjective> failed_objectives;
 
 		bool tracked{ false };
 		bool completed{ false };

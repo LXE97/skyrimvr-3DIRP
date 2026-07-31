@@ -3,6 +3,9 @@
 #include "art_addon.h"
 #include "helper_math.h"
 
+#include <iomanip>
+#include <sstream>
+
 namespace helper
 {
 	struct PlayerCharacter_Update
@@ -979,5 +982,148 @@ namespace helper
 				logChildren(child.get(), depth + 1, maxDepth, filter);
 			}
 		}
+	}
+
+	/* Quest related functions */
+	const RE::BGSQuestInstanceText* FindQuestInstanceText(
+		const RE::TESQuest* a_quest, std::uint32_t a_instanceID)
+	{
+		if (!a_quest) { return nullptr; }
+
+		for (const auto* instance : a_quest->instanceData)
+		{
+			if (instance && instance->id == a_instanceID) { return instance; }
+		}
+
+		return nullptr;
+	}
+
+	RE::BGSBaseAlias* FindQuestAlias(const RE::TESQuest* a_quest, std::string_view a_aliasName)
+	{
+		if (!a_quest) { return nullptr; }
+
+		for (auto* alias : a_quest->aliases)
+		{
+			if (alias && a_aliasName == alias->aliasName.c_str()) { return alias; }
+		}
+
+		return nullptr;
+	}
+
+	RE::TESForm* FindStoredAliasNameForm(
+		const RE::TESQuest* a_quest, std::uint32_t a_instanceID, const RE::BGSBaseAlias* a_alias)
+	{
+		const auto* instance = FindQuestInstanceText(a_quest, a_instanceID);
+		if (!instance || !a_alias) { return nullptr; }
+
+		for (const auto& entry : instance->stringData)
+		{
+			if (entry.aliasID == a_alias->aliasID)
+			{
+				return RE::TESForm::LookupByID(entry.fullNameFormID);
+			}
+		}
+
+		return nullptr;
+	}
+
+	std::string ResolveReferenceName(RE::TESObjectREFR* a_reference, bool a_shortName)
+	{
+		if (!a_reference) { return "[...]"; }
+
+		if (a_shortName)
+		{
+			if (auto* actor = a_reference->As<RE::Actor>())
+			{
+				if (auto* npc = actor->GetActorBase(); npc && !npc->shortName.empty())
+				{
+					return npc->shortName.c_str();
+				}
+			}
+		}
+
+		const auto* name = a_reference->GetDisplayFullName();
+		return name && *name ? name : "[...]";
+	}
+
+	std::string ResolveAliasName(const RE::TESQuest* a_quest, std::uint32_t a_instanceID,
+		std::string_view a_aliasName, bool a_shortName)
+	{
+		if (a_aliasName == "Player")
+		{
+			return ResolveReferenceName(RE::PlayerCharacter::GetSingleton(), a_shortName);
+		}
+
+		auto* alias = FindQuestAlias(a_quest, a_aliasName);
+		if (!alias) { return "[...]"; }
+
+		if (auto* nameForm = FindStoredAliasNameForm(a_quest, a_instanceID, alias))
+		{
+			if (a_shortName)
+			{
+				if (auto* npc = nameForm->As<RE::TESNPC>(); npc && !npc->shortName.empty())
+				{
+					return npc->shortName.c_str();
+				}
+			}
+
+			const auto* name = nameForm->GetName();
+			if (name && *name) { return name; }
+		}
+
+		if (auto* refAlias = skyrim_cast<RE::BGSRefAlias*>(alias))
+		{
+			return ResolveReferenceName(refAlias->GetReference(), a_shortName);
+		}
+
+		return "[...]";
+	}
+
+	const RE::TESGlobal* FindTextGlobal(const RE::TESQuest* a_quest, std::string_view a_editorID)
+	{
+		if (!a_quest || !a_quest->textGlobals) { return nullptr; }
+
+		for (const auto* global : *a_quest->textGlobals)
+		{
+			if (global && a_editorID == global->GetFormEditorID()) { return global; }
+		}
+
+		return nullptr;
+	}
+
+	std::optional<float> GetStoredGlobalValue(
+		const RE::TESQuest* a_quest, std::uint32_t a_instanceID, const RE::TESGlobal* a_global)
+	{
+		const auto* instance = FindQuestInstanceText(a_quest, a_instanceID);
+		if (!instance || !a_global) { return std::nullopt; }
+
+		for (const auto& entry : instance->valueData)
+		{
+			if (entry.global == a_global) { return entry.value; }
+		}
+
+		return std::nullopt;
+	}
+
+	std::string ResolveGlobalValue(
+		const RE::TESQuest* a_quest, std::uint32_t a_instanceID, std::string_view a_editorID)
+	{
+		const auto* global = FindTextGlobal(a_quest, a_editorID);
+		if (!global) { return "[...]"; }
+
+		const float value =
+			GetStoredGlobalValue(a_quest, a_instanceID, global).value_or(global->value);
+
+		std::ostringstream result;
+		if (global->type == RE::TESGlobal::Type::kFloat)
+		{
+			result << std::fixed << std::setprecision(2) << value;
+		}
+		else
+		{
+			result << std::fixed << std::setprecision(0) << value;
+		}
+
+		return result.str();
 	}
 }
