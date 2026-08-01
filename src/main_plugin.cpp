@@ -144,9 +144,6 @@ namespace vr3dirp
 		auto menu_sink = EventSink<RE::MenuOpenCloseEvent>::GetSingleton();
 		menu_sink->AddCallback(OnMenuOpenClose);
 		RE::UI::GetSingleton()->AddEventSink(menu_sink);
-
-		vrinput::AddCallback(OnSecondaryDebugButton, vr::EVRButtonId::k_EButton_A,
-			vrinput::Hand::kRight, vrinput::ActionType::kPress);
 	}
 
 	void OnMenuOpenClose(RE::MenuOpenCloseEvent const* evn)
@@ -456,6 +453,7 @@ namespace vr3dirp
 					settings.horizontal_margin =
 						helper::ReadFloatFromIni(config, "fHorizontalMargin");
 					settings.top_margin = helper::ReadFloatFromIni(config, "fTopMargin");
+					settings.show_misc_all = helper::ReadFloatFromIni(config, "bShowMiscInAll");
 					settings.hidden_quests = helper::ReadStringFromIni(config, "sHiddenQuests");
 
 					settings.right_offset_x = helper::ReadFloatFromIni(config, "fRightOffsetX");

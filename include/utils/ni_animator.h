@@ -26,11 +26,20 @@ namespace ni_animator
 	class NiAnimator
 	{
 	public:
-		using OnFinish = std::function<void()>;
+		using Callback = std::function<void()>;
 
-		void PlayImmediately(
-			const AnimationRange& a_anim, float a_speed = 1.f, OnFinish a_on_finish = {});
-		void Queue(const AnimationRange& a_anim, float a_speed = 1.f, OnFinish a_on_finish = {});
+		struct TimedCallback
+		{
+			float    time{};
+			Callback callback{};
+		};
+
+		using CallbackQueue = std::deque<TimedCallback>;
+
+		void PlayImmediately(const AnimationRange& a_anim, float a_speed = 1.f,
+			CallbackQueue a_callbacks = {});
+		void Queue(const AnimationRange& a_anim, float a_speed = 1.f,
+			CallbackQueue a_callbacks = {});
 
 		void Update(RE::NiAVObject* a_target, float a_delta);
 
@@ -56,7 +65,7 @@ namespace ni_animator
 			const AnimationRange* anim{};
 			float                 time{};
 			float                 speed{ 1.f };
-			OnFinish              on_finish{};
+			CallbackQueue         callbacks;
 		};
 
 		std::optional<Entry> current;

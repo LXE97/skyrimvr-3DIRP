@@ -21,6 +21,7 @@ namespace vr_gui
 		void Update(float a_delta) override;
 		void Hide() override;
 		void Show() override;
+		static float GetGlyphWidth(char a_character);
 
 	private:
 		struct GlyphLocation
@@ -62,7 +63,6 @@ namespace vr_gui
 		void PlaceCharacter(PoolModel& a_model, const PendingText& a_text, char a_character);
 		void SetCharacterUV(PoolModel& a_model, std::size_t a_quadIndex, char a_character);
 		bool UploadVertices(PoolModel& a_model);
-		static float GetGlyphWidth(char a_character);
 
 		static const std::unordered_map<char, float> glyph_widths;
 

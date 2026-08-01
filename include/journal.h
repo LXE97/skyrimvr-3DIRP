@@ -14,6 +14,7 @@ namespace vr3dirp
 		float       journal_scale = 0.9f;
 		float       quest_line_spacing = 0.6f;
 		std::string hidden_quests = "3372b";
+		bool        show_misc_all = true;
 	};
 
 	class Journal;
@@ -29,7 +30,7 @@ namespace vr3dirp
 	inline constexpr std::array<QuestTypeInfo, 12> kQuestTypeInfo{ {
 		{ 12, "3DIRP/Chapters/None.nif" },            // kNone
 		{ 1, "3DIRP/Chapters/MainQuest.nif" },        // kMainQuest
-		{ 6, "3DIRP/Chapters/College.nif" },       // kMagesGuild
+		{ 6, "3DIRP/Chapters/College.nif" },          // kMagesGuild
 		{ 7, "3DIRP/Chapters/ThievesGuild.nif" },     // kThievesGuild
 		{ 8, "3DIRP/Chapters/DarkBrotherhood.nif" },  // kDarkBrotherhood
 		{ 9, "3DIRP/Chapters/Companions.nif" },       // kCompanionsQuest
@@ -43,7 +44,7 @@ namespace vr3dirp
 
 	struct JournalQuestData
 	{
-		RE::TESQuest*                                owner;
+		RE::TESQuest*                               owner;
 		std::vector<RE::BGSInstancedQuestObjective> current_objectives;
 		std::vector<RE::BGSInstancedQuestObjective> completed_objectives;
 		std::vector<RE::BGSInstancedQuestObjective> failed_objectives;

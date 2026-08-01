@@ -144,8 +144,9 @@ namespace vr3dirp
 	void QuestChapter::MakePages(const Book::Layout& a_layout)
 	{
 		auto quests = GetQuestsByType(type);
-		std::erase_if(quests,
-			[this](const JournalQuestData& a_quest) { return journal.IsQuestHidden(a_quest.owner); });
+		std::erase_if(quests, [this](const JournalQuestData& a_quest) {
+			return journal.IsQuestHidden(a_quest.owner);
+		});
 
 		std::ranges::sort(quests, [](const JournalQuestData& a_lhs, const JournalQuestData& a_rhs) {
 			if (a_lhs.completed != a_rhs.completed) { return !a_lhs.completed; }
@@ -211,6 +212,7 @@ namespace vr3dirp
 		if (a_left_page)
 		{
 			auto& page_anchor = a_context.left_page;
+			//if (!page_anchor.GetChildren().empty()) { return; }
 			if (selected_quest_index < quests.size() && !IsHidden(quests[selected_quest_index]))
 			{
 				// Get selected quest from hover group
@@ -293,6 +295,7 @@ namespace vr3dirp
 		else if (!a_left_page)
 		{
 			auto& page_anchor = a_context.right_page;
+			//if (!page_anchor.GetChildren().empty()) { return; }
 
 			NiTransform zero{};
 			NiTransform page_cursor{};
@@ -353,15 +356,17 @@ namespace vr3dirp
 						if (highlight)
 						{
 							selected_quest_index = i;
-							a_context.left_page.ClearChildren();
 
 							auto&    L = a_context.layout;
-							NiPoint3 offset = { L.kRightPageWidth * -0.5f + L.horizontal_margin +
-									(L.body_text_scale + L.body_character_spacing) * 3 + 2.5f,
+							NiPoint3 offset = { 0,
 								line->GetTransform().translate.y - L.body_text_scale * 0.3f, 0 };
 							indicator->MoveTo(offset);
 
-							if (!a_context.left_page.GetChildren().empty()) Draw(a_context, true);
+							if (!journal.IsAnimating())
+							{
+								a_context.left_page.ClearChildren();
+								Draw(a_context, true);
+							}
 						}
 					},
 					// on click/activate: toggle quest tracked status
@@ -467,8 +472,7 @@ namespace vr3dirp
 		if (onActivate) { onActivate(); }
 	}
 
-	Journal::Journal(
-		bool a_isLeft, TESObjectREFR* a_objectReference, NiAVObject* a_root,
+	Journal::Journal(bool a_isLeft, TESObjectREFR* a_objectReference, NiAVObject* a_root,
 		JournalSettings& a_settings) :
 		Book(Journal::kModelPath, a_isLeft, a_objectReference, a_root, a_settings,
 			a_settings.journal_scale),
@@ -480,7 +484,7 @@ namespace vr3dirp
 		while (!hidden_ids.empty())
 		{
 			const auto delimiter = hidden_ids.find(',');
-			auto token = hidden_ids.substr(0, delimiter);
+			auto       token = hidden_ids.substr(0, delimiter);
 
 			const auto token_begin = token.find_first_not_of(" \t\r\n");
 			if (token_begin != std::string_view::npos)
@@ -525,8 +529,7 @@ namespace vr3dirp
 		const auto form_id = a_quest->GetFormID();
 		if (!hidden_quests.insert(form_id).second) { return false; }
 
-		if (!journal_settings.hidden_quests.empty() &&
-			journal_settings.hidden_quests.back() != ',')
+		if (!journal_settings.hidden_quests.empty() && journal_settings.hidden_quests.back() != ',')
 		{
 			journal_settings.hidden_quests.push_back(',');
 		}

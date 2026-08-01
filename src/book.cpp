@@ -72,7 +72,7 @@ namespace vr3dirp
 	{
 		if (animator.HasQueued()) { animator.ClearQueue(); }
 		animator.PlayImmediately(close, animation_speed * 1.2,
-			[this]() { Controller::GetSingleton()->MarkForDelete(this); });
+			{ { close.end, [this]() { Controller::GetSingleton()->MarkForDelete(this); } } });
 
 		RE::BSSoundHandle sound;
 		auto              world_pos = GetWorld().translate;
@@ -157,7 +157,7 @@ namespace vr3dirp
 			}
 
 			// Interaction Volume
-			t.translate = { -9, -2, 4 };
+			t.translate = { -7, -2, 4 };
 			auto interaction_volume = AddChild<BasicHitbox>(t, NiPoint3(18, 14, 5));
 			interaction_volume->AddBehavior<HandInteractionMode>();
 			interaction_volume->AddBehavior<BlockInputOnHover>(InputBlock::kAll);
@@ -210,14 +210,19 @@ namespace vr3dirp
 			grab_node = AddChild<GrabNode>(t, NiPoint3(2, 2, 4));
 			grab_node->SetPriority(5);
 
-			animator.PlayImmediately(open, animation_speed, [this]() { DrawCurrentPage(true); });
+			const auto initial_chapter = static_cast<int>(chapter_index);
+			const auto initial_page = static_cast<int>(page_index);
+			animator.PlayImmediately(
+				open, animation_speed, { { open.end, [this, initial_chapter, initial_page]() {
+											  DrawPage(initial_chapter, initial_page, true);
+										  } } });
 
 			RE::BSSoundHandle sound;
 			auto              world_pos = GetWorld().translate;
 			helper::InitializeSound(sound, kBookOpenSd);
 			helper::PlaySound(sound, 1, world_pos, Get3D());
 
-			DrawCurrentPage(false);
+			DrawPage(initial_chapter, initial_page, false);
 		});
 	}
 
@@ -277,8 +282,6 @@ namespace vr3dirp
 		page_index = a_page_index;
 
 		const bool turn_left = a_direction == TurnDirection::kLeft;
-		ClearPageView();
-		DrawCurrentPage(!turn_left);
 
 		float anim_speed_adjust = animation_speed;
 		if (animator.IsBusy())
@@ -290,8 +293,18 @@ namespace vr3dirp
 		animator.ClearQueue();
 
 		const auto& animation = turn_left ? flip_left : flip_right;
-		animator.Queue(
-			animation, anim_speed_adjust, [this, turn_left] { DrawCurrentPage(turn_left); });
+		const auto  draw_chapter = static_cast<int>(a_chapter_index);
+		const auto  draw_page = static_cast<int>(a_page_index);
+		animator.Queue(animation, anim_speed_adjust,
+			{ { 0.2f,
+				  [this, turn_left, draw_chapter, draw_page] {
+					  ClearPageView(!turn_left);
+					  DrawPage(draw_chapter, draw_page, !turn_left);
+				  } },
+				{ turn_left ? 1.8f : 2.7f, [this, turn_left, draw_chapter, draw_page] {
+					 ClearPageView(turn_left);
+					 DrawPage(draw_chapter, draw_page, turn_left);
+				 } } });
 
 		RE::BSSoundHandle sound;
 		auto              world_pos = GetWorld().translate;
@@ -365,23 +378,30 @@ namespace vr3dirp
 		if (on_activate) on_activate();
 	}
 
-	void Book::DrawCurrentPage(bool a_left_page)
+	void Book::DrawPage(int a_chapter, int a_page, bool a_left_page)
 	{
-		if (chapter_index >= chapters.size() || !chapters[chapter_index]) { return; }
+		if (a_chapter < 0 || a_page < 0) { return; }
 
-		auto& pages = chapters[chapter_index]->pages;
-		if (page_index >= pages.size() || !pages[page_index]) { return; }
+		const auto chapter = static_cast<std::size_t>(a_chapter);
+		const auto page = static_cast<std::size_t>(a_page);
+		if (chapter >= chapters.size() || !chapters[chapter]) { return; }
 
-		PageContext context{ layout, *left_page_parent, *right_page_parent, (int)page_index,
+		auto& pages = chapters[chapter]->pages;
+		if (page >= pages.size() || !pages[page]) { return; }
+
+		PageContext context{ layout, *left_page_parent, *right_page_parent, a_page,
 			(int)pages.size() };
 
-		pages[page_index]->Draw(context, a_left_page);
+		pages[page]->Draw(context, a_left_page);
 	}
 
-	void Book::ClearPageView()
+	void Book::ClearPageView(bool a_left)
 	{
-		left_page_parent->ClearChildren();
-		right_page_parent->ClearChildren();
+		if (a_left) { left_page_parent->ClearChildren(); }
+		else
+		{
+			right_page_parent->ClearChildren();
+		}
 	}
 
 	void Page::Draw(Book::PageContext a_context, bool a_left_page)

@@ -45,7 +45,8 @@ namespace ni_animator
 		}
 	}
 
-	void NiAnimator::PlayImmediately(const AnimationRange& a_anim, float a_speed, OnFinish a_on_finish)
+	void NiAnimator::PlayImmediately(const AnimationRange& a_anim, float a_speed,
+		CallbackQueue a_callbacks)
 	{
 		queue.clear();
 
@@ -53,18 +54,19 @@ namespace ni_animator
 		entry.anim = std::addressof(a_anim);
 		entry.time = a_anim.start;
 		entry.speed = a_speed;
-		entry.on_finish = std::move(a_on_finish);
+		entry.callbacks = std::move(a_callbacks);
 
 		current = std::move(entry);
 	}
 
-	void NiAnimator::Queue(const AnimationRange& a_anim, float a_speed, OnFinish a_on_finish)
+	void NiAnimator::Queue(
+		const AnimationRange& a_anim, float a_speed, CallbackQueue a_callbacks)
 	{
 		Entry entry;
 		entry.anim = std::addressof(a_anim);
 		entry.time = a_anim.start;
 		entry.speed = a_speed;
-		entry.on_finish = std::move(a_on_finish);
+		entry.callbacks = std::move(a_callbacks);
 
 		queue.push_back(std::move(entry));
 	}
@@ -84,23 +86,33 @@ namespace ni_animator
 		entry.time += a_delta * entry.speed;
 
 		RE::NiUpdateData ctx{};
+		const bool reached_end = entry.time >= entry.anim->end;
 
-		if (entry.time > entry.anim->end)
+		if (reached_end)
 		{
 			SetControllerTime(a_target, entry.anim->steady);
-			a_target->Update(ctx);
+		}
+		else
+		{
+			SetControllerTime(a_target, entry.time);
+		}
+		a_target->Update(ctx);
 
-			// copy the callback in case it marks the parent for deletion
-			auto on_finish = std::move(entry.on_finish);
-			current.reset();
+		const auto callback_time = reached_end ? entry.anim->end : entry.time;
+		if (!entry.callbacks.empty() && entry.callbacks.front().time <= callback_time)
+		{
+			auto callback = std::move(entry.callbacks.front().callback);
+			entry.callbacks.pop_front();
 
-			if (on_finish) { on_finish(); }
+			const bool has_due_callback = !entry.callbacks.empty() &&
+				entry.callbacks.front().time <= entry.anim->end;
+			if (reached_end && !has_due_callback) { current.reset(); }
 
+			if (callback) { callback(); }
 			return;
 		}
 
-		SetControllerTime(a_target, entry.time);
-		a_target->Update(ctx);
+		if (reached_end) { current.reset(); }
 	}
 
 	void NiAnimator::Stop() { current.reset(); }

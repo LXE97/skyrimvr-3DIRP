@@ -130,6 +130,8 @@ namespace vr3dirp
 
 		bool HandStateFilter(Hand& a_hand) const override { return a_hand.IsLeft() != isLeft; }
 
+		bool IsAnimating() {return animator.IsBusy();}
+
 	protected:
 		enum class TurnDirection
 		{
@@ -152,9 +154,9 @@ namespace vr3dirp
 		void TurnToPage(
 			std::size_t a_chapter_index, std::size_t a_page_index, TurnDirection a_direction);
 
-		void DrawCurrentPage(bool a_left_page);
+		void DrawPage(int a_chapter, int a_page, bool a_left_page);
 
-		void ClearPageView();
+		void ClearPageView(bool a_left);
 		void RestoreSpellVisual();
 
 		GrabNode* grab_node;

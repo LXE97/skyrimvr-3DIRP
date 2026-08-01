@@ -2,6 +2,7 @@
 
 #include "helper_game.h"
 #include "helper_math.h"
+#include "text_manager.h"
 #include "vr_gui_input_block.h"
 
 namespace vr_gui
@@ -19,17 +20,18 @@ namespace vr_gui
 			return line_count + static_cast<int>(std::ranges::count(a_text, '\n'));
 		}
 
-		const float character_width = a_char_scale * 0.5f;
 		const float character_spacing = a_char_spacing * a_char_scale;
-		const float character_advance = character_width + character_spacing;
-		if (character_advance <= 0.0f) {
-			return line_count + static_cast<int>(std::ranges::count(a_text, '\n'));
-		}
+		auto get_width = [&a_text, a_char_scale, character_spacing](
+			std::size_t a_begin, std::size_t a_end) {
+			if (a_begin >= a_end) { return 0.0f; }
 
-		auto get_width = [character_width, character_spacing](std::size_t a_character_count) {
-			if (a_character_count == 0) { return 0.0f; }
-			return character_width * static_cast<float>(a_character_count) +
-				character_spacing * static_cast<float>(a_character_count - 1);
+			float width = 0.0f;
+			for (auto i = a_begin; i < a_end; ++i)
+			{
+				width += TextManager::GetGlyphWidth(a_text[i]) * a_char_scale;
+			}
+			return width +
+				character_spacing * static_cast<float>(a_end - a_begin - 1);
 		};
 
 		std::size_t line_start = 0;
@@ -51,8 +53,7 @@ namespace vr_gui
 				continue;
 			}
 
-			const auto characters_on_line = i - line_start + 1;
-			if (get_width(characters_on_line) <= a_max_width || last_break == std::string::npos)
+			if (get_width(line_start, i + 1) <= a_max_width || last_break == std::string::npos)
 			{
 				continue;
 			}
