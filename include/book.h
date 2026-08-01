@@ -22,7 +22,7 @@ namespace vr3dirp
 
 	struct BookSettings
 	{
-				float light_fade = 1.f;
+		float light_fade = 1.f;
 		float font_size = 1.f;
 		float book_scale = 1.0f;
 		float rightpage_text_z_offset = 1.f;
@@ -130,7 +130,7 @@ namespace vr3dirp
 
 		bool HandStateFilter(Hand& a_hand) const override { return a_hand.IsLeft() != isLeft; }
 
-		bool IsAnimating() {return animator.IsBusy();}
+		bool IsAnimating() { return animator.IsBusy(); }
 
 	protected:
 		enum class TurnDirection

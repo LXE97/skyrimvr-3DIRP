@@ -88,7 +88,8 @@ namespace vr3dirp
 			return seen;
 		}
 
-		std::vector<JournalQuestData> GetQuestsByType(std::optional<QuestType> a_type)
+		std::vector<JournalQuestData> GetQuestsByType(
+			std::optional<QuestType> a_type, const JournalSettings& a_settings)
 		{
 			std::vector<JournalQuestData> result;
 
@@ -102,8 +103,15 @@ namespace vr3dirp
 
 				if (!quest) { continue; }
 
-				// nullopt means accept every quest type
-				if (a_type && quest->GetType() != *a_type) { continue; }
+				const auto quest_type = quest->GetType();
+				if (a_type)
+				{
+					if (quest_type != *a_type) { continue; }
+				}
+				else if (!a_settings.show_misc_all && quest_type == QuestType::kMiscellaneous)
+				{
+					continue;
+				}
 
 				const auto state = instance.InstanceState;
 
@@ -143,7 +151,7 @@ namespace vr3dirp
 
 	void QuestChapter::MakePages(const Book::Layout& a_layout)
 	{
-		auto quests = GetQuestsByType(type);
+		auto quests = GetQuestsByType(type, journal.GetJournalSettings());
 		std::erase_if(quests, [this](const JournalQuestData& a_quest) {
 			return journal.IsQuestHidden(a_quest.owner);
 		});

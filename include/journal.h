@@ -137,6 +137,7 @@ namespace vr3dirp
 		bool HideQuest(const RE::TESQuest* a_quest);
 
 		const HiddenQuestSet& GetHiddenQuests() const { return hidden_quests; }
+		const JournalSettings& GetJournalSettings() const { return journal_settings; }
 
 	private:
 		JournalSettings& journal_settings;
