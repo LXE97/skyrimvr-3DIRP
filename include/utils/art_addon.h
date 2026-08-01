@@ -51,6 +51,7 @@ namespace art_addon
 		/** Returns: Pointer to the attached NiAVObject. nullptr if initialization hasn't finished. */
 		RE::NiAVObject* Get3D() { return root3D; }
 		RE::NiAVObject* GetParent() { return attach_node; }
+		RE::TESObjectREFR* GetTarget() { return target; }
 
 		/** Keeps the addon at the requested world transform regardless of its physical parent. */
 		void SetWorldTransform(const RE::NiTransform& a_world);

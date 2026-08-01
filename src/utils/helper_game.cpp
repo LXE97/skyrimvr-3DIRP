@@ -37,6 +37,71 @@ namespace helper
 		return nullptr;
 	}
 
+	RE::NiPointer<RE::NiPointLight> MakeLight(RE::TESObjectREFR* target, RE::NiNode* attach_node,
+		const RE::NiTransform& local, float radius, float fade)
+	{
+		RE::NiPointer<RE::NiPointLight> result;
+		if (!target || !attach_node)
+		{
+			SKSE::log::trace("cannot create light without a player and attach node");
+			return result;
+		}
+
+		if (auto* lightForm = TESForm::LookupByEditorID<TESObjectLIGH>("MagicLightLightSpell01"))
+		{
+			RE::NiPointer<RE::NiLight> generatedLight{ lightForm->GenDynamic(
+				target, attach_node, true, true, true) };
+
+			if (!generatedLight)
+			{
+				SKSE::log::trace("MagicLightLightSpell01 failed to generate a light");
+			}
+			else if (auto* pointLight = netimmerse_cast<RE::NiPointLight*>(generatedLight.get()))
+			{
+				pointLight->local = local;
+				pointLight->SetLightAttenuation(radius);
+				auto& data = pointLight->GetLightRuntimeData();
+				 data.ambient = { 0.1f, 0.08f, 0.05f };
+				 data.diffuse = { 1.0f, 0.8f, 0.5f };
+				data.fade = fade;
+				RE::NiUpdateData ctx{};
+				pointLight->Update(ctx);
+
+				result.reset(pointLight);
+			}
+			else
+			{
+				if (auto* shadowScene = RE::DrawWorld::GetSingleton().mainShadowSceneNode)
+				{
+					shadowScene->RemoveLight(generatedLight.get());
+				}
+				if (auto* parent = generatedLight->parent)
+				{
+					parent->DetachChild(generatedLight.get());
+				}
+				SKSE::log::trace("MagicLightLightSpell01 did not generate a point light");
+			}
+		}
+		else
+		{
+			SKSE::log::trace("light form not found");
+		}
+
+		return result;
+	}
+
+	void DestroyLight(RE::NiPointer<RE::NiPointLight>& runtimeLight)
+	{
+		if (auto* shadowScene = RE::DrawWorld::GetSingleton().mainShadowSceneNode)
+		{
+			shadowScene->RemoveLight(runtimeLight.get());
+		}
+
+		if (auto* parent = runtimeLight->parent) { parent->DetachChild(runtimeLight.get()); }
+
+		runtimeLight.reset();
+	}
+
 	RE::FormID GetFullFormID(uint8_t a_modindex, RE::FormID a_localID)
 	{ return (a_modindex << 24) | a_localID; }
 
@@ -323,16 +388,16 @@ namespace helper
 		const std::filesystem::path& a_path, std::string_view a_setting, float a_value)
 	{
 		std::vector<std::string> lines;
-		std::ifstream             input(a_path);
-		std::string               line;
-		bool                      found = false;
+		std::ifstream            input(a_path);
+		std::string              line;
+		bool                     found = false;
 
 		while (std::getline(input, line))
 		{
 			const auto delimiter = line.find('=');
 			if (delimiter != std::string::npos)
 			{
-				auto key = std::string_view(line).substr(0, delimiter);
+				auto       key = std::string_view(line).substr(0, delimiter);
 				const auto key_begin = key.find_first_not_of(" \t");
 				const auto key_end = key.find_last_not_of(" \t");
 
@@ -372,20 +437,20 @@ namespace helper
 		return output.good();
 	}
 
-	bool WriteStringToIni(const std::filesystem::path& a_path, std::string_view a_setting,
-		std::string_view a_value)
+	bool WriteStringToIni(
+		const std::filesystem::path& a_path, std::string_view a_setting, std::string_view a_value)
 	{
 		std::vector<std::string> lines;
-		std::ifstream             input(a_path);
-		std::string               line;
-		bool                      found = false;
+		std::ifstream            input(a_path);
+		std::string              line;
+		bool                     found = false;
 
 		while (std::getline(input, line))
 		{
 			const auto delimiter = line.find('=');
 			if (delimiter != std::string::npos)
 			{
-				auto key = std::string_view(line).substr(0, delimiter);
+				auto       key = std::string_view(line).substr(0, delimiter);
 				const auto key_begin = key.find_first_not_of(" \t");
 				const auto key_end = key.find_last_not_of(" \t");
 
@@ -403,10 +468,7 @@ namespace helper
 			lines.emplace_back(std::move(line));
 		}
 
-		if (!found)
-		{
-			lines.emplace_back(std::string(a_setting) + '=' + std::string(a_value));
-		}
+		if (!found) { lines.emplace_back(std::string(a_setting) + '=' + std::string(a_value)); }
 
 		input.close();
 		std::ofstream output(a_path, std::ios::trunc);

@@ -64,6 +64,8 @@ namespace vr3dirp
 				}
 			}
 		}
+
+		if (book_light) { helper::DestroyLight(book_light); }
 	}
 
 	void Book::Close()
@@ -86,13 +88,24 @@ namespace vr3dirp
 		settings(a_settings),
 		isLeft(a_isLeft)
 	{
-		layout.kRightPageOrigin.z = settings.text_z_offset;
+		layout.right_page_origin.z = a_isLeft ? settings.rightpage_text_z_offset :
+												settings.rightpage_text_z_offset_righthand;
+		layout.left_page_origin.z -=
+			a_isLeft ? settings.leftpage_text_z_offset : settings.leftpage_text_z_offset_righthand;
 		layout.top_margin = settings.top_margin;
 		layout.horizontal_margin = settings.horizontal_margin;
-		layout.body_text_scale *= settings.font_size;
+		layout.body_text_scale = settings.font_size;
 		layout.heading_text_scale *= settings.font_size;
 		layout.objective_spacing =
 			0.2f + art_addon::AddonTextBox::kLineSpacing * layout.body_text_scale;
+
+		// if (settings.light_radius > 0.1f)
+		// {
+		// 	NiTransform book_transform;
+		// 	book_transform.translate = { 0, 0, 10 };
+		// 	book_light = helper::MakeLight(a_objectReference, a_root->AsNode(), book_transform,
+		// 		settings.light_radius, settings.light_fade);
+		// }
 
 		// store state of dismissal button when summoned to avoid instant closing
 		const auto vrgui_settings = Controller::GetSingleton()->GetSettings();
@@ -134,6 +147,15 @@ namespace vr3dirp
 
 			NiTransform t;
 
+			// Light
+			if (settings.light_fade > 0.01f)
+			{
+				NiTransform book_transform;
+				book_transform.translate = { -9, 0, 15 };
+				book_light = helper::MakeLight(
+					a->GetTarget(), a->Get3D()->AsNode(), book_transform, 5.0, settings.light_fade);
+			}
+
 			// Interaction Volume
 			t.translate = { -9, -2, 4 };
 			auto interaction_volume = AddChild<BasicHitbox>(t, NiPoint3(18, 14, 5));
@@ -153,13 +175,13 @@ namespace vr3dirp
 			for (std::size_t i = 0; i < chapters.size(); ++i) AddChapterTab(i);
 
 			// Page Content anchors
-			t.translate = layout.kRightPageOrigin;
+			t.translate = layout.right_page_origin;
 			right_page_parent = AddChild<Widget>(t,
 				NiPoint3(layout.kRightPageWidth * 0.5f, layout.kRightPageHeight * 0.5f, 1),
 				right_parent);
 			right_page_parent->AddBehavior<ExclusiveHoverGroup>();
 
-			t.translate = layout.kLeftPageOrigin;
+			t.translate = layout.left_page_origin;
 
 			// left parent is upside down
 			t.rotate = {

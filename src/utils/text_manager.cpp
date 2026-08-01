@@ -6,10 +6,45 @@ namespace vr_gui
 {
 	using namespace RE;
 
+	// Estimated from the font atlas. Widths are normalized to the widest glyph (W = 1.0).
+	const std::unordered_map<char, float> TextManager::glyph_widths{
+		{ ' ', 0.45F }, { '!', 0.30F }, { '"', 0.32F }, { '#', 0.62F },
+		{ '$', 0.58F }, { '%', 0.90F }, { '&', 0.80F }, { '\'', 0.20F },
+		{ '(', 0.38F }, { ')', 0.38F }, { '*', 0.45F }, { '+', 0.68F },
+		{ ',', 0.28F }, { '-', 0.48F }, { '.', 0.25F }, { '/', 0.45F },
+		{ '0', 0.65F }, { '1', 0.42F }, { '2', 0.58F }, { '3', 0.58F },
+		{ '4', 0.62F }, { '5', 0.58F }, { '6', 0.62F }, { '7', 0.58F },
+		{ '8', 0.62F }, { '9', 0.62F }, { ':', 0.26F }, { ';', 0.30F },
+		{ '<', 0.62F }, { '=', 0.62F }, { '>', 0.62F }, { '?', 0.55F },
+		{ '@', 0.80F }, { 'A', 0.69F }, { 'B', 0.62F }, { 'C', 0.68F },
+		{ 'D', 0.70F }, { 'E', 0.60F }, { 'F', 0.58F }, { 'G', 0.72F },
+		{ 'H', 0.72F }, { 'I', 0.34F }, { 'J', 0.45F }, { 'K', 0.68F },
+		{ 'L', 0.56F }, { 'M', 0.92F }, { 'N', 0.76F }, { 'O', 0.78F },
+		{ 'P', 0.62F }, { 'Q', 0.80F }, { 'R', 0.68F }, { 'S', 0.62F },
+		{ 'T', 0.66F }, { 'U', 0.74F }, { 'V', 0.76F }, { 'W', 1.00F },
+		{ 'X', 0.73F }, { 'Y', 0.70F }, { 'Z', 0.66F }, { '[', 0.34F },
+		{ '\\', 0.45F }, { ']', 0.34F }, { '^', 0.50F }, { '_', 0.70F },
+		{ '`', 0.25F }, { 'a', 0.58F }, { 'b', 0.62F }, { 'c', 0.54F },
+		{ 'd', 0.65F }, { 'e', 0.55F }, { 'f', 0.42F }, { 'g', 0.64F },
+		{ 'h', 0.63F }, { 'i', 0.30F }, { 'j', 0.34F }, { 'k', 0.59F },
+		{ 'l', 0.30F }, { 'm', 0.82F }, { 'n', 0.62F }, { 'o', 0.61F },
+		{ 'p', 0.63F }, { 'q', 0.63F }, { 'r', 0.43F }, { 's', 0.51F },
+		{ 't', 0.42F }, { 'u', 0.63F }, { 'v', 0.58F }, { 'w', 0.80F },
+		{ 'x', 0.59F }, { 'y', 0.58F }, { 'z', 0.52F }, { '{', 0.38F },
+		{ '|', 0.22F }, { '}', 0.38F }, { '~', 0.63F }
+	};
+
 	TextManager::TextManager(Widget* a_parent, NiTransform a_local, std::string_view a_modelPath) :
 		Widget(a_parent, std::move(a_local), NiPoint3{}),
 		model_path(a_modelPath)
 	{ CreateModel(); }
+
+	float TextManager::GetGlyphWidth(char a_character)
+	{
+		const auto glyph = glyph_widths.find(a_character);
+		if (glyph == glyph_widths.end()) { return 1.0F; }
+		return glyph->second * art_addon::NifChar::kCharacterWidth;
+	}
 
 	void TextManager::AddText(const Widget* a_owner, std::string_view a_text, float a_spacing)
 	{
@@ -164,7 +199,7 @@ namespace vr_gui
 				if (character == ' ')
 				{
 					++text.next_character;
-					text.cursor.translate.x += art_addon::NifChar::kCharacterWidth + text.spacing;
+					text.cursor.translate.x += GetGlyphWidth(character) + text.spacing;
 					continue;
 				}
 
@@ -180,7 +215,7 @@ namespace vr_gui
 					GlyphLocation{ models.size() - 1, pool.used_quads };
 				++pool.used_quads;
 				++text.next_character;
-				text.cursor.translate.x += art_addon::NifChar::kCharacterWidth + text.spacing;
+				text.cursor.translate.x += GetGlyphWidth(character) + text.spacing;
 				modified = true;
 			}
 
@@ -192,7 +227,10 @@ namespace vr_gui
 	void TextManager::PlaceCharacter(
 		PoolModel& a_model, const PendingText& a_text, char a_character)
 	{
-		const auto glyph_transform = a_text.transform * a_text.cursor;
+		auto glyph_cursor = a_text.cursor;
+		glyph_cursor.translate.x -=
+			(art_addon::NifChar::kCharacterWidth - GetGlyphWidth(a_character)) * 0.5F;
+		const auto glyph_transform = a_text.transform * glyph_cursor;
 		const auto first_vertex = a_model.used_quads * kVerticesPerQuad;
 
 		for (std::size_t i = 0; i < kVerticesPerQuad; ++i)

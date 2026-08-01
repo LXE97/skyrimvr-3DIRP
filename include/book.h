@@ -22,9 +22,13 @@ namespace vr3dirp
 
 	struct BookSettings
 	{
+				float light_fade = 1.f;
 		float font_size = 1.f;
 		float book_scale = 1.0f;
-		float text_z_offset = 1.25f;
+		float rightpage_text_z_offset = 1.f;
+		float leftpage_text_z_offset = 0.03f;
+		float rightpage_text_z_offset_righthand = 1.f;
+		float leftpage_text_z_offset_righthand = 0.03f;
 		float horizontal_margin = 0.9f;
 		float top_margin = 1.0f;
 
@@ -57,8 +61,8 @@ namespace vr3dirp
 
 		struct Layout
 		{
-			const NiPoint3 kLeftPageOrigin = { -3.8, 0.0, -0.03 };
-			NiPoint3       kRightPageOrigin = { 9.05, -0.2, 1.25 };
+			NiPoint3       left_page_origin = { -3.8, 0.0, 0 };
+			NiPoint3       right_page_origin = { 9.05, -0.2, 0 };
 			const NiPoint3 kTabOffset = { 0.0f, 9.5f, 1.1f };
 
 			static constexpr float kRightPageWidth = 16;
@@ -71,9 +75,9 @@ namespace vr3dirp
 			float                  top_margin = 1.0f;
 			float                  horizontal_margin = 0.9f;
 
-			float                  body_text_scale = 1.7f;
-			float                  heading_text_scale = 1.0f;
-			static constexpr float body_character_spacing = -0.15f;
+			float                  body_text_scale = 1.0f;
+			float                  heading_text_scale = 1.2f;
+			static constexpr float body_character_spacing = 0.0f;
 			static constexpr float page_number_character_spacing = -0.15f;
 
 			float quest_line_spacing = 0.6f;
@@ -174,6 +178,8 @@ namespace vr3dirp
 		RE::SpellItem* stored_spell{};
 
 		ModeHandle hand_mode;
+
+		RE::NiPointer<RE::NiPointLight> book_light;
 	};
 
 	class Page

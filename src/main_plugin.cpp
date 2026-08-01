@@ -144,6 +144,9 @@ namespace vr3dirp
 		auto menu_sink = EventSink<RE::MenuOpenCloseEvent>::GetSingleton();
 		menu_sink->AddCallback(OnMenuOpenClose);
 		RE::UI::GetSingleton()->AddEventSink(menu_sink);
+
+		vrinput::AddCallback(OnSecondaryDebugButton, vr::EVRButtonId::k_EButton_A,
+			vrinput::Hand::kRight, vrinput::ActionType::kPress);
 	}
 
 	void OnMenuOpenClose(RE::MenuOpenCloseEvent const* evn)
@@ -284,9 +287,6 @@ namespace vr3dirp
 	static bool OnSecondaryDebugButton(const vrinput::ModInputEvent& e)
 	{
 		static bool toggle = true;
-
-		vr_gui::Controller::GetSingleton()->ShowHitboxes(toggle);
-		ShowHands(toggle);
 
 		if (e.button_state == vrinput::ButtonState::kButtonDown) { toggle ^= 1; }
 
@@ -439,12 +439,20 @@ namespace vr3dirp
 						ParseBookType(helper::ReadStringFromIni(config, "sBellySecondary"));
 					belly_both = ParseBookType(helper::ReadStringFromIni(config, "sBellyBoth"));
 
+					settings.light_fade = helper::ReadFloatFromIni(config, "fLightIntensity");
 					settings.font_size = helper::ReadFloatFromIni(config, "fFontSize");
 					settings.book_scale = helper::ReadFloatFromIni(config, "fBookScale");
 					settings.journal_scale = helper::ReadFloatFromIni(config, "fJournalScale");
 					settings.quest_line_spacing =
 						helper::ReadFloatFromIni(config, "fQuestLineSpacing");
-					settings.text_z_offset = helper::ReadFloatFromIni(config, "fTextZOffset");
+					settings.rightpage_text_z_offset =
+						helper::ReadFloatFromIni(config, "fRightPageTextZOffset");
+					settings.rightpage_text_z_offset_righthand =
+						helper::ReadFloatFromIni(config, "fRightPageTextZOffsetRight");
+					settings.leftpage_text_z_offset =
+						helper::ReadFloatFromIni(config, "fLeftPageTextZOffset");
+					settings.leftpage_text_z_offset_righthand =
+						helper::ReadFloatFromIni(config, "fLeftPageTextZOffsetRight");
 					settings.horizontal_margin =
 						helper::ReadFloatFromIni(config, "fHorizontalMargin");
 					settings.top_margin = helper::ReadFloatFromIni(config, "fTopMargin");
