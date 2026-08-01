@@ -5,7 +5,8 @@
 namespace vr3dirp
 {
 	using namespace art_addon;
-	static constexpr float kHiddenSpellScale = 0.001f;
+
+	static constexpr float kChapterGlow = 1.9f;
 
 	namespace
 	{
@@ -295,18 +296,21 @@ namespace vr3dirp
 		NiTransform transform;
 		transform.translate = layout.kTabOffset;
 		transform.translate.y -= static_cast<float>(a_index) * layout.tab_spacing;
-		transform.translate.x -= (a_index % 2) * 0.3;
+		transform.translate.x += 0.1;
+		transform.translate.x -= (a_index % 2) * 0.2;
 		transform.translate.z -= 0.1 * a_index;
 
 		auto* tab = tab_container->AddChild<Widget>(transform, NiPoint3(1.0, 0.3, 0.25));
 		tab->AddModel(chapters[a_index]->model_path, false, [this, a_index](ArtAddon* a_model) {
-			helper::SetGlowMult(
-				a_model ? a_model->Get3D() : nullptr, chapter_index == a_index ? 0.9f : 0.0f);
+			helper::SetGlowMult(a_model ? a_model->Get3D() : nullptr,
+				chapter_index == a_index ? kChapterGlow : 0.0f);
 		});
 		tab->SetPriority(tab_container->GetPriority() + 1);
 		tab->AddBehavior<SelectionHighlight>(
 			tab_container->GetBehavior<ExclusiveHoverGroup>(),
-			[tab](bool highlight) { helper::SetGlowMult(tab->Get3D(), highlight ? 0.9f : 0.0f); },
+			[tab](bool highlight) {
+				helper::SetGlowMult(tab->Get3D(), highlight ? kChapterGlow : 0.0f);
+			},
 			[this, a_index] { TurnToChapter((int)a_index); },
 			[this, a_index] { return GetChapterIndex() == a_index; });
 

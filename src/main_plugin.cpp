@@ -196,6 +196,8 @@ namespace vr3dirp
 		helper::WriteFloatToIni(config_path, "fLeftRotateX", settings.left_rotate_x);
 		helper::WriteFloatToIni(config_path, "fLeftRotateY", settings.left_rotate_y);
 		helper::WriteFloatToIni(config_path, "fLeftRotateZ", settings.left_rotate_z);
+
+		helper::WriteStringToIni(config_path, "sHiddenQuests", settings.hidden_quests);
 	}
 
 	void OnGameLoad()

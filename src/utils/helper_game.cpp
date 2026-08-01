@@ -372,6 +372,54 @@ namespace helper
 		return output.good();
 	}
 
+	bool WriteStringToIni(const std::filesystem::path& a_path, std::string_view a_setting,
+		std::string_view a_value)
+	{
+		std::vector<std::string> lines;
+		std::ifstream             input(a_path);
+		std::string               line;
+		bool                      found = false;
+
+		while (std::getline(input, line))
+		{
+			const auto delimiter = line.find('=');
+			if (delimiter != std::string::npos)
+			{
+				auto key = std::string_view(line).substr(0, delimiter);
+				const auto key_begin = key.find_first_not_of(" \t");
+				const auto key_end = key.find_last_not_of(" \t");
+
+				if (key_begin != std::string_view::npos)
+				{
+					key = key.substr(key_begin, key_end - key_begin + 1);
+					if (key == a_setting)
+					{
+						line = std::string(a_setting) + '=' + std::string(a_value);
+						found = true;
+					}
+				}
+			}
+
+			lines.emplace_back(std::move(line));
+		}
+
+		if (!found)
+		{
+			lines.emplace_back(std::string(a_setting) + '=' + std::string(a_value));
+		}
+
+		input.close();
+		std::ofstream output(a_path, std::ios::trunc);
+		if (!output.is_open())
+		{
+			SKSE::log::error("Unable to write INI setting {}", a_setting);
+			return false;
+		}
+
+		for (const auto& output_line : lines) { output << output_line << '\n'; }
+		return output.good();
+	}
+
 	int ReadIntFromIni(std::ifstream& a_file, std::string a_setting)
 	{
 		if (a_file.is_open())

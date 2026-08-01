@@ -58,8 +58,8 @@ namespace vr3dirp
 		char GetStatusSymbol(const JournalQuestData& a_quest)
 		{
 			//if (a_quest.failed) return 'x';
-			if (a_quest.completed) return '/';
-			if (a_quest.tracked) return '>';
+			if (a_quest.completed) return 0x82;
+			if (a_quest.tracked) return 0x80;
 			return 0x7F;
 		}
 
@@ -144,6 +144,8 @@ namespace vr3dirp
 	void QuestChapter::MakePages(const Book::Layout& a_layout)
 	{
 		auto quests = GetQuestsByType(type);
+		std::erase_if(quests,
+			[this](const JournalQuestData& a_quest) { return journal.IsQuestHidden(a_quest.owner); });
 
 		std::ranges::sort(quests, [](const JournalQuestData& a_lhs, const JournalQuestData& a_rhs) {
 			if (a_lhs.completed != a_rhs.completed) { return !a_lhs.completed; }
@@ -247,7 +249,7 @@ namespace vr3dirp
 					if (page_cursor.translate.y < L.kRightPageHeight * -0.5f) { return; }
 					auto* objective = instance.Objective;
 					if (!objective) { continue; }
-					std::string temp = "0 ";
+					std::string temp = std::string(1, 0x83) + ' ';
 					temp.append(objective->displayText.c_str());
 					ParseQuestString(temp, objective->ownerQuest, instance.instanceID);
 					int   lines = FormatParagraph(temp, L.body_text_scale, L.body_character_spacing,
@@ -262,7 +264,7 @@ namespace vr3dirp
 					if (page_cursor.translate.y < L.kRightPageHeight * -0.5f) { return; }
 					auto* objective = instance.Objective;
 					if (!objective) { continue; }
-					std::string temp = "x ";
+					std::string temp = std::string(1, 0x81) + ' ';
 					temp.append(objective->displayText.c_str());
 					ParseQuestString(temp, objective->ownerQuest, instance.instanceID);
 					int   lines = FormatParagraph(temp, L.body_text_scale, L.body_character_spacing,
@@ -277,7 +279,7 @@ namespace vr3dirp
 					if (page_cursor.translate.y < L.kRightPageHeight * -0.5f) { return; }
 					auto* objective = instance.Objective;
 					if (!objective) { continue; }
-					std::string temp = "- ";
+					std::string temp = std::string(1, 0x82) + ' ';
 					temp.append(objective->displayText.c_str());
 					ParseQuestString(temp, objective->ownerQuest, instance.instanceID);
 					int   lines = FormatParagraph(temp, L.body_text_scale, L.body_character_spacing,
@@ -369,7 +371,7 @@ namespace vr3dirp
 						{
 							quest.tracked ^= 1;
 							helper::SetQuestTracked(quest.owner, quest.tracked);
-							textmanager->SetCharacter(line_text, 0, quest.tracked ? '>' : 0x7F);
+							textmanager->SetCharacter(line_text, 0, quest.tracked ? 0x80 : 0x7F);
 						}
 					},
 					// IsSelected: check selected quest index

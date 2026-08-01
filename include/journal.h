@@ -29,7 +29,7 @@ namespace vr3dirp
 	inline constexpr std::array<QuestTypeInfo, 12> kQuestTypeInfo{ {
 		{ 12, "3DIRP/Chapters/None.nif" },            // kNone
 		{ 1, "3DIRP/Chapters/MainQuest.nif" },        // kMainQuest
-		{ 6, "3DIRP/Chapters/MagesGuild.nif" },       // kMagesGuild
+		{ 6, "3DIRP/Chapters/College.nif" },       // kMagesGuild
 		{ 7, "3DIRP/Chapters/ThievesGuild.nif" },     // kThievesGuild
 		{ 8, "3DIRP/Chapters/DarkBrotherhood.nif" },  // kDarkBrotherhood
 		{ 9, "3DIRP/Chapters/Companions.nif" },       // kCompanionsQuest
