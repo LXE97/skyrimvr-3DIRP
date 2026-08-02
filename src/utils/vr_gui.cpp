@@ -7,8 +7,8 @@
 
 namespace vr_gui
 {
-	static const char* kHelperModelPath = "HelperSphere.nif";
-	static const char* kDebugModelPath = "DebugSphere.nif";
+	static const char* kHelperModelPath = "3DIRP/vr_gui/HelperSphere.nif";
+	static const char* kDebugModelPath = "3DIRP/vr_gui/DebugSphere.nif";
 
 	void Controller::Cleanup()
 	{

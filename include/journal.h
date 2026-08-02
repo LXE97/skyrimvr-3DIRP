@@ -14,7 +14,7 @@ namespace vr3dirp
 		float       journal_scale = 0.9f;
 		float       quest_line_spacing = 0.6f;
 		std::string hidden_quests = "3372b";
-		bool        show_misc_all = true;
+		int        show_misc_all = 0;
 	};
 
 	class Journal;
@@ -25,21 +25,22 @@ namespace vr3dirp
 		std::string_view chapter_model_path;
 	};
 
-	inline constexpr std::string_view kAllQuestsChapterModelPath = "3DIRP/Chapters/All.nif";
+	inline constexpr std::string_view kAllQuestsChapterModelPath = "3DIRP/Journal/Chapters/All.nif";
+	inline constexpr std::string_view kFavoritesChapterModelPath = "3DIRP/Journal/Chapters/Favorites.nif";
 
 	inline constexpr std::array<QuestTypeInfo, 12> kQuestTypeInfo{ {
-		{ 12, "3DIRP/Chapters/None.nif" },            // kNone
-		{ 2, "3DIRP/Chapters/MainQuest.nif" },        // kMainQuest
-		{ 6, "3DIRP/Chapters/College.nif" },          // kMagesGuild
-		{ 7, "3DIRP/Chapters/ThievesGuild.nif" },     // kThievesGuild
-		{ 8, "3DIRP/Chapters/DarkBrotherhood.nif" },  // kDarkBrotherhood
-		{ 9, "3DIRP/Chapters/Companions.nif" },       // kCompanionsQuest
-		{ 1, "3DIRP/Chapters/Miscellaneous.nif" },    // kMiscellaneous
-		{ 4, "3DIRP/Chapters/Daedric.nif" },          // kDaedric
-		{ 3, "3DIRP/Chapters/SideQuest.nif" },        // kSideQuest
-		{ 5, "3DIRP/Chapters/CivilWar.nif" },         // kCivilWar
-		{ 10, "3DIRP/Chapters/Dawnguard.nif" },       // kDLC01_Vampire
-		{ 11, "3DIRP/Chapters/Dragonborn.nif" },      // kDLC02_Dragonborn
+		{ 12, "3DIRP/Journal/Chapters/None.nif" },            // kNone
+		{ 3, "3DIRP/Journal/Chapters/MainQuest.nif" },        // kMainQuest
+		{ 6, "3DIRP/Journal/Chapters/College.nif" },          // kMagesGuild
+		{ 7, "3DIRP/Journal/Chapters/ThievesGuild.nif" },     // kThievesGuild
+		{ 8, "3DIRP/Journal/Chapters/DarkBrotherhood.nif" },  // kDarkBrotherhood
+		{ 9, "3DIRP/Journal/Chapters/Companions.nif" },       // kCompanionsQuest
+		{ 1, "3DIRP/Journal/Chapters/Miscellaneous.nif" },    // kMiscellaneous
+		{ 4, "3DIRP/Journal/Chapters/Daedric.nif" },          // kDaedric
+		{ 2, "3DIRP/Journal/Chapters/SideQuest.nif" },        // kSideQuest
+		{ 5, "3DIRP/Journal/Chapters/CivilWar.nif" },         // kCivilWar
+		{ 10, "3DIRP/Journal/Chapters/Dawnguard.nif" },       // kDLC01_Vampire
+		{ 11, "3DIRP/Journal/Chapters/Dragonborn.nif" },      // kDLC02_Dragonborn
 	} };
 
 	struct JournalQuestData
@@ -60,25 +61,29 @@ namespace vr3dirp
 
 		if (index < kQuestTypeInfo.size()) { return kQuestTypeInfo[index]; }
 
-		return { std::numeric_limits<std::uint8_t>::max(), "3DIRP/Chapters/None.nif" };
+		return { std::numeric_limits<std::uint8_t>::max(), "3DIRP/Journal/Chapters/None.nif" };
 	}
 
 	class QuestChapter : public Chapter
 	{
 	public:
-		QuestChapter(std::optional<QuestType> a_type, Journal& a_journal) :
+		QuestChapter(std::optional<QuestType> a_type, Journal& a_journal, bool a_tracked_only = false) :
 			Chapter(std::string{
-				a_type ? GetQuestTypeInfo(*a_type).chapter_model_path : "3DIRP/Chapters/All.nif" }),
+				a_type ? GetQuestTypeInfo(*a_type).chapter_model_path :
+						 a_tracked_only ? kFavoritesChapterModelPath : kAllQuestsChapterModelPath }),
 			type(a_type),
-			journal(a_journal)
+			journal(a_journal),
+			favorites(a_tracked_only)
 		{}
 
 		void MakePages(const Book::Layout& a_layout) override;
+		void OnSelected(const Book::Layout& a_layout) override;
 
 		std::optional<QuestType> type;
 
 	private:
 		Journal& journal;
+		bool favorites {false};
 	};
 
 	class QuestPage : public Page
@@ -89,6 +94,7 @@ namespace vr3dirp
 			journal(a_journal)
 		{}
 
+		void OnSelected() override { selected_quest_index = 0; }
 		void Draw(Book::PageContext a_context, bool a_left_page) override;
 		void HideQuest(const JournalQuestData& a_quest, Book::PageContext a_context);
 
@@ -129,7 +135,7 @@ namespace vr3dirp
 	class Journal : public Book
 	{
 	public:
-		static constexpr std::string_view kModelPath = "3DIRP/journal.nif";
+		static constexpr std::string_view kModelPath = "3DIRP/Journal/journal.nif";
 
 		Journal(bool a_isLeft, TESObjectREFR* a_objectReference, NiAVObject* a_root,
 			JournalSettings& a_settings);

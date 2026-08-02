@@ -59,7 +59,7 @@ void MessageListener(SKSE::MessagingInterface::Message* message)
 		if (g_vrikInterface) { info("Got VRIK interface"); }
 		else
 		{
-			error("VRIK interface not found");
+			error("Plugin disabled: VRIK interface not found");
 			g_plugin_error = true;
 		}
 		break;

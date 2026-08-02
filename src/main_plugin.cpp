@@ -140,8 +140,8 @@ namespace vr3dirp
 
 		RegisterVRInputCallback();
 
-		g_vrikInterface->addGestureAction(VrikActionSummonBookLeft, "Book Left");
-		g_vrikInterface->addGestureAction(VrikActionSummonBookRight, "Book Right");
+		g_vrikInterface->addGestureAction(VrikActionSummonBookLeft, "Journal Left");
+		g_vrikInterface->addGestureAction(VrikActionSummonBookRight, "Journal Right");
 
 		auto menu_sink = EventSink<RE::MenuOpenCloseEvent>::GetSingleton();
 		menu_sink->AddCallback(OnMenuOpenClose);
@@ -279,22 +279,22 @@ namespace vr3dirp
 		update_hand(false, g_right_hand_center, g_right_hand_extents);
 	}
 
-	static bool OnDebugButton(const vrinput::ModInputEvent& e)
-	{
-		static bool toggle = true;
+	// static bool OnDebugButton(const vrinput::ModInputEvent& e)
+	// {
+	// 	static bool toggle = true;
 
-		if (e.button_state == vrinput::ButtonState::kButtonDown) { toggle ^= 1; }
-		return false;
-	}
+	// 	if (e.button_state == vrinput::ButtonState::kButtonDown) { toggle ^= 1; }
+	// 	return false;
+	// }
 
-	static bool OnSecondaryDebugButton(const vrinput::ModInputEvent& e)
-	{
-		static bool toggle = true;
+	// static bool OnSecondaryDebugButton(const vrinput::ModInputEvent& e)
+	// {
+	// 	static bool toggle = true;
 
-		if (e.button_state == vrinput::ButtonState::kButtonDown) { toggle ^= 1; }
+	// 	if (e.button_state == vrinput::ButtonState::kButtonDown) { toggle ^= 1; }
 
-		return false;
-	}
+	// 	return false;
+	// }
 
 	void CreateHolsters()
 	{
@@ -464,7 +464,7 @@ namespace vr3dirp
 					settings.horizontal_margin =
 						helper::ReadFloatFromIni(config, "fHorizontalMargin");
 					settings.top_margin = helper::ReadFloatFromIni(config, "fTopMargin");
-					settings.show_misc_all = helper::ReadFloatFromIni(config, "bShowMiscInAll");
+					settings.show_misc_all = helper::ReadIntFromIni(config, "iShowMiscInAll");
 					settings.hidden_quests = helper::ReadStringFromIni(config, "sHiddenQuests");
 
 					settings.right_offset_x = helper::ReadFloatFromIni(config, "fRightOffsetX");

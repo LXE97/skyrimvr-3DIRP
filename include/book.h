@@ -61,22 +61,23 @@ namespace vr3dirp
 
 		struct Layout
 		{
-			NiPoint3       left_page_origin = { -3.8, 0.0, 0 };
-			NiPoint3       right_page_origin = { 9.05, -0.2, 0 };
-			const NiPoint3 kTabOffset = { 0.0f, 9.5f, 1.1f };
+			NiPoint3 left_page_origin = { -3.8, 0.0, 0 };
+			NiPoint3 right_page_origin = { 9.05, -0.2, 0 };
+			NiPoint3 tab_origin = { 0.0f, 9.5f, 1.1f };
+			float tab_scale = 1.f;
 
 			static constexpr float kRightPageWidth = 16;
 			static constexpr float kLeftPageWidth = 6.94 * 2;
 			static constexpr float kRightPageHeight = 11.9 * 2;
 			static constexpr float kLeftPageHeight = 11.69 * 2;
 
-			static constexpr float tab_spacing = 1.8f;
-			static constexpr float bottom_margin = 0.0f;
-			float                  top_margin = 1.0f;
-			float                  horizontal_margin = 0.9f;
+			float tab_spacing = 1.8f;
+			float bottom_margin = 0.0f;
+			float top_margin = 1.0f;
+			float horizontal_margin = 0.9f;
+			float body_text_scale = 1.0f;
+			float heading_text_scale = 1.2f;
 
-			float                  body_text_scale = 1.0f;
-			float                  heading_text_scale = 1.2f;
 			static constexpr float body_character_spacing = 0.0f;
 			static constexpr float page_number_character_spacing = -0.15f;
 
@@ -84,7 +85,7 @@ namespace vr3dirp
 			float objective_spacing =
 				0.2f + art_addon::AddonTextBox::kLineSpacing * body_text_scale;
 
-			std::string_view body_font_model_path = "3DIRP/char_2048.nif";
+			std::string_view body_font_model_path = "3DIRP/vr_gui/char_2048.nif";
 		};
 
 		struct PageContext
@@ -93,15 +94,17 @@ namespace vr3dirp
 			Widget&       left_page;
 			Widget&       right_page;
 			int           page_index;
+			int           chapter_index;
 			int           num_pages;
 		};
 
-		static constexpr std::string_view kModelPath = "3DIRP/custom.nif";
-		static constexpr const char*      kDefaultParent = "Book Pages Nub";
-		static constexpr const char*      kChapterParent = "Book Pages Nub";
-		static constexpr const char*      kRightParent = "Book Pages";
-		static constexpr const char*      kLeftParent = "Book CoverPage Turn04";
-		static constexpr float            kDefaultWindowRadius = 40.f;
+		static constexpr std::string_view kModelPath =
+			"clutter/books/book02/character assets/spelltomealteration.nif";
+		static constexpr const char* kDefaultParent = "Book Pages Nub";
+		static constexpr const char* kChapterParent = "Book Pages Nub";
+		static constexpr const char* kRightParent = "Book Pages";
+		static constexpr const char* kLeftParent = "Book CoverPage Turn04";
+		static constexpr float       kDefaultWindowRadius = 40.f;
 
 		static constexpr const char* kBookOpenSd = "ITMBookOpenSD";
 		static constexpr const char* kBookCloseSd = "ITMBookCloseSD";
@@ -130,7 +133,7 @@ namespace vr3dirp
 
 		bool HandStateFilter(Hand& a_hand) const override { return a_hand.IsLeft() != isLeft; }
 
-		bool IsAnimating() { return animator.IsBusy(); }
+		bool IsAnimating() const { return animator.IsBusy(); }
 
 	protected:
 		enum class TurnDirection
@@ -188,6 +191,7 @@ namespace vr3dirp
 	{
 	public:
 		virtual ~Page() = default;
+		virtual void OnSelected() {}
 		virtual void Draw(Book::PageContext a_context, bool a_left_page);
 	};
 
@@ -203,6 +207,7 @@ namespace vr3dirp
 			pages.emplace_back(std::make_unique<Page>());
 			pages.emplace_back(std::make_unique<Page>());
 		};
+		virtual void OnSelected(const Book::Layout& layout) {MakePages(layout);}
 
 		std::vector<std::unique_ptr<Page>> pages;
 		Widget*                            tab{};
@@ -384,15 +389,17 @@ namespace vr3dirp
 		using OnHighlight = std::function<void(bool)>;
 		using OnActivate = std::function<void()>;
 		using IsSelected = std::function<bool()>;
+		using CanInteract = std::function<bool()>;
 
 		SelectionHighlight(Widget* a_parent, ExclusiveHoverGroup* a_hover_group,
 			OnHighlight a_on_highlight, OnActivate a_on_activate = {},
-			IsSelected a_is_selected = {}) :
+			IsSelected a_is_selected = {}, CanInteract a_can_interact = {}) :
 			Behavior(a_parent),
 			hover_group(a_hover_group),
-			on_highlight(std::move(a_on_highlight)),
 			is_selected(std::move(a_is_selected)),
-			on_activate(std::move(a_on_activate))
+			on_activate(std::move(a_on_activate)),
+			on_highlight(std::move(a_on_highlight)),
+			can_interact(std::move(a_can_interact))
 		{}
 
 		void Update(float a_delta) override;
@@ -404,6 +411,7 @@ namespace vr3dirp
 		IsSelected           is_selected{};
 		OnActivate           on_activate{};
 		OnHighlight          on_highlight{};
+		CanInteract          can_interact{};
 	};
 
 }

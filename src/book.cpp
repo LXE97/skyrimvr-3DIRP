@@ -1,7 +1,7 @@
 #include "book.h"
 
-#include "helper_game.h"
 #include "equipment_checker.h"
+#include "helper_game.h"
 
 namespace vr3dirp
 {
@@ -99,14 +99,6 @@ namespace vr3dirp
 		layout.heading_text_scale *= settings.font_size;
 		layout.objective_spacing =
 			0.2f + art_addon::AddonTextBox::kLineSpacing * layout.body_text_scale;
-
-		// if (settings.light_radius > 0.1f)
-		// {
-		// 	NiTransform book_transform;
-		// 	book_transform.translate = { 0, 0, 10 };
-		// 	book_light = helper::MakeLight(a_objectReference, a_root->AsNode(), book_transform,
-		// 		settings.light_radius, settings.light_fade);
-		// }
 
 		// store state of dismissal button when summoned to avoid instant closing
 		const auto vrgui_settings = Controller::GetSingleton()->GetSettings();
@@ -213,17 +205,20 @@ namespace vr3dirp
 
 			const auto initial_chapter = static_cast<int>(chapter_index);
 			const auto initial_page = static_cast<int>(page_index);
-			animator.PlayImmediately(
-				open, animation_speed, { { open.end, [this, initial_chapter, initial_page]() {
-											  DrawPage(initial_chapter, initial_page, true);
-										  } } });
+
+			animator.PlayImmediately(open, animation_speed,
+				{ { open.end * 0.1f,
+					  [this, initial_chapter, initial_page]() {
+						  DrawPage(initial_chapter, initial_page, false);
+					  } },
+					{ open.end * 0.6f, [this, initial_chapter, initial_page]() {
+						 DrawPage(initial_chapter, initial_page, true);
+					 } } });
 
 			RE::BSSoundHandle sound;
 			auto              world_pos = GetWorld().translate;
 			helper::InitializeSound(sound, kBookOpenSd);
 			helper::PlaySound(sound, 1, world_pos, Get3D());
-
-			DrawPage(initial_chapter, initial_page, false);
 		});
 	}
 
@@ -261,9 +256,14 @@ namespace vr3dirp
 
 	void Book::TurnToChapter(int a_index)
 	{
-		if (a_index == (int)chapter_index) { return; }
+		if (chapters.empty()) { return; }
 		if (a_index >= (int)chapters.size()) a_index = 0;
 		if (a_index < 0) a_index = (int)chapters.size() - 1;
+		if (a_index == (int)chapter_index) { return; }
+
+		auto* chapter = chapters[static_cast<std::size_t>(a_index)].get();
+		if (!chapter) { return; }
+
 		TurnToPage(a_index, 0,
 			a_index > (int)chapter_index ? TurnDirection::kLeft : TurnDirection::kRight);
 	}
@@ -272,14 +272,23 @@ namespace vr3dirp
 		std::size_t a_chapter_index, std::size_t a_page_index, TurnDirection a_direction)
 	{
 		if (a_chapter_index >= chapters.size() || !chapters[a_chapter_index] ||
-			a_page_index >= chapters[a_chapter_index]->pages.size() ||
-			!chapters[a_chapter_index]->pages[a_page_index] ||
 			(a_chapter_index == chapter_index && a_page_index == page_index))
 		{
 			return;
 		}
 
+		if (chapter_index != a_chapter_index)
+		{
+			chapters[a_chapter_index]->OnSelected(layout);
+		}
 		chapter_index = a_chapter_index;
+
+		if (a_page_index >= chapters[a_chapter_index]->pages.size() ||
+			!chapters[a_chapter_index]->pages[a_page_index])
+		{
+			return;
+		}
+		chapters[a_chapter_index]->pages[a_page_index]->OnSelected();
 		page_index = a_page_index;
 
 		const bool turn_left = a_direction == TurnDirection::kLeft;
@@ -287,7 +296,7 @@ namespace vr3dirp
 		float anim_speed_adjust = animation_speed;
 		if (animator.IsBusy())
 		{
-			anim_speed_adjust *= 1.2f;
+			anim_speed_adjust *= 1.3f;
 			animator.SetSpeed(anim_speed_adjust);
 		}
 
@@ -296,13 +305,14 @@ namespace vr3dirp
 		const auto& animation = turn_left ? flip_left : flip_right;
 		const auto  draw_chapter = static_cast<int>(a_chapter_index);
 		const auto  draw_page = static_cast<int>(a_page_index);
+
 		animator.Queue(animation, anim_speed_adjust,
-			{ { 0.2f,
+			{ { std::lerp(animation.start, animation.end, 0.2f),
 				  [this, turn_left, draw_chapter, draw_page] {
 					  ClearPageView(!turn_left);
 					  DrawPage(draw_chapter, draw_page, !turn_left);
 				  } },
-				{ turn_left ? 1.8f : 2.7f, [this, turn_left, draw_chapter, draw_page] {
+				{ std::lerp(animation.start, animation.end, 0.7f), [this, turn_left, draw_chapter, draw_page] {
 					 ClearPageView(turn_left);
 					 DrawPage(draw_chapter, draw_page, turn_left);
 				 } } });
@@ -316,7 +326,6 @@ namespace vr3dirp
 	void Book::AddChapter(std::unique_ptr<Chapter> a_chapter)
 	{
 		if (!a_chapter) { return; }
-		a_chapter->MakePages(layout);
 		chapters.emplace_back(std::move(a_chapter));
 		AddChapterTab(chapters.size() - 1);
 	}
@@ -330,7 +339,8 @@ namespace vr3dirp
 		}
 
 		NiTransform transform;
-		transform.translate = layout.kTabOffset;
+		transform.scale = layout.tab_scale;
+		transform.translate = layout.tab_origin;
 		transform.translate.y -= static_cast<float>(a_index) * layout.tab_spacing;
 		transform.translate.x += 0.1;
 		transform.translate.x -= (a_index % 2) * 0.2;
@@ -355,7 +365,7 @@ namespace vr3dirp
 
 	void SelectionHighlight::Update(float)
 	{
-		if (!parent) { return; }
+		if (!parent || (can_interact && !can_interact())) { return; }
 
 		const bool selected = is_selected && is_selected();
 		const bool should_highlight = selected ||
@@ -372,6 +382,7 @@ namespace vr3dirp
 
 	void SelectionHighlight::OnClick(bool a_activate, Hand& a_hand, MenuAction a_action)
 	{
+		if (can_interact && !can_interact()) { return; }
 		if (!a_activate || a_action != MenuAction::kPrimary) { return; }
 		if (hover_group) { hover_group->Update(0.0f); }
 		if (hover_group && !hover_group->IsExclusivelyHovered(parent, a_hand.IsLeft())) { return; }
@@ -390,7 +401,7 @@ namespace vr3dirp
 		auto& pages = chapters[chapter]->pages;
 		if (page >= pages.size() || !pages[page]) { return; }
 
-		PageContext context{ layout, *left_page_parent, *right_page_parent, a_page,
+		PageContext context{ layout, *left_page_parent, *right_page_parent, a_page, a_chapter,
 			(int)pages.size() };
 
 		pages[page]->Draw(context, a_left_page);

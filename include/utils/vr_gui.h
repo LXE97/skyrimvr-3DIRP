@@ -11,7 +11,7 @@
 
 namespace vr_gui
 {
-	const std::string kPluginName = "VRGUItest.esp";
+	const std::string kPluginName = "";
 	const RE::FormID  kActivatorID = 0xD98;
 	const RE::FormID  kMarkerModspaceID = 0xD99;
 

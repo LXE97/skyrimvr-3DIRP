@@ -10,7 +10,7 @@
 namespace art_addon
 {
 	static constexpr const char* kEmptyNif = "effects/fxemptyobject.nif";
-	static constexpr const char* kFontAtlas = "3DIRP/char_2048.nif";
+	static constexpr const char* kFontAtlas = "3DIRP/vr_gui/char_2048.nif";
 
 	class ArtAddon;
 	using ArtAddonPtr = std::shared_ptr<ArtAddon>;
@@ -131,6 +131,7 @@ namespace art_addon
 	};
 
 	/* For creation of floating text.*/
+	/* deprecated- use TextManager */
 	class AddonTextBox
 	{
 	public:

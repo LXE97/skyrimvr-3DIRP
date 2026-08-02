@@ -9,7 +9,7 @@
 
 namespace vr3dirp
 {
-	constexpr const char* kPluginName = "Real_Spellbook_VR";
+	constexpr const char* kPluginName = "3DIRP.esp";
 
 	extern uint32_t g_esp_index;
 
