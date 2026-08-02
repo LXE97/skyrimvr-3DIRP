@@ -8,13 +8,15 @@ namespace vr3dirp
 	using namespace vr_gui;
 	using QuestType = RE::QUEST_DATA::Type;
 	using HiddenQuestSet = std::unordered_set<RE::FormID>;
+	using NewQuestSet = std::unordered_set<RE::FormID>;
 
 	struct JournalSettings : BookSettings
 	{
-		float       journal_scale = 0.9f;
-		float       quest_line_spacing = 0.6f;
-		std::string hidden_quests = "3372b";
-		int        show_misc_all = 0;
+		float          journal_scale = 0.9f;
+		float          quest_line_spacing = 0.6f;
+		HiddenQuestSet hidden_quests{ 0x3372b };
+		NewQuestSet    new_quests;
+		int            show_misc_all = 0;
 	};
 
 	class Journal;
@@ -26,7 +28,8 @@ namespace vr3dirp
 	};
 
 	inline constexpr std::string_view kAllQuestsChapterModelPath = "3DIRP/Journal/Chapters/All.nif";
-	inline constexpr std::string_view kFavoritesChapterModelPath = "3DIRP/Journal/Chapters/Favorites.nif";
+	inline constexpr std::string_view kFavoritesChapterModelPath =
+		"3DIRP/Journal/Chapters/Favorites.nif";
 
 	inline constexpr std::array<QuestTypeInfo, 12> kQuestTypeInfo{ {
 		{ 12, "3DIRP/Journal/Chapters/None.nif" },            // kNone
@@ -53,6 +56,7 @@ namespace vr3dirp
 
 		bool tracked{ false };
 		bool completed{ false };
+		bool unseen{ false };
 	};
 
 	constexpr QuestTypeInfo GetQuestTypeInfo(QuestType a_type) noexcept
@@ -67,10 +71,11 @@ namespace vr3dirp
 	class QuestChapter : public Chapter
 	{
 	public:
-		QuestChapter(std::optional<QuestType> a_type, Journal& a_journal, bool a_tracked_only = false) :
-			Chapter(std::string{
-				a_type ? GetQuestTypeInfo(*a_type).chapter_model_path :
-						 a_tracked_only ? kFavoritesChapterModelPath : kAllQuestsChapterModelPath }),
+		QuestChapter(
+			std::optional<QuestType> a_type, Journal& a_journal, bool a_tracked_only = false) :
+			Chapter(std::string{ a_type ? GetQuestTypeInfo(*a_type).chapter_model_path :
+					a_tracked_only      ? kFavoritesChapterModelPath :
+										  kAllQuestsChapterModelPath }),
 			type(a_type),
 			journal(a_journal),
 			favorites(a_tracked_only)
@@ -83,7 +88,7 @@ namespace vr3dirp
 
 	private:
 		Journal& journal;
-		bool favorites {false};
+		bool     favorites{ false };
 	};
 
 	class QuestPage : public Page
@@ -139,9 +144,13 @@ namespace vr3dirp
 
 		Journal(bool a_isLeft, TESObjectREFR* a_objectReference, NiAVObject* a_root,
 			JournalSettings& a_settings);
+		~Journal() override;
 
 		bool IsQuestHidden(const RE::TESQuest* a_quest) const;
 		bool HideQuest(const RE::TESQuest* a_quest);
+		bool IsQuestUnseen(const RE::TESQuest* a_quest) const;
+		void MarkQuestSeen(const RE::TESQuest* a_quest);
+		void PruneNewQuests(const NewQuestSet& a_visible_quests);
 
 		const HiddenQuestSet&  GetHiddenQuests() const { return hidden_quests; }
 		const JournalSettings& GetJournalSettings() const { return journal_settings; }
@@ -149,6 +158,8 @@ namespace vr3dirp
 	private:
 		JournalSettings& journal_settings;
 		HiddenQuestSet   hidden_quests;
+		NewQuestSet      new_quests;
+		NewQuestSet      new_quests_at_open;
 	};
 
 }

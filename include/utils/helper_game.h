@@ -227,4 +227,9 @@ namespace helper
 
 	void DestroyLight(RE::NiPointer<RE::NiPointLight>& runtimeLight);
 
+	std::unordered_set<RE::FormID> ParseFormIDList(
+		std::string_view a_list, std::string_view a_setting_name);
+
+	std::string SerializeFormIDList(const std::unordered_set<RE::FormID>& a_form_ids);
+
 }

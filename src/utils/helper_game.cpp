@@ -1239,4 +1239,58 @@ namespace helper
 
 		return result.str();
 	}
+
+	std::unordered_set<RE::FormID> ParseFormIDList(
+		std::string_view a_list, std::string_view a_setting_name)
+	{
+		std::unordered_set<RE::FormID> result;
+
+		while (!a_list.empty())
+		{
+			const auto delimiter = a_list.find(',');
+			auto       token = a_list.substr(0, delimiter);
+
+			const auto token_begin = token.find_first_not_of(" \t\r\n");
+			if (token_begin != std::string_view::npos)
+			{
+				const auto token_end = token.find_last_not_of(" \t\r\n");
+				token = token.substr(token_begin, token_end - token_begin + 1);
+				if (token.starts_with("0x") || token.starts_with("0X"))
+				{
+					token.remove_prefix(2);
+				}
+
+				RE::FormID form_id{};
+				const auto [end, error] =
+					std::from_chars(token.data(), token.data() + token.size(), form_id, 16);
+				if (error == std::errc{} && end == token.data() + token.size())
+				{
+					result.insert(form_id);
+				}
+				else
+				{
+					SKSE::log::warn("Invalid form ID in {}: {}", a_setting_name, token);
+				}
+			}
+
+			if (delimiter == std::string_view::npos) { break; }
+			a_list.remove_prefix(delimiter + 1);
+		}
+
+		return result;
+	}
+
+	std::string SerializeFormIDList(const std::unordered_set<RE::FormID>& a_form_ids)
+	{
+		std::vector<RE::FormID> sorted_ids(a_form_ids.begin(), a_form_ids.end());
+		std::ranges::sort(sorted_ids);
+
+		std::string result;
+		for (const auto form_id : sorted_ids)
+		{
+			if (!result.empty()) { result.push_back(','); }
+			result.append(std::format("{:x}", form_id));
+		}
+		return result;
+	}
 }

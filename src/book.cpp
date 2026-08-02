@@ -144,9 +144,9 @@ namespace vr3dirp
 			if (settings.light_fade > 0.01f)
 			{
 				NiTransform book_transform;
-				book_transform.translate = { -9, 0, 15 };
+				book_transform.translate = { -10, 0, 15 };
 				book_light = helper::MakeLight(
-					a->GetTarget(), a->Get3D()->AsNode(), book_transform, 5.0, settings.light_fade);
+					a->GetTarget(), a->Get3D()->AsNode(), book_transform, 10.0, settings.light_fade);
 			}
 
 			// Interaction Volume

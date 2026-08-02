@@ -2,8 +2,6 @@
 
 #include "text_manager.h"
 
-#include <charconv>
-
 namespace vr3dirp
 {
 	namespace
@@ -63,6 +61,7 @@ namespace vr3dirp
 
 		unsigned int GetStatusSymbol(const JournalQuestData& a_quest)
 		{
+			if (a_quest.unseen) return 0x83U;
 			if (a_quest.completed) return 0x82U;
 			if (a_quest.tracked) return 0x80U;
 			return 0x7FU;
@@ -129,10 +128,12 @@ namespace vr3dirp
 			return seen;
 		}
 
-		std::vector<JournalQuestData> GetQuestsByType(std::optional<QuestType> a_type,
-			const JournalSettings& a_settings, bool tracked_only = false)
+		std::vector<JournalQuestData> GetQuestsByType(
+			std::optional<QuestType> a_type, Journal& a_journal, bool tracked_only = false)
 		{
 			std::vector<JournalQuestData> result;
+			const auto&                   settings = a_journal.GetJournalSettings();
+			NewQuestSet                    quests_with_displayed_objectives;
 
 			auto* player = PlayerCharacter::GetSingleton();
 			if (!player) { return result; }
@@ -144,6 +145,19 @@ namespace vr3dirp
 
 				if (!quest) { continue; }
 
+				const bool is_displayed =
+					objective->state == QUEST_OBJECTIVE_STATE::kFailedDisplayed ||
+					objective->state == QUEST_OBJECTIVE_STATE::kCompletedDisplayed ||
+					objective->state == QUEST_OBJECTIVE_STATE::kDisplayed;
+
+				if (!a_type)
+				{
+					if (is_displayed)
+					{
+						quests_with_displayed_objectives.insert(quest->GetFormID());
+					}
+				}
+
 				const auto raw_quest_type = quest->GetType();
 				const auto quest_type =
 					raw_quest_type == QuestType::kNone ? QuestType::kSideQuest : raw_quest_type;
@@ -154,14 +168,12 @@ namespace vr3dirp
 				else if (quest_type == QuestType::kMiscellaneous)
 				{
 					const int show_misc_flag = tracked_only ? kShowMiscOnFavorites : kShowMiscOnAll;
-					if ((a_settings.show_misc_all & show_misc_flag) == 0) { continue; }
+					if ((settings.show_misc_all & show_misc_flag) == 0) { continue; }
 				}
 
 				const auto state = instance.InstanceState;
 
-				if (objective->state == QUEST_OBJECTIVE_STATE::kFailedDisplayed ||
-					objective->state == QUEST_OBJECTIVE_STATE::kCompletedDisplayed ||
-					objective->state == QUEST_OBJECTIVE_STATE::kDisplayed)
+				if (is_displayed)
 				{
 					auto it = std::ranges::find(result, quest, &JournalQuestData::owner);
 
@@ -173,6 +185,7 @@ namespace vr3dirp
 						it->owner = quest;
 						it->tracked = quest->IsActive();
 						it->completed = quest->IsCompleted();
+						it->unseen = a_journal.IsQuestUnseen(quest);
 					}
 
 					if (state == QUEST_OBJECTIVE_STATE::kDisplayed)
@@ -189,13 +202,19 @@ namespace vr3dirp
 					}
 				}
 			}
+
+			if (!a_type)
+			{
+				a_journal.PruneNewQuests(quests_with_displayed_objectives);
+			}
+
 			return result;
 		}
 	}
 
 	void QuestChapter::MakePages(const Book::Layout& a_layout)
 	{
-		auto quests = GetQuestsByType(type, journal.GetJournalSettings(), favorites);
+		auto quests = GetQuestsByType(type, journal, favorites);
 		std::erase_if(quests, [this](const JournalQuestData& a_quest) {
 			return journal.IsQuestHidden(a_quest.owner);
 		});
@@ -209,6 +228,7 @@ namespace vr3dirp
 		std::ranges::sort(
 			quests, [&a_layout](const JournalQuestData& a_lhs, const JournalQuestData& a_rhs) {
 				if (a_lhs.completed != a_rhs.completed) { return !a_lhs.completed; }
+				if (a_lhs.unseen != a_rhs.unseen) { return a_lhs.unseen; }
 
 				return GetQuestName(a_lhs, a_layout) < GetQuestName(a_rhs, a_layout);
 			});
@@ -364,7 +384,7 @@ namespace vr3dirp
 
 			for (std::size_t i = 0; i < quests.size(); ++i)
 			{
-				const auto& quest = quests[i];
+				auto& quest = quests[i];
 				if (IsHidden(quest))
 				{
 					continue;
@@ -383,6 +403,11 @@ namespace vr3dirp
 				auto* line_text = line->AddChild<Widget>(line_cursor, NiPoint3());
 
 				textmanager->AddText(line_text, quest_name, L.body_character_spacing);
+				if (quest.unseen)
+				{
+					journal.MarkQuestSeen(quest.owner);
+					quest.unseen = false;
+				}
 
 				line->AddBehavior<SelectionHighlight>(
 					page_anchor.GetBehavior<ExclusiveHoverGroup>(),
@@ -517,34 +542,12 @@ namespace vr3dirp
 		layout.tab_scale = 1.1f;
 		layout.tab_origin.y = 10.7f;
 
-		std::string_view hidden_ids = journal_settings.hidden_quests;
-		while (!hidden_ids.empty())
-		{
-			const auto delimiter = hidden_ids.find(',');
-			auto       token = hidden_ids.substr(0, delimiter);
+		hidden_quests = journal_settings.hidden_quests;
+		new_quests = journal_settings.new_quests;
+		new_quests_at_open = new_quests;
 
-			const auto token_begin = token.find_first_not_of(" \t\r\n");
-			if (token_begin != std::string_view::npos)
-			{
-				const auto token_end = token.find_last_not_of(" \t\r\n");
-				token = token.substr(token_begin, token_end - token_begin + 1);
-				if (token.starts_with("0x") || token.starts_with("0X")) { token.remove_prefix(2); }
-
-				RE::FormID form_id{};
-				const auto [end, error] =
-					std::from_chars(token.data(), token.data() + token.size(), form_id, 16);
-				if (error == std::errc{} && end == token.data() + token.size())
-				{
-					hidden_quests.insert(form_id);
-				}
-				else
-				{
-					SKSE::log::warn("Invalid hidden quest form ID: {}", token);
-				}
-			}
-
-			if (delimiter == std::string_view::npos) { break; }
-			hidden_ids.remove_prefix(delimiter + 1);
+		if (!new_quests.empty()){
+			SKSE::log::trace("new quests ");
 		}
 
 		auto seen_types = GetPlayerQuestTypes();
@@ -559,6 +562,15 @@ namespace vr3dirp
 		chapters[0]->OnSelected(layout);
 	}
 
+	Journal::~Journal()
+	{
+		auto added_while_open = journal_settings.new_quests;
+		for (const auto form_id : new_quests_at_open) { added_while_open.erase(form_id); }
+
+		new_quests.insert(added_while_open.begin(), added_while_open.end());
+		journal_settings.new_quests = std::move(new_quests);
+	}
+
 	bool Journal::IsQuestHidden(const RE::TESQuest* a_quest) const
 	{ return a_quest && hidden_quests.contains(a_quest->GetFormID()); }
 
@@ -569,14 +581,26 @@ namespace vr3dirp
 		const auto form_id = a_quest->GetFormID();
 		if (!hidden_quests.insert(form_id).second) { return false; }
 
-		if (!journal_settings.hidden_quests.empty() && journal_settings.hidden_quests.back() != ',')
-		{
-			journal_settings.hidden_quests.push_back(',');
-		}
-		journal_settings.hidden_quests.append(std::format("{:x}", form_id));
+		journal_settings.hidden_quests.insert(form_id);
 
 		SKSE::log::trace("hiding quest {:x}", form_id);
 		return true;
+	}
+
+	bool Journal::IsQuestUnseen(const RE::TESQuest* a_quest) const
+	{ return a_quest && new_quests.contains(a_quest->GetFormID()); }
+
+	void Journal::MarkQuestSeen(const RE::TESQuest* a_quest)
+	{
+		if (a_quest) { new_quests.erase(a_quest->GetFormID()); }
+	}
+
+	void Journal::PruneNewQuests(const NewQuestSet& a_visible_quests)
+	{
+		std::erase_if(new_quests,
+			[&a_visible_quests](const FormID a_form_id) {
+				return !a_visible_quests.contains(a_form_id);
+			});
 	}
 
 }

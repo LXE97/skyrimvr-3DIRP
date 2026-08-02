@@ -25,7 +25,8 @@ namespace settings
 		Manager& operator=(const Manager&) = delete;
 		Manager& operator=(Manager&&) = delete;
 
-		RE::BGSListForm*                                mod_settings = nullptr;;
+		RE::BGSListForm* mod_settings = nullptr;
+		;
 		std::unordered_map<std::string, RE::TESGlobal*> global_vars;
 	};
 }
