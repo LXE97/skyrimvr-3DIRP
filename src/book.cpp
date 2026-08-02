@@ -145,8 +145,8 @@ namespace vr3dirp
 			{
 				NiTransform book_transform;
 				book_transform.translate = { -10, 0, 15 };
-				book_light = helper::MakeLight(
-					a->GetTarget(), a->Get3D()->AsNode(), book_transform, 10.0, settings.light_fade);
+				book_light = helper::MakeLight(a->GetTarget(), a->Get3D()->AsNode(), book_transform,
+					10.0, settings.light_fade);
 			}
 
 			// Interaction Volume
@@ -277,10 +277,7 @@ namespace vr3dirp
 			return;
 		}
 
-		if (chapter_index != a_chapter_index)
-		{
-			chapters[a_chapter_index]->OnSelected(layout);
-		}
+		if (chapter_index != a_chapter_index) { chapters[a_chapter_index]->OnSelected(layout); }
 		chapter_index = a_chapter_index;
 
 		if (a_page_index >= chapters[a_chapter_index]->pages.size() ||
@@ -312,10 +309,11 @@ namespace vr3dirp
 					  ClearPageView(!turn_left);
 					  DrawPage(draw_chapter, draw_page, !turn_left);
 				  } },
-				{ std::lerp(animation.start, animation.end, 0.7f), [this, turn_left, draw_chapter, draw_page] {
-					 ClearPageView(turn_left);
-					 DrawPage(draw_chapter, draw_page, turn_left);
-				 } } });
+				{ std::lerp(animation.start, animation.end, 0.7f),
+					[this, turn_left, draw_chapter, draw_page] {
+						ClearPageView(turn_left);
+						DrawPage(draw_chapter, draw_page, turn_left);
+					} } });
 
 		RE::BSSoundHandle sound;
 		auto              world_pos = GetWorld().translate;
@@ -343,10 +341,10 @@ namespace vr3dirp
 		transform.translate = layout.tab_origin;
 		transform.translate.y -= static_cast<float>(a_index) * layout.tab_spacing;
 		transform.translate.x += 0.1;
-		transform.translate.x -= (a_index % 2) * 0.2;
-		transform.translate.z -= 0.1 * a_index;
+		transform.translate.x -= (a_index % 2) * 0.16;
+		transform.translate.z -= 0.07 * a_index;
 
-		auto* tab = tab_container->AddChild<Widget>(transform, NiPoint3(1.0, 0.3, 0.25));
+		auto* tab = tab_container->AddChild<Widget>(transform, NiPoint3(0.8, 0.3, 0.45));
 		tab->AddModel(chapters[a_index]->model_path, false, [this, a_index](ArtAddon* a_model) {
 			helper::SetGlowMult(a_model ? a_model->Get3D() : nullptr,
 				chapter_index == a_index ? kChapterGlow : 0.0f);
@@ -484,48 +482,7 @@ namespace vr3dirp
 			}
 			else
 			{
-				if (isGrabbed)
-				{
-					auto*      book = static_cast<Book*>(GetRoot());
-					const auto transform = book->GetTransform();
-					const auto quat = helper::Mat2Quat(transform.rotate);
-
-					if (book->isLeft)
-					{
-						book->settings.left_offset_x = transform.translate.x;
-						book->settings.left_offset_y = transform.translate.y;
-						book->settings.left_offset_z = transform.translate.z;
-
-						book->settings.left_rotate_w = quat.w;
-						book->settings.left_rotate_x = quat.x;
-						book->settings.left_rotate_y = quat.y;
-						book->settings.left_rotate_z = quat.z;
-					}
-					else
-					{
-						book->settings.right_offset_x = transform.translate.x;
-						book->settings.right_offset_y = transform.translate.y;
-						book->settings.right_offset_z = transform.translate.z;
-
-						book->settings.right_rotate_w = quat.w;
-						book->settings.right_rotate_x = quat.x;
-						book->settings.right_rotate_y = quat.y;
-						book->settings.right_rotate_z = quat.z;
-					}
-
-					helper::PrintTransform(parent->GetTransform());
-				}
-				isGrabButtonHeld = false;
-				grabHoldTime = 0.0f;
-				grabHand = nullptr;
-				isGrabbed = false;
-				follow_target = nullptr;
-
-				if (!IsHovered(a_hand.IsLeft())) { hand_mode.Release(); }
-				else
-				{
-					hand_mode = a_hand.RequestMode(Hand::Mode::kOpen, Hand::ModePriority::kGrab);
-				}
+				if (isGrabbed) { Release(); }
 			}
 		}
 	}
@@ -550,11 +507,58 @@ namespace vr3dirp
 
 		if (isGrabbed && follow_target)
 		{
+			if (vrinput::GetButtonState(Controller::GetSingleton()->GetSettings().secondary,
+					vrinput::Hand(isLeft),
+					vrinput::ActionType::kPress) == vrinput::ButtonState::kButtonUp)
+			{
+				Release();
+				return;
+			}
 			if (auto* book = dynamic_cast<Book*>(parent))
 			{
 				book->VirtualParent(follow_target, parent_store);
 			}
 		}
+	}
+
+	void GrabNode::Release()
+	{
+		auto*      book = static_cast<Book*>(GetRoot());
+		const auto transform = book->GetTransform();
+		const auto quat = helper::Mat2Quat(transform.rotate);
+
+		if (book->isLeft)
+		{
+			book->settings.left_offset_x = transform.translate.x;
+			book->settings.left_offset_y = transform.translate.y;
+			book->settings.left_offset_z = transform.translate.z;
+
+			book->settings.left_rotate_w = quat.w;
+			book->settings.left_rotate_x = quat.x;
+			book->settings.left_rotate_y = quat.y;
+			book->settings.left_rotate_z = quat.z;
+		}
+		else
+		{
+			book->settings.right_offset_x = transform.translate.x;
+			book->settings.right_offset_y = transform.translate.y;
+			book->settings.right_offset_z = transform.translate.z;
+
+			book->settings.right_rotate_w = quat.w;
+			book->settings.right_rotate_x = quat.x;
+			book->settings.right_rotate_y = quat.y;
+			book->settings.right_rotate_z = quat.z;
+		}
+
+		helper::PrintTransform(parent->GetTransform());
+
+		isGrabButtonHeld = false;
+		grabHoldTime = 0.0f;
+		grabHand = nullptr;
+		isGrabbed = false;
+		follow_target = nullptr;
+
+		if (!IsHovered(isLeft)) { hand_mode.Release(); }
 	}
 
 	void GrabNode::OnHover(bool a_activate, Hand& a_hand)
@@ -563,7 +567,7 @@ namespace vr3dirp
 		{
 			hand_mode = a_hand.RequestMode(Hand::Mode::kOpen, Hand::ModePriority::kGrab);
 		}
-		if (!a_activate)
+		if (!a_activate && !isGrabbed)
 		{
 			isGrabButtonHeld = false;
 			grabHoldTime = 0.0f;

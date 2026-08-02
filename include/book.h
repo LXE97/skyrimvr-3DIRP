@@ -243,6 +243,8 @@ namespace vr3dirp
 		// TODO: make setting
 		static constexpr float kGrabHoldTime = 1.0f;
 
+		void Release();
+
 		bool        isGrabbed = false;
 		bool        isGrabButtonHeld = false;
 		bool        isLeft = false;
