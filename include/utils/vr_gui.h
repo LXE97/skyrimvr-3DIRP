@@ -15,9 +15,6 @@ namespace vr_gui
 	const RE::FormID  kActivatorID = 0xD98;
 	const RE::FormID  kMarkerModspaceID = 0xD99;
 
-	int FormatParagraph(
-		std::string& a_text, float a_char_scale, float a_char_spacing, float a_max_width);
-
 	using namespace RE;
 	class Widget;
 	class Hand;

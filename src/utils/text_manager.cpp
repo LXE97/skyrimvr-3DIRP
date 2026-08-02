@@ -6,6 +6,105 @@ namespace vr_gui
 {
 	using namespace RE;
 
+	float GetTextWidth(std::string_view a_text, float a_char_scale, float a_char_spacing)
+	{
+		if (a_text.empty()) { return 0.0F; }
+
+		float width = 0.0F;
+		for (const auto character : a_text)
+		{
+			width += TextManager::GetGlyphWidth(character) * a_char_scale;
+		}
+
+		return width + a_char_spacing * a_char_scale * static_cast<float>(a_text.size() - 1);
+	}
+
+	void TrimToLine(
+		std::string& a_text, float a_char_scale, float a_char_spacing, float a_max_width)
+	{
+		if (a_text.empty()) { return; }
+		if (a_max_width <= 0.0F)
+		{
+			a_text.clear();
+			return;
+		}
+
+		float       width = 0.0F;
+		std::size_t length = 0;
+		for (const auto character : a_text)
+		{
+			if (character == '\n') { break; }
+
+			float advance = TextManager::GetGlyphWidth(character) * a_char_scale;
+			if (length > 0) { advance += a_char_spacing * a_char_scale; }
+			if (width + advance > a_max_width) { break; }
+
+			width += advance;
+			++length;
+		}
+
+		const bool trimmed = length < a_text.size();
+		a_text.resize(length);
+		if (trimmed)
+		{
+			const auto ellipsis_length = std::min<std::size_t>(3, a_text.size());
+			a_text.replace(a_text.size() - ellipsis_length, ellipsis_length,
+				ellipsis_length, '.');
+		}
+	}
+
+	int FormatParagraph(
+		std::string& a_text, float a_char_scale, float a_char_spacing, float a_max_width)
+	{
+		if (a_text.empty()) { return 0; }
+
+		int line_count = 1;
+		if (a_char_scale <= 0.0f || a_max_width <= 0.0f) {
+			return line_count + static_cast<int>(std::ranges::count(a_text, '\n'));
+		}
+
+		auto get_width = [&a_text, a_char_scale, a_char_spacing](
+			std::size_t a_begin, std::size_t a_end) {
+			if (a_begin >= a_end) { return 0.0f; }
+			return GetTextWidth(
+				std::string_view{ a_text }.substr(a_begin, a_end - a_begin),
+				a_char_scale, a_char_spacing);
+		};
+
+		std::size_t line_start = 0;
+		std::size_t last_break = std::string::npos;
+
+		for (std::size_t i = 0; i < a_text.size(); ++i)
+		{
+			if (a_text[i] == '\n')
+			{
+				++line_count;
+				line_start = i + 1;
+				last_break = std::string::npos;
+				continue;
+			}
+
+			if (a_text[i] == ' ' || a_text[i] == '\t')
+			{
+				last_break = i;
+				continue;
+			}
+
+			if (get_width(line_start, i + 1) <= a_max_width || last_break == std::string::npos)
+			{
+				continue;
+			}
+
+			a_text[last_break] = '\n';
+			++line_count;
+			line_start = last_break + 1;
+			last_break = std::string::npos;
+		}
+
+		return line_count;
+	}
+
+
 	// Estimated from the font atlas. Widths are normalized to the widest glyph (W = 1.0).
 	const std::unordered_map<char, float> TextManager::glyph_widths{
 		{ ' ', 0.45F }, { '!', 0.30F }, { '"', 0.32F }, { '#', 0.62F },

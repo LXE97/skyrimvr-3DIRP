@@ -45,6 +45,7 @@ namespace vr3dirp
 	struct JournalQuestData
 	{
 		RE::TESQuest*                               owner;
+		std::string                                 name;
 		std::vector<RE::BGSInstancedQuestObjective> current_objectives;
 		std::vector<RE::BGSInstancedQuestObjective> completed_objectives;
 		std::vector<RE::BGSInstancedQuestObjective> failed_objectives;
@@ -136,7 +137,7 @@ namespace vr3dirp
 		bool IsQuestHidden(const RE::TESQuest* a_quest) const;
 		bool HideQuest(const RE::TESQuest* a_quest);
 
-		const HiddenQuestSet& GetHiddenQuests() const { return hidden_quests; }
+		const HiddenQuestSet&  GetHiddenQuests() const { return hidden_quests; }
 		const JournalSettings& GetJournalSettings() const { return journal_settings; }
 
 	private:

@@ -55,12 +55,51 @@ namespace vr3dirp
 			}
 		}
 
-		char GetStatusSymbol(const JournalQuestData& a_quest)
+		constexpr char ToGlyphCharacter(unsigned int a_glyph)
+		{
+			return static_cast<char>(static_cast<unsigned char>(a_glyph));
+		}
+
+		unsigned int GetStatusSymbol(const JournalQuestData& a_quest)
 		{
 			//if (a_quest.failed) return 'x';
-			if (a_quest.completed) return 0x82;
-			if (a_quest.tracked) return 0x80;
-			return 0x7F;
+			if (a_quest.completed) return 0x82U;
+			if (a_quest.tracked) return 0x80U;
+			return 0x7FU;
+		}
+
+		std::string GetQuestName(const JournalQuestData& a_quest, const Book::Layout& a_layout)
+		{
+			std::string name = a_quest.owner ? a_quest.owner->GetFullName() : "";
+			if (!name.empty()) { return name; }
+
+			const RE::BGSInstancedQuestObjective* first_objective = nullptr;
+			for (const auto* objectives : { &a_quest.current_objectives,
+				&a_quest.completed_objectives, &a_quest.failed_objectives })
+			{
+				if (!objectives->empty())
+				{
+					first_objective = std::addressof(objectives->front());
+					break;
+				}
+			}
+
+			auto* objective = first_objective ? first_objective->Objective : nullptr;
+			if (!objective) { return name; }
+
+			name = objective->displayText.c_str();
+			ParseQuestString(name, objective->ownerQuest, first_objective->instanceID);
+
+			const std::string prefix =
+				std::string(1, ToGlyphCharacter(GetStatusSymbol(a_quest))) + ' ';
+			const float line_width = a_layout.kRightPageWidth - a_layout.horizontal_margin;
+			const float prefix_width = GetTextWidth(
+				prefix, a_layout.body_text_scale, a_layout.body_character_spacing);
+			const float separating_spacing = a_layout.body_character_spacing *
+				a_layout.body_text_scale;
+			TrimToLine(name, a_layout.body_text_scale, a_layout.body_character_spacing,
+				line_width - prefix_width - separating_spacing);
+			return name;
 		}
 
 		std::vector<QuestType> GetPlayerQuestTypes()
@@ -156,11 +195,11 @@ namespace vr3dirp
 			return journal.IsQuestHidden(a_quest.owner);
 		});
 
-		std::ranges::sort(quests, [](const JournalQuestData& a_lhs, const JournalQuestData& a_rhs) {
+		std::ranges::sort(quests, [&a_layout](
+			const JournalQuestData& a_lhs, const JournalQuestData& a_rhs) {
 			if (a_lhs.completed != a_rhs.completed) { return !a_lhs.completed; }
 
-			return std::string_view{ a_lhs.owner->GetFullName() } <
-				std::string_view{ a_rhs.owner->GetFullName() };
+			return GetQuestName(a_lhs, a_layout) < GetQuestName(a_rhs, a_layout);
 		});
 
 		const float line_height = art_addon::AddonTextBox::kLineSpacing * a_layout.body_text_scale;
@@ -176,8 +215,9 @@ namespace vr3dirp
 		for (auto& quest : quests)
 		{
 			// Use exactly the same string and width as Draw().
-			std::string quest_name = std::string(1, GetStatusSymbol(quest)) + (char)0x7F;
-			quest_name.append(quest.owner->GetFullName());
+			std::string quest_name =
+				std::string(1, ToGlyphCharacter(GetStatusSymbol(quest))) + ' ';
+			quest_name.append(GetQuestName(quest, a_layout));
 
 			const int quest_lines = std::max(1,
 				FormatParagraph(quest_name, a_layout.body_text_scale,
@@ -259,7 +299,7 @@ namespace vr3dirp
 					if (page_cursor.translate.y < L.kRightPageHeight * -0.5f) { return; }
 					auto* objective = instance.Objective;
 					if (!objective) { continue; }
-					std::string temp = std::string(1, 0x83) + ' ';
+					std::string temp = std::string(1, ToGlyphCharacter(0x83U)) + ' ';
 					temp.append(objective->displayText.c_str());
 					ParseQuestString(temp, objective->ownerQuest, instance.instanceID);
 					int   lines = FormatParagraph(temp, L.body_text_scale, L.body_character_spacing,
@@ -274,7 +314,7 @@ namespace vr3dirp
 					if (page_cursor.translate.y < L.kRightPageHeight * -0.5f) { return; }
 					auto* objective = instance.Objective;
 					if (!objective) { continue; }
-					std::string temp = std::string(1, 0x81) + ' ';
+					std::string temp = std::string(1, ToGlyphCharacter(0x81U)) + ' ';
 					temp.append(objective->displayText.c_str());
 					ParseQuestString(temp, objective->ownerQuest, instance.instanceID);
 					int   lines = FormatParagraph(temp, L.body_text_scale, L.body_character_spacing,
@@ -289,7 +329,7 @@ namespace vr3dirp
 					if (page_cursor.translate.y < L.kRightPageHeight * -0.5f) { return; }
 					auto* objective = instance.Objective;
 					if (!objective) { continue; }
-					std::string temp = std::string(1, 0x82) + ' ';
+					std::string temp = std::string(1, ToGlyphCharacter(0x82U)) + ' ';
 					temp.append(objective->displayText.c_str());
 					ParseQuestString(temp, objective->ownerQuest, instance.instanceID);
 					int   lines = FormatParagraph(temp, L.body_text_scale, L.body_character_spacing,
@@ -344,8 +384,9 @@ namespace vr3dirp
 					continue;
 				}
 
-				std::string quest_name = std::string(1, GetStatusSymbol(quest)) + ' ';
-				quest_name.append(quest.owner->GetFullName());
+				std::string quest_name =
+					std::string(1, ToGlyphCharacter(GetStatusSymbol(quest))) + ' ';
+				quest_name.append(GetQuestName(quest, L));
 
 				const int quest_lines = FormatParagraph(quest_name, L.body_text_scale,
 					L.body_character_spacing, L.kRightPageWidth - L.horizontal_margin);
@@ -384,7 +425,8 @@ namespace vr3dirp
 						{
 							quest.tracked ^= 1;
 							helper::SetQuestTracked(quest.owner, quest.tracked);
-							textmanager->SetCharacter(line_text, 0, quest.tracked ? 0x80 : 0x7F);
+							textmanager->SetCharacter(line_text, 0,
+								ToGlyphCharacter(quest.tracked ? 0x80U : 0x7FU));
 						}
 					},
 					// IsSelected: check selected quest index

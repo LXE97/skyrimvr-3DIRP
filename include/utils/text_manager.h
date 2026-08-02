@@ -8,6 +8,14 @@
 
 namespace vr_gui
 {
+	int FormatParagraph(
+		std::string& a_text, float a_char_scale, float a_char_spacing, float a_max_width);
+	float GetTextWidth(
+		std::string_view a_text, float a_char_scale, float a_char_spacing);
+	void TrimToLine(
+		std::string& a_text, float a_char_scale, float a_char_spacing, float a_max_width);
+
+
 	class TextManager : public Widget
 	{
 	public:
