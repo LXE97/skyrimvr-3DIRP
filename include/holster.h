@@ -1,4 +1,5 @@
 #pragma once
+#include "equipment_checker.h"
 #include "vr_gui.h"
 
 namespace vr_gui
@@ -20,10 +21,12 @@ namespace vr_gui
 	{
 	public:
 		Holster(float a_radius, TESObjectREFR* a_objectReference, NiAVObject* a_transformParentNode,
-			NiTransform a_local, vrinput::Hand a_hand_type, HolsterCallbacks a_callbacks = {}) :
+			NiTransform a_local, vrinput::Hand a_hand_type, HolsterCallbacks a_callbacks = {},
+			bool a_allow_empty_arrow_hand = true) :
 			Widget(a_radius, a_objectReference, a_transformParentNode, a_local),
 			hand_filter(a_hand_type),
-			callbacks(std::move(a_callbacks))
+			callbacks(std::move(a_callbacks)),
+			allow_empty_arrow_hand(a_allow_empty_arrow_hand)
 		{}
 
 		void OnHover(bool a_activate, Hand& a_hand) override
@@ -45,7 +48,7 @@ namespace vr_gui
 					bool secondary = Controller::GetSingleton()->IsMenuActionPressed(
 						a_hand, MenuAction::kSecondary);
 
-					if (primary && secondary &&  callbacks.both) { callbacks.both(a_hand); }
+					if (primary && secondary && callbacks.both) { callbacks.both(a_hand); }
 					else if (primary && callbacks.primary) { callbacks.primary(a_hand); }
 					else if (secondary && callbacks.secondary) { callbacks.secondary(a_hand); }
 				}
@@ -61,7 +64,9 @@ namespace vr_gui
 
 		bool HandStateFilter(Hand& a_hand) const override
 		{
-			if (a_hand.GetState() == Hand::State::kReady)
+			if (a_hand.GetState() == Hand::State::kReady &&
+				(allow_empty_arrow_hand ||
+					equipment_checker::IsHandEmpty(a_hand.IsLeft(), false)))
 			{
 				if (hand_filter == vrinput::Hand::kLeft && a_hand.IsLeft() ||
 					hand_filter == vrinput::Hand::kRight && !a_hand.IsLeft() ||
@@ -74,10 +79,11 @@ namespace vr_gui
 		}
 
 	private:
+		bool  allow_empty_arrow_hand = true;
 		bool  entered_while_held{ false };
 		float hold_time{ 0 };
 
-		vrinput::Hand   hand_filter;
+		vrinput::Hand    hand_filter;
 		HolsterCallbacks callbacks;
 	};
 }

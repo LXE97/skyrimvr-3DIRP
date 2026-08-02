@@ -1,6 +1,7 @@
 #include "book.h"
 
 #include "helper_game.h"
+#include "equipment_checker.h"
 
 namespace vr3dirp
 {
@@ -55,7 +56,7 @@ namespace vr3dirp
 	{
 		if (auto* actor = GetObjectReference()->As<RE::Actor>())
 		{
-			if (stored_spell && helper::IsHandEmpty(isLeft))
+			if (stored_spell && equipment_checker::IsHandEmpty(isLeft))
 			{
 				if (auto* equip_manager = RE::ActorEquipManager::GetSingleton())
 				{
@@ -166,7 +167,7 @@ namespace vr3dirp
 
 			// Chapter tabs
 			auto chapter_parent = Get3D()->GetObjectByName(kChapterParent);
-			t.translate = { 0.1f, 0, -0.1f };
+			t.translate = { -0.05f, 0, -0.1f };
 			tab_container = AddChild<Widget>(
 				t, NiPoint3(1.0, layout.kRightPageHeight * 0.5f, 0.5), chapter_parent);
 			tab_container->SetPriority(10);

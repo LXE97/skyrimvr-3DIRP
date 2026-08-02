@@ -1,4 +1,5 @@
 #pragma once
+#include "equipment_checker.h"
 #include "Windows.h"
 
 #include <filesystem>
@@ -16,8 +17,6 @@ namespace helper
 	void InstallPlayerUpdateHook(std::function<void(void)> a_func);
 
 	typedef bool (*_DrawWeapon)(RE::Actor* actor, bool draw);
-
-	bool IsHandEmpty(bool a_isLeft);
 
 	inline void PlayerDrawWeapon(bool draw)
 	{

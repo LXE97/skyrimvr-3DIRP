@@ -2,6 +2,7 @@
 
 #include "art_addon.h"
 #include "book.h"
+#include "equipment_checker.h"
 #include "helper_game.h"
 #include "helper_math.h"
 #include "holster.h"
@@ -74,6 +75,7 @@ namespace vr3dirp
 	static bool show_hands{};
 
 	// settings
+	bool     allow_empty_arrow_hand = false;
 	float    shoulder_holster_radius = 10.f;
 	float    shoulder_holster_x = -20.f;
 	float    shoulder_holster_y = 0.f;
@@ -144,6 +146,10 @@ namespace vr3dirp
 		auto menu_sink = EventSink<RE::MenuOpenCloseEvent>::GetSingleton();
 		menu_sink->AddCallback(OnMenuOpenClose);
 		RE::UI::GetSingleton()->AddEventSink(menu_sink);
+
+		auto equip_sink = EventSink<RE::TESEquipEvent>::GetSingleton();
+		equip_sink->AddCallback(OnEquipped);
+		RE::ScriptEventSourceHolder::GetSingleton()->AddEventSink(equip_sink);
 	}
 
 	void OnMenuOpenClose(RE::MenuOpenCloseEvent const* evn)
@@ -156,7 +162,7 @@ namespace vr3dirp
 		}
 	}
 
-	void OnEquipped(const RE::TESEquipEvent* event) {}
+	void OnEquipped(const RE::TESEquipEvent* event) { equipment_checker::OnEquipEvent(event); }
 
 	static void PlayerUpdate()
 	{
@@ -289,6 +295,7 @@ namespace vr3dirp
 
 		return false;
 	}
+
 	void CreateHolsters()
 	{
 		auto has_action = [](BookType a_primary, BookType a_secondary, BookType a_both) {
@@ -342,7 +349,8 @@ namespace vr3dirp
 				auto temp = std::make_unique<vr_gui::Holster>(shoulder_holster_radius, pc,
 					head_node, t, vrinput::Hand::kLeft,
 					make_callbacks(
-						left_shoulder_primary, left_shoulder_secondary, left_shoulder_both));
+						left_shoulder_primary, left_shoulder_secondary, left_shoulder_both),
+					allow_empty_arrow_hand);
 				vr_gui::Controller::GetSingleton()->AddRoot(std::move(temp));
 			}
 
@@ -352,7 +360,8 @@ namespace vr3dirp
 				auto temp = std::make_unique<vr_gui::Holster>(shoulder_holster_radius, pc,
 					head_node, t, vrinput::Hand::kRight,
 					make_callbacks(
-						right_shoulder_primary, right_shoulder_secondary, right_shoulder_both));
+						right_shoulder_primary, right_shoulder_secondary, right_shoulder_both),
+					allow_empty_arrow_hand);
 				vr_gui::Controller::GetSingleton()->AddRoot(std::move(temp));
 			}
 		}
@@ -410,6 +419,8 @@ namespace vr3dirp
 				std::ifstream config(config_path);
 				if (config.is_open())
 				{
+					allow_empty_arrow_hand =
+						(bool)helper::ReadIntFromIni(config, "bAllowEmptyArrowHand");
 					shoulder_holster_radius = helper::ReadFloatFromIni(config, "fShoulderRadius");
 					belly_holster_radius = helper::ReadFloatFromIni(config, "fBellyRadius");
 					shoulder_holster_x = helper::ReadFloatFromIni(config, "fShoulderX");

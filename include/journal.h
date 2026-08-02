@@ -29,14 +29,14 @@ namespace vr3dirp
 
 	inline constexpr std::array<QuestTypeInfo, 12> kQuestTypeInfo{ {
 		{ 12, "3DIRP/Chapters/None.nif" },            // kNone
-		{ 1, "3DIRP/Chapters/MainQuest.nif" },        // kMainQuest
+		{ 2, "3DIRP/Chapters/MainQuest.nif" },        // kMainQuest
 		{ 6, "3DIRP/Chapters/College.nif" },          // kMagesGuild
 		{ 7, "3DIRP/Chapters/ThievesGuild.nif" },     // kThievesGuild
 		{ 8, "3DIRP/Chapters/DarkBrotherhood.nif" },  // kDarkBrotherhood
 		{ 9, "3DIRP/Chapters/Companions.nif" },       // kCompanionsQuest
-		{ 3, "3DIRP/Chapters/Miscellaneous.nif" },    // kMiscellaneous
+		{ 1, "3DIRP/Chapters/Miscellaneous.nif" },    // kMiscellaneous
 		{ 4, "3DIRP/Chapters/Daedric.nif" },          // kDaedric
-		{ 2, "3DIRP/Chapters/SideQuest.nif" },        // kSideQuest
+		{ 3, "3DIRP/Chapters/SideQuest.nif" },        // kSideQuest
 		{ 5, "3DIRP/Chapters/CivilWar.nif" },         // kCivilWar
 		{ 10, "3DIRP/Chapters/Dawnguard.nif" },       // kDLC01_Vampire
 		{ 11, "3DIRP/Chapters/Dragonborn.nif" },      // kDLC02_Dragonborn
