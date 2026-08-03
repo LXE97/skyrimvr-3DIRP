@@ -30,7 +30,7 @@ namespace ni_animator
 		{
 			controller->flags.set(clamp, RE::NiTimeController::Flag::kCycleType_Clamp);
 			controller->flags.set(loop, RE::NiTimeController::Flag::kCycleType_Loop);
-			//controller->flags.set(true, RE::NiTimeController::Flag::kForceUpdate);
+			controller->flags.set(false, RE::NiTimeController::Flag::kForceUpdate);
 			controller->flags.set(active, RE::NiTimeController::Flag::kActive);
 			controller->flags.set(apptime, RE::NiTimeController::Flag::kAnimType_AppTime);
 			controller->flags.set(scaledtime, RE::NiTimeController::Flag::kComputeScaledTime);

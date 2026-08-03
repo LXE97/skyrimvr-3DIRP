@@ -62,21 +62,24 @@ namespace vr3dirp
 
 	namespace
 	{
-		constexpr RE::FormID kDefaultHiddenQuest = 0x3372b;
-		constexpr std::uint32_t kSerializationID =
-			static_cast<std::uint32_t>('3') | (static_cast<std::uint32_t>('D') << 8) |
-			(static_cast<std::uint32_t>('I') << 16) | (static_cast<std::uint32_t>('R') << 24);
-		constexpr std::uint32_t kNewQuestsRecord =
-			static_cast<std::uint32_t>('N') | (static_cast<std::uint32_t>('Q') << 8) |
-			(static_cast<std::uint32_t>('S') << 16) | (static_cast<std::uint32_t>('T') << 24);
-		constexpr std::uint32_t kHiddenQuestsRecord =
-			static_cast<std::uint32_t>('H') | (static_cast<std::uint32_t>('Q') << 8) |
-			(static_cast<std::uint32_t>('S') << 16) | (static_cast<std::uint32_t>('T') << 24);
+		/* SKSE Cosave definitions */
+		constexpr RE::FormID    kDefaultHiddenQuest = 0x3372b;
+		constexpr std::uint32_t kSerializationID = static_cast<std::uint32_t>('3') |
+			(static_cast<std::uint32_t>('D') << 8) | (static_cast<std::uint32_t>('I') << 16) |
+			(static_cast<std::uint32_t>('R') << 24);
+		constexpr std::uint32_t kNewQuestsRecord = static_cast<std::uint32_t>('N') |
+			(static_cast<std::uint32_t>('Q') << 8) | (static_cast<std::uint32_t>('S') << 16) |
+			(static_cast<std::uint32_t>('T') << 24);
+		constexpr std::uint32_t kHiddenQuestsRecord = static_cast<std::uint32_t>('H') |
+			(static_cast<std::uint32_t>('Q') << 8) | (static_cast<std::uint32_t>('S') << 16) |
+			(static_cast<std::uint32_t>('T') << 24);
 		constexpr std::uint32_t kQuestRecordVersion = 1;
 
 		std::shared_mutex g_quest_state_mutex;
-		NewQuestSet      g_new_quests;
-		HiddenQuestSet   g_hidden_quests{ kDefaultHiddenQuest };
+		NewQuestSet       g_new_quests;
+		HiddenQuestSet    g_hidden_quests{ kDefaultHiddenQuest };
+
+		void ResetHiddenQuestsLocked() { g_hidden_quests = { kDefaultHiddenQuest }; }
 
 		bool WriteQuestForms(SKSE::SerializationInterface* a_intfc, std::uint32_t a_type,
 			const std::unordered_set<RE::FormID>& a_forms)
@@ -171,142 +174,145 @@ namespace vr3dirp
 		{
 			std::unique_lock lock(g_quest_state_mutex);
 			g_new_quests.clear();
-			g_hidden_quests = { kDefaultHiddenQuest };
+			ResetHiddenQuestsLocked();
 		}
-	}
 
-	BookSettings ReadBookSettings()
-	{
-		auto* manager = settings::Manager::GetSingleton();
-		BookSettings result;
 
-		result.light_fade = manager->Get("fLightIntensity");
-		result.font_size = manager->Get("fFontSize");
-		result.book_scale = manager->Get("fBookScale");
-		result.rightpage_text_z_offset = manager->Get("fRightPageTextZOffset");
-		result.leftpage_text_z_offset = manager->Get("fLeftPageTextZOffset");
-		result.rightpage_text_z_offset_righthand = manager->Get("fRightPageTextZOffsetRight");
-		result.leftpage_text_z_offset_righthand = manager->Get("fLeftPageTextZOffsetRight");
-		result.horizontal_margin = manager->Get("fHorizontalMargin");
-		result.top_margin = manager->Get("fTopMargin");
-		result.close_button = static_cast<int>(manager->Get("iCloseButton"));
-		result.close_action = static_cast<int>(manager->Get("iCloseAction"));
-		result.close_timing = manager->Get("fCloseTiming");
-
-		result.right_offset_x = manager->Get("fRightOffsetX");
-		result.right_offset_y = manager->Get("fRightOffsetY");
-		result.right_offset_z = manager->Get("fRightOffsetZ");
-		result.right_rotate_w = manager->Get("fRightRotateW");
-		result.right_rotate_x = manager->Get("fRightRotateX");
-		result.right_rotate_y = manager->Get("fRightRotateY");
-		result.right_rotate_z = manager->Get("fRightRotateZ");
-
-		result.left_offset_x = manager->Get("fLeftOffsetX");
-		result.left_offset_y = manager->Get("fLeftOffsetY");
-		result.left_offset_z = manager->Get("fLeftOffsetZ");
-		result.left_rotate_w = manager->Get("fLeftRotateW");
-		result.left_rotate_x = manager->Get("fLeftRotateX");
-		result.left_rotate_y = manager->Get("fLeftRotateY");
-		result.left_rotate_z = manager->Get("fLeftRotateZ");
-
-		return result;
-	}
-
-	JournalSettings ReadJournalSettings()
-	{
-		auto* manager = settings::Manager::GetSingleton();
-		return {
-			.journal_scale = manager->Get("fJournalScale"),
-			.quest_line_spacing = manager->Get("fQuestLineSpacing"),
-			.show_misc_all = static_cast<int>(manager->Get("iShowMiscInAll")),
-			.highlight_new_quests = manager->Get("bHighlightNewQuests") != 0.0f,
-			.hide_button = static_cast<int>(manager->Get("iHideButton")),
-			.font = static_cast<int>(manager->Get("iFont")),
-		};
-	}
-
-	BookCallbacks MakeBookCallbacks()
-	{
-		return { .transform_changed = [](bool a_is_left, const NiTransform& a_transform) {
-			auto* manager = settings::Manager::GetSingleton();
-			const auto rotation = helper::Mat2Quat(a_transform.rotate);
-			const auto side = a_is_left ? "Left" : "Right";
-
-			manager->Set(std::format("f{}OffsetX", side), a_transform.translate.x);
-			manager->Set(std::format("f{}OffsetY", side), a_transform.translate.y);
-			manager->Set(std::format("f{}OffsetZ", side), a_transform.translate.z);
-			manager->Set(std::format("f{}RotateW", side), rotation.w);
-			manager->Set(std::format("f{}RotateX", side), rotation.x);
-			manager->Set(std::format("f{}RotateY", side), rotation.y);
-			manager->Set(std::format("f{}RotateZ", side), rotation.z);
-		} };
-	}
-
-	JournalState GetJournalState()
-	{
-		std::shared_lock lock(g_quest_state_mutex);
-		return { .hidden_quests = g_hidden_quests, .new_quests = g_new_quests };
-	}
-
-	JournalCallbacks MakeJournalCallbacks()
-	{
-		return {
-			.quest_hidden = [](RE::FormID a_form_id) {
-				std::unique_lock lock(g_quest_state_mutex);
-				g_hidden_quests.insert(a_form_id);
-			},
-			.new_quests_removed = [](const NewQuestSet& a_form_ids) {
-				std::unique_lock lock(g_quest_state_mutex);
-				for (const auto form_id : a_form_ids) { g_new_quests.erase(form_id); }
-			},
-		};
-	}
-
-	HolsterSettings ReadHolsterSettings()
-	{
-		auto* manager = settings::Manager::GetSingleton();
-
-		return {
-			.allow_empty_arrow_hand = static_cast<bool>(manager->Get("bAllowEmptyArrowHand")),
-			.shoulder_radius = manager->Get("fShoulderRadius"),
-			.shoulder_offset = { manager->Get("fShoulderX"), manager->Get("fShoulderY"),
-				manager->Get("fShoulderZ") },
-			.belly_radius = manager->Get("fBellyRadius"),
-			.belly_offset = { manager->Get("fBellyX"), manager->Get("fBellyY"),
-				manager->Get("fBellyZ") },
-			.left_shoulder_primary = ParseBookType(manager->Get("iLeftShoulderPrimary")),
-			.left_shoulder_secondary = ParseBookType(manager->Get("iLeftShoulderSecondary")),
-			.left_shoulder_both = ParseBookType(manager->Get("iLeftShoulderBoth")),
-			.right_shoulder_primary = ParseBookType(manager->Get("iRightShoulderPrimary")),
-			.right_shoulder_secondary = ParseBookType(manager->Get("iRightShoulderSecondary")),
-			.right_shoulder_both = ParseBookType(manager->Get("iRightShoulderBoth")),
-			.belly_primary = ParseBookType(manager->Get("iBellyPrimary")),
-			.belly_secondary = ParseBookType(manager->Get("iBellySecondary")),
-			.belly_both = ParseBookType(manager->Get("iBellyBoth")),
-		};
-	}
-
-	vr::EVRButtonId ReadControllerButton(std::string_view a_key)
-	{
-		switch (static_cast<int>(settings::Manager::GetSingleton()->Get(a_key)))
+		/* Settings management */
+		BookSettings ReadBookSettings()
 		{
-		case 1:
-			return vr::EVRButtonId::k_EButton_Grip;
-		case 2:
-			return vr::EVRButtonId::k_EButton_A;
-		case 3:
-			return vr::EVRButtonId::k_EButton_ApplicationMenu;
-		default:
-			return vr::EVRButtonId::k_EButton_SteamVR_Trigger;
+			auto*        manager = settings::Manager::GetSingleton();
+			BookSettings result;
+
+			result.light_fade = manager->Get("fLightIntensity");
+			result.page_brightness = manager->Get("fPageBrightness");
+			result.font_size = manager->Get("fFontSize");
+			result.book_scale = manager->Get("fBookScale");
+			result.rightpage_text_z_offset = manager->Get("fRightPageTextZOffset");
+			result.leftpage_text_z_offset = manager->Get("fLeftPageTextZOffset");
+			result.rightpage_text_z_offset_righthand = manager->Get("fRightPageTextZOffsetRight");
+			result.leftpage_text_z_offset_righthand = manager->Get("fLeftPageTextZOffsetRight");
+			result.horizontal_margin = manager->Get("fHorizontalMargin");
+			result.top_margin = manager->Get("fTopMargin");
+			result.close_button = static_cast<int>(manager->Get("iCloseButton"));
+			result.close_action = static_cast<int>(manager->Get("iCloseAction"));
+			result.close_timing = manager->Get("fCloseTiming");
+
+			result.right_offset_x = manager->Get("fRightOffsetX");
+			result.right_offset_y = manager->Get("fRightOffsetY");
+			result.right_offset_z = manager->Get("fRightOffsetZ");
+			result.right_rotate_w = manager->Get("fRightRotateW");
+			result.right_rotate_x = manager->Get("fRightRotateX");
+			result.right_rotate_y = manager->Get("fRightRotateY");
+			result.right_rotate_z = manager->Get("fRightRotateZ");
+
+			result.left_offset_x = manager->Get("fLeftOffsetX");
+			result.left_offset_y = manager->Get("fLeftOffsetY");
+			result.left_offset_z = manager->Get("fLeftOffsetZ");
+			result.left_rotate_w = manager->Get("fLeftRotateW");
+			result.left_rotate_x = manager->Get("fLeftRotateX");
+			result.left_rotate_y = manager->Get("fLeftRotateY");
+			result.left_rotate_z = manager->Get("fLeftRotateZ");
+
+			return result;
+		}
+
+		JournalSettings ReadJournalSettings()
+		{
+			auto* manager = settings::Manager::GetSingleton();
+			return {
+				.journal_scale = manager->Get("fJournalScale"),
+				.quest_line_spacing = manager->Get("fQuestLineSpacing"),
+				.show_misc_all = static_cast<int>(manager->Get("iShowMiscInAll")),
+				.highlight_new_quests = manager->Get("bHighlightNewQuests") != 0.0f,
+				.hide_button = static_cast<int>(manager->Get("iHideButton")),
+				.font = static_cast<int>(manager->Get("iFont")),
+			};
+		}
+
+		BookCallbacks MakeBookCallbacks()
+		{
+			return { .transform_changed = [](bool a_is_left, const NiTransform& a_transform) {
+				auto*      manager = settings::Manager::GetSingleton();
+				const auto rotation = helper::Mat2Quat(a_transform.rotate);
+				const auto side = a_is_left ? "Left" : "Right";
+
+				manager->Set(std::format("f{}OffsetX", side), a_transform.translate.x);
+				manager->Set(std::format("f{}OffsetY", side), a_transform.translate.y);
+				manager->Set(std::format("f{}OffsetZ", side), a_transform.translate.z);
+				manager->Set(std::format("f{}RotateW", side), rotation.w);
+				manager->Set(std::format("f{}RotateX", side), rotation.x);
+				manager->Set(std::format("f{}RotateY", side), rotation.y);
+				manager->Set(std::format("f{}RotateZ", side), rotation.z);
+			} };
+		}
+
+		JournalState GetJournalState()
+		{
+			std::shared_lock lock(g_quest_state_mutex);
+			return { .hidden_quests = g_hidden_quests, .new_quests = g_new_quests };
+		}
+
+		JournalCallbacks MakeJournalCallbacks()
+		{
+			return {
+				.quest_hidden =
+					[](RE::FormID a_form_id) {
+						std::unique_lock lock(g_quest_state_mutex);
+						g_hidden_quests.insert(a_form_id);
+					},
+				.new_quests_removed =
+					[](const NewQuestSet& a_form_ids) {
+						std::unique_lock lock(g_quest_state_mutex);
+						for (const auto form_id : a_form_ids) { g_new_quests.erase(form_id); }
+					},
+			};
+		}
+
+		HolsterSettings ReadHolsterSettings()
+		{
+			auto* manager = settings::Manager::GetSingleton();
+
+			return {
+				.allow_empty_arrow_hand = static_cast<bool>(manager->Get("bAllowEmptyArrowHand")),
+				.shoulder_radius = manager->Get("fShoulderRadius"),
+				.shoulder_offset = { manager->Get("fShoulderX"), manager->Get("fShoulderY"),
+					manager->Get("fShoulderZ") },
+				.belly_radius = manager->Get("fBellyRadius"),
+				.belly_offset = { manager->Get("fBellyX"), manager->Get("fBellyY"),
+					manager->Get("fBellyZ") },
+				.left_shoulder_primary = ParseBookType(manager->Get("iLeftShoulderPrimary")),
+				.left_shoulder_secondary = ParseBookType(manager->Get("iLeftShoulderSecondary")),
+				.left_shoulder_both = ParseBookType(manager->Get("iLeftShoulderBoth")),
+				.right_shoulder_primary = ParseBookType(manager->Get("iRightShoulderPrimary")),
+				.right_shoulder_secondary = ParseBookType(manager->Get("iRightShoulderSecondary")),
+				.right_shoulder_both = ParseBookType(manager->Get("iRightShoulderBoth")),
+				.belly_primary = ParseBookType(manager->Get("iBellyPrimary")),
+				.belly_secondary = ParseBookType(manager->Get("iBellySecondary")),
+				.belly_both = ParseBookType(manager->Get("iBellyBoth")),
+			};
+		}
+
+		vr::EVRButtonId ReadControllerButton(std::string_view a_key)
+		{
+			switch (static_cast<int>(settings::Manager::GetSingleton()->Get(a_key)))
+			{
+			case 1:
+				return vr::EVRButtonId::k_EButton_Grip;
+			case 2:
+				return vr::EVRButtonId::k_EButton_A;
+			case 3:
+				return vr::EVRButtonId::k_EButton_ApplicationMenu;
+			default:
+				return vr::EVRButtonId::k_EButton_SteamVR_Trigger;
+			}
 		}
 	}
 
-	void ApplyInputSettings()
+	void ResetHiddenQuests()
 	{
-		vr_gui::Controller::GetSingleton()->SetSettings({
-			.primary = ReadControllerButton("iPrimaryButton"),
-			.secondary = ReadControllerButton("iSecondaryButton"),
-		});
+		std::unique_lock lock(g_quest_state_mutex);
+		ResetHiddenQuestsLocked();
 	}
 
 	static void RegisterVRInputCallback();
@@ -323,10 +329,10 @@ namespace vr3dirp
 
 	PapyrusVRAPI* g_papyrusvr{};
 
-	bool g_left_hand_mode = false;
-	bool g_use_firstperson = false;
-	bool g_show_debug_spheres = false;
-	bool g_createHolstersPending = false;
+	bool                          g_left_hand_mode = false;
+	bool                          g_use_firstperson = false;
+	bool                          g_show_debug_spheres = false;
+	bool                          g_createHolstersPending = false;
 	std::vector<vr_gui::Holster*> g_holsters;
 
 	PlayerCharacter* pc{};
@@ -334,15 +340,6 @@ namespace vr3dirp
 	void VrikActionSummonBookLeft(int) { SummonBook(true, BookType::kJournal); }
 
 	void VrikActionSummonBookRight(int) { SummonBook(false, BookType::kJournal); }
-
-	void InitSerialization()
-	{
-		auto* serialization = SKSE::GetSerializationInterface();
-		serialization->SetUniqueID(kSerializationID);
-		serialization->SetSaveCallback(SaveQuestForms);
-		serialization->SetLoadCallback(LoadQuestForms);
-		serialization->SetRevertCallback(RevertQuestForms);
-	}
 
 	void Init()
 	{
@@ -371,26 +368,13 @@ namespace vr3dirp
 		RE::ScriptEventSourceHolder::GetSingleton()->AddEventSink(quest_sink);
 	}
 
-	void ApplySettings()
+	void InitSerialization()
 	{
-		ApplyInputSettings();
-		vr_gui::Controller::GetSingleton()->ShowHitboxes(
-			settings::Manager::GetSingleton()->Get("bShowDebugSpheres") != 0.0f);
-
-		auto* controller = vr_gui::Controller::GetSingleton();
-		for (auto* holster : g_holsters) { controller->MarkForDelete(holster); }
-		g_holsters.clear();
-		g_createHolstersPending = true;
-
-		if (settings::Manager::GetSingleton()->Get("bDebugLog") != 0.0f)
-		{
-			settings::Manager::GetSingleton()->PrintSettings();
-			spdlog::set_level(spdlog::level::trace);
-		}
-		else
-		{
-			spdlog::set_level(spdlog::level::info);
-		}
+		auto* serialization = SKSE::GetSerializationInterface();
+		serialization->SetUniqueID(kSerializationID);
+		serialization->SetSaveCallback(SaveQuestForms);
+		serialization->SetLoadCallback(LoadQuestForms);
+		serialization->SetRevertCallback(RevertQuestForms);
 	}
 
 	void OnQuestStartStop(const RE::TESQuestStartStopEvent* a_event)
@@ -436,6 +420,32 @@ namespace vr3dirp
 		pc = PlayerCharacter::GetSingleton();
 	}
 
+	void ApplySettings()
+	{
+		vr_gui::Controller::GetSingleton()->SetSettings({
+			.primary = ReadControllerButton("iPrimaryButton"),
+			.secondary = ReadControllerButton("iSecondaryButton"),
+		});
+
+		vr_gui::Controller::GetSingleton()->ShowHitboxes(
+			settings::Manager::GetSingleton()->Get("bShowDebugSpheres") != 0.0f);
+
+		auto* controller = vr_gui::Controller::GetSingleton();
+		for (auto* holster : g_holsters) { controller->MarkForDelete(holster); }
+		g_holsters.clear();
+		g_createHolstersPending = true;
+
+		if (settings::Manager::GetSingleton()->Get("bDebugLog") != 0.0f)
+		{
+			settings::Manager::GetSingleton()->PrintSettings();
+			spdlog::set_level(spdlog::level::trace);
+		}
+		else
+		{
+			spdlog::set_level(spdlog::level::info);
+		}
+	}
+
 	void SummonBook(bool isLeft, BookType a_type)
 	{
 		if (a_type == BookType::kDisabled) { return; }
@@ -473,7 +483,8 @@ namespace vr3dirp
 		auto*      controller = vr_gui::Controller::GetSingleton();
 
 		auto add_holster = [controller](std::unique_ptr<vr_gui::Holster> a_holster) {
-			auto* holster = static_cast<vr_gui::Holster*>(controller->AddRoot(std::move(a_holster)));
+			auto* holster =
+				static_cast<vr_gui::Holster*>(controller->AddRoot(std::move(a_holster)));
 			g_holsters.push_back(holster);
 		};
 

@@ -1,7 +1,7 @@
 #include "vr_gui_hand.h"
 
-#include "vr_gui.h"
 #include "equipment_checker.h"
+#include "vr_gui.h"
 
 namespace vr_gui
 {
@@ -118,10 +118,10 @@ namespace vr_gui
 			{
 				transform = &(node->world);
 			}
-			radius = 6.f;
-			extents = { 3, 1, 5 };
+			radius = 7.f;
+			extents = { 4, 1.5, 6 };
 			offset.rotate = NiMatrix3();
-			offset.translate = isLeft ? NiPoint3{ 0, 0.5, 5 } : NiPoint3{ 0, -0.5, 5 };
+			offset.translate = isLeft ? NiPoint3{ 0, 0.5, 5.5 } : NiPoint3{ 0, -0.5, 5.5 };
 			offset_box = offset;
 			g_vrikInterface->restoreFingers(isLeft);
 			break;
@@ -147,8 +147,8 @@ namespace vr_gui
 				transform = &(node->world);
 			}
 			radius = 7.f;
-			extents = { 3, 1, 5 };
-			offset.translate = isLeft ? NiPoint3{ 0, 0.5, 5 } : NiPoint3{ 0, -0.5, 5 };
+			extents = { 4, 1.5, 6 };
+			offset.translate = isLeft ? NiPoint3{ 0, 0.5, 5.5 } : NiPoint3{ 0, -0.5, 5.5 };
 			offset.rotate = NiMatrix3();
 			offset_box = offset;
 			g_vrikInterface->setFingerRange(isLeft, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
@@ -162,12 +162,10 @@ namespace vr_gui
 			}
 			radius = 10.5f;
 			extents = { 0.7, 0.7, 1 };
-			//offset.translate = NiPoint3{ 0, -2, -5.5 };
-			offset.translate = {-2.5, 1, -7.8};
+			
+			offset.translate = { -2.5, 1, -7.8 };
 			offset.rotate = NiMatrix3();
 			offset_box.translate = NiPoint3{ 0, 0, 1 };
-			//offset_box.translate = isLeft ? NiPoint3{ -2.5, -1.6, 12 } : NiPoint3{ 2.5, -1.6, 12 };
-			//offset_box.rotate.SetEulerAnglesXYZ(-0.3141593, isLeft ? 0.1396263 : -0.1396263, 0);
 			g_vrikInterface->setFingerRange(isLeft, 0.1, 0.1, 1, 1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1);
 			break;
 		}

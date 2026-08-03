@@ -21,4 +21,5 @@ namespace vr3dirp
 	void OnSaveGame();
 
 	void ApplySettings();
+	void ResetHiddenQuests();
 }

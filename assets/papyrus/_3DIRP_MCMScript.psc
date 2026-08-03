@@ -143,16 +143,27 @@ Function DrawJournalPage()
 	AddMenuOptionST("iCloseButton", "Close Button", BookButtons[GetMenuIndex("iCloseButton", BookButtons)])
 	AddMenuOptionST("iCloseAction", "Close Action", CloseActions[GetMenuIndex("iCloseAction", CloseActions)])
 	AddSliderOptionST("fCloseTiming", "Close Timing", _3DIRP_Settings.GetSetting("fCloseTiming"), "{1}")
-	AddTextOptionST("bResetHiddenQuests", "Reset Hidden Quest List", "Reset")
+	AddEmptyOption()
+	AddSliderOptionST("fLightIntensity", "Light Intensity", _3DIRP_Settings.GetSetting("fLightIntensity"), "{1}")
+	AddSliderOptionST("fPageBrightness", "Page Brightness", _3DIRP_Settings.GetSetting("fPageBrightness"), "{1}")
+	AddEmptyOption()
+	AddTextOptionST("ResetHiddenQuests", "Reset Hidden Quest List", "Reset")
 
 	SetCursorPosition(1)
-	AddSliderOptionST("fLightIntensity", "Light Intensity", _3DIRP_Settings.GetSetting("fLightIntensity"), "{1}")
+	AddMenuOptionST("iFont", "Font", Fonts[GetMenuIndex("iFont", Fonts)])
 	AddSliderOptionST("fJournalScale", "Book Scale", _3DIRP_Settings.GetSetting("fJournalScale"), "{2}")
 	AddSliderOptionST("fFontSize", "Font Scale", _3DIRP_Settings.GetSetting("fFontSize"), "{2}")
 	AddSliderOptionST("fTopMargin", "Top Margin", _3DIRP_Settings.GetSetting("fTopMargin"), "{2}")
 	AddSliderOptionST("fHorizontalMargin", "Left Margin", _3DIRP_Settings.GetSetting("fHorizontalMargin"), "{2}")
 	AddSliderOptionST("fQuestLineSpacing", "Quest Spacing", _3DIRP_Settings.GetSetting("fQuestLineSpacing"), "{2}")
-	AddMenuOptionST("iFont", "Font", Fonts[GetMenuIndex("iFont", Fonts)])
+	AddSliderOptionST("fLeftPageTextZOffset", "Left Page Text Z offset", _3DIRP_Settings.GetSetting("fLeftPageTextZOffset"), "{3}")
+	AddSliderOptionST("fRightPageTextZOffset", "Right Page Text Z offset", _3DIRP_Settings.GetSetting("fRightPageTextZOffset"), "{3}")
+	AddSliderOptionST("fLeftPageTextZOffsetRight", "Left Page Text Z offset (Rhand)", _3DIRP_Settings.GetSetting("fLeftPageTextZOffsetRight"), "{3}")
+	AddSliderOptionST("fRightPageTextZOffsetRight", "Right Page Text Z offset (Rhand)", _3DIRP_Settings.GetSetting("fRightPageTextZOffsetRight"), "{3}")
+
+
+
+
 EndFunction
 
 ; -------------------------------------------------------------------------------------------------
@@ -426,10 +437,11 @@ State fCloseTiming
 	EndEvent
 EndState
 
-State bResetHiddenQuests
+State ResetHiddenQuests
 	Event OnSelectST()
-		_3DIRP_Settings.SetSetting("bResetHiddenQuests", 1.0)
-		SetTextOptionValueST("Queued")
+		If _3DIRP_Settings.ResetHiddenQuests()
+			SetTextOptionValueST("Reset")
+		EndIf
 	EndEvent
 EndState
 
@@ -439,6 +451,15 @@ State fLightIntensity
 	EndEvent
 	Event OnSliderAcceptST(Float a_value)
 		AcceptSliderSetting("fLightIntensity", a_value, "{1}")
+	EndEvent
+EndState
+
+State fPageBrightness
+	Event OnSliderOpenST()
+		OpenSliderSetting("fPageBrightness", 0.3, 1.0, 0.1)
+	EndEvent
+	Event OnSliderAcceptST(Float a_value)
+		AcceptSliderSetting("fPageBrightness", a_value, "{1}")
 	EndEvent
 EndState
 
@@ -484,6 +505,42 @@ State fQuestLineSpacing
 	EndEvent
 	Event OnSliderAcceptST(Float a_value)
 		AcceptSliderSetting("fQuestLineSpacing", a_value, "{2}")
+	EndEvent
+EndState
+
+State fLeftPageTextZOffset
+	Event OnSliderOpenST()
+		OpenSliderSetting("fLeftPageTextZOffset", 0.0, 3.0, 0.001)
+	EndEvent
+	Event OnSliderAcceptST(Float a_value)
+		AcceptSliderSetting("fLeftPageTextZOffset", a_value, "{3}")
+	EndEvent
+EndState
+
+State fRightPageTextZOffset
+	Event OnSliderOpenST()
+		OpenSliderSetting("fRightPageTextZOffset", 0.0, 3.0, 0.001)
+	EndEvent
+	Event OnSliderAcceptST(Float a_value)
+		AcceptSliderSetting("fRightPageTextZOffset", a_value, "{3}")
+	EndEvent
+EndState
+
+State fLeftPageTextZOffsetRight
+	Event OnSliderOpenST()
+		OpenSliderSetting("fLeftPageTextZOffsetRight", 0.0, 3.0, 0.001)
+	EndEvent
+	Event OnSliderAcceptST(Float a_value)
+		AcceptSliderSetting("fLeftPageTextZOffsetRight", a_value, "{3}")
+	EndEvent
+EndState
+
+State fRightPageTextZOffsetRight
+	Event OnSliderOpenST()
+		OpenSliderSetting("fRightPageTextZOffsetRight", 0.0, 3.0, 0.001)
+	EndEvent
+	Event OnSliderAcceptST(Float a_value)
+		AcceptSliderSetting("fRightPageTextZOffsetRight", a_value, "{3}")
 	EndEvent
 EndState
 

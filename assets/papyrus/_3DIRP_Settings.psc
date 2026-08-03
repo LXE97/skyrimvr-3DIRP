@@ -7,6 +7,7 @@ Bool Function ReloadSettings() Global Native
 Bool Function LoadProfile(String profile) Global Native
 Bool Function CreateProfile(String profile) Global Native
 Bool Function SaveSettings() Global Native
+Bool Function ResetHiddenQuests() Global Native
 
 String[] Function GetProfiles() Global Native
 String Function GetActiveProfile() Global Native

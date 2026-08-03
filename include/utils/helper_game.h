@@ -46,6 +46,7 @@ namespace helper
 
 	void SetGlowMult(RE::NiAVObject* a_target, float a_glow_mult);
 	void SetGlowColor(RE::NiAVObject* a_target, int a_color_hex);
+	void SetVertexColor(RE::BSTriShape* a_shape, const RE::Color& a_color);
 	void SetSpecularMult();
 	void SetSpecularColor();
 	void SetTintColor();

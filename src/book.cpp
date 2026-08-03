@@ -162,6 +162,31 @@ namespace vr3dirp
 				return;
 			}
 
+			constexpr std::array<std::string_view, 7> kNodesToDarken{
+				"HighPolyJournal01:1",
+				"HighPolyJournal01:3",
+				"Base Page1",
+				"Base Page2",
+				"Base Page3",
+				"Base Page4",
+				"Base Page5",
+			};
+			const auto brightness = std::clamp(settings.page_brightness, 0.3f, 1.0f);
+			const RE::NiColor pageColor{ brightness, brightness, brightness };
+			const RE::Color vertexColor{ pageColor.ToInt() };
+
+			for (auto& nodename : kNodesToDarken)
+			{
+				if (auto node = a->Get3D()->GetObjectByName(nodename))
+				{
+					helper::SetVertexColor(node->AsTriShape(), vertexColor);
+				}
+				else
+				{
+					SKSE::log::trace("dark set node not found");
+				}
+			}
+
 			NiTransform t;
 
 			// Light
@@ -174,8 +199,8 @@ namespace vr3dirp
 			}
 
 			// Interaction Volume
-			t.translate = { -7, -2, 4 };
-			auto interaction_volume = AddChild<BasicHitbox>(t, NiPoint3(18, 14, 5));
+			t.translate = { -8, -2, 4 };
+			auto interaction_volume = AddChild<BasicHitbox>(t, NiPoint3(19, 14, 5));
 			interaction_volume->AddBehavior<HandInteractionMode>();
 			interaction_volume->AddBehavior<BlockInputOnHover>(InputBlock::kAll);
 			interaction_volume->AddBehavior<BookPageTurn>();
@@ -480,10 +505,7 @@ namespace vr3dirp
 					}
 				}
 			}
-			else if (!secondary_pressed)
-			{
-				secondary_press_elapsed.reset();
-			}
+			else if (!secondary_pressed) { secondary_press_elapsed.reset(); }
 		}
 		else
 		{
@@ -566,7 +588,7 @@ namespace vr3dirp
 		if (isGrabbed && follow_target)
 		{
 			if (vrinput::GetButtonState(Controller::GetSingleton()->GetSettings().secondary,
-					vrinput::Hand(isLeft),
+					vrinput::Hand(grabHand->IsLeft()),
 					vrinput::ActionType::kPress) == vrinput::ButtonState::kButtonUp)
 			{
 				Release();
@@ -595,7 +617,6 @@ namespace vr3dirp
 			book->settings.left_rotate_x = quat.x;
 			book->settings.left_rotate_y = quat.y;
 			book->settings.left_rotate_z = quat.z;
-
 		}
 		else
 		{
@@ -607,7 +628,6 @@ namespace vr3dirp
 			book->settings.right_rotate_x = quat.x;
 			book->settings.right_rotate_y = quat.y;
 			book->settings.right_rotate_z = quat.z;
-
 		}
 
 		if (book->callbacks.transform_changed)
@@ -623,7 +643,7 @@ namespace vr3dirp
 		isGrabbed = false;
 		follow_target = nullptr;
 
-		if (!IsHovered(isLeft)) { hand_mode.Release(); }
+		if (!IsHovered(!book->isLeft)) { hand_mode.Release(); }
 	}
 
 	void GrabNode::OnHover(bool a_activate, Hand& a_hand)

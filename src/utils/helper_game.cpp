@@ -61,8 +61,8 @@ namespace helper
 				pointLight->local = local;
 				pointLight->SetLightAttenuation(radius);
 				auto& data = pointLight->GetLightRuntimeData();
-				 data.ambient = { 0.1f, 0.08f, 0.05f };
-				 data.diffuse = { 1.0f, 0.8f, 0.5f };
+				data.ambient = { 0.1f, 0.08f, 0.05f };
+				data.diffuse = { 1.0f, 0.8f, 0.5f };
 				data.fade = fade;
 				RE::NiUpdateData ctx{};
 				pointLight->Update(ctx);
@@ -218,6 +218,112 @@ namespace helper
 					NiColor temp(a_color_hex);
 					*(shader->emissiveColor) = temp;
 				}
+			}
+		}
+	}
+
+	namespace
+	{
+		bool UploadVertexBuffer(
+			RE::BSGraphics::TriShape* a_data, std::uint32_t a_vertexCount)
+		{
+			auto* device = RE::BSGraphics::Renderer::GetDevice();
+			if (!a_data || !a_data->rawVertexData || !device || a_vertexCount == 0)
+			{
+				return false;
+			}
+
+			REX::W32::D3D11_BUFFER_DESC bufferDesc{};
+			bufferDesc.byteWidth = a_vertexCount * a_data->vertexDesc.GetSize();
+			bufferDesc.usage = REX::W32::D3D11_USAGE_DEFAULT;
+			bufferDesc.bindFlags = REX::W32::D3D11_BIND_VERTEX_BUFFER;
+
+			REX::W32::D3D11_SUBRESOURCE_DATA initialData{};
+			initialData.sysMem = a_data->rawVertexData;
+
+			REX::W32::ID3D11Buffer* vertexBuffer = nullptr;
+			const auto result = device->CreateBuffer(&bufferDesc, &initialData, &vertexBuffer);
+			if (result < 0 || !vertexBuffer)
+			{
+				SKSE::log::error("Failed to create vertex color buffer (HRESULT {:#x})",
+					static_cast<std::uint32_t>(result));
+				return false;
+			}
+
+			auto* oldVertexBuffer =
+				reinterpret_cast<REX::W32::ID3D11Buffer*>(a_data->vertexBuffer);
+			a_data->vertexBuffer = reinterpret_cast<RE::ID3D11Buffer*>(vertexBuffer);
+			if (oldVertexBuffer) { oldVertexBuffer->Release(); }
+			return true;
+		}
+
+		void SetVertexBufferColor(
+			RE::BSGraphics::TriShape* a_data, std::uint32_t a_vertexCount, const RE::Color& a_color)
+		{
+			if (!a_data || !a_data->rawVertexData || a_vertexCount == 0)
+			{
+				SKSE::log::trace("SetVertexColor: no vertex data");
+				return;
+			}
+
+			auto vertexDesc = a_data->vertexDesc;
+			if (!vertexDesc.HasFlag(RE::BSGraphics::Vertex::Flags::VF_COLORS))
+			{
+				SKSE::log::trace("SetVertexColor: no vertex color property");
+				return;
+			}
+
+			const auto vertexSize = vertexDesc.GetSize();
+			const auto colorOffset =
+				vertexDesc.GetAttributeOffset(RE::BSGraphics::Vertex::Attribute::VA_COLOR);
+
+			for (std::uint32_t i = 0; i < a_vertexCount; ++i)
+			{
+				auto* vertexColor = reinterpret_cast<RE::Color*>(
+					a_data->rawVertexData + i * vertexSize + colorOffset);
+				*vertexColor = a_color;
+			}
+
+			UploadVertexBuffer(a_data, a_vertexCount);
+		}
+	}
+
+	void SetVertexColor(RE::BSTriShape* a_shape, const RE::Color& a_color)
+	{
+		if (!a_shape)
+		{
+			SKSE::log::trace("SetVertexColor: invalid bstrishape");
+			return;
+		}
+
+		auto& geometryData = a_shape->GetGeometryRuntimeData();
+		SetVertexBufferColor(
+			geometryData.rendererData, a_shape->GetTrishapeRuntimeData().vertexCount, a_color);
+
+		if (auto* shaderProperty = geometryData.shaderProperty.get())
+		{
+			using ShaderFlag = RE::BSShaderProperty::EShaderPropertyFlag8;
+			shaderProperty->SetFlags(ShaderFlag::kVertexColors, true);
+			shaderProperty->SetFlags(ShaderFlag::kSpecular, false);
+		}
+		else
+		{
+			SKSE::log::trace("SetVertexColor: couldn't set shader flags");
+		}
+
+		if (auto* skinInstance = geometryData.skinInstance.get())
+		{
+			SKSE::log::trace("SetVertexColor: setting skin instance colors");
+			if (auto* skinPartition = skinInstance->skinPartition.get())
+			{
+				for (auto& partition : skinPartition->partitions)
+				{
+					SetVertexBufferColor(partition.buffData, partition.vertices, a_color);
+				}
+			}
+			else
+			{
+				SKSE::log::trace("SetVertexColor: no skin partition in skin instance");
 			}
 		}
 	}
@@ -1255,10 +1361,7 @@ namespace helper
 			{
 				const auto token_end = token.find_last_not_of(" \t\r\n");
 				token = token.substr(token_begin, token_end - token_begin + 1);
-				if (token.starts_with("0x") || token.starts_with("0X"))
-				{
-					token.remove_prefix(2);
-				}
+				if (token.starts_with("0x") || token.starts_with("0X")) { token.remove_prefix(2); }
 
 				RE::FormID form_id{};
 				const auto [end, error] =

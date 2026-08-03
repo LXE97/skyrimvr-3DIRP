@@ -404,7 +404,7 @@ namespace vr_gui
 	{
 		for (auto& pool : models)
 		{
-			if (pool.addon) { pool.addon->SetWorldTransform(GetWorld()); }
+			//if (pool.addon) { pool.addon->SetWorldTransform(GetWorld()); }
 		}
 	}
 

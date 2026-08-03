@@ -9,6 +9,7 @@ namespace vr_gui
 {
 	static const char* kHelperModelPath = "3DIRP/vr_gui/HelperSphere.nif";
 	static const char* kDebugModelPath = "3DIRP/vr_gui/DebugSphere.nif";
+	static const char* kDebugBoxModelPath = "3DIRP/vr_gui/DrawExtents.nif";
 
 	void Controller::Cleanup()
 	{
@@ -652,13 +653,13 @@ namespace vr_gui
 		{
 			if (!parent)
 			{
-				AddModel("DebugSphere.nif", true, [radius = this->radius](ArtAddon* sphere) {
+				AddModel(kDebugModelPath, true, [radius = this->radius](ArtAddon* sphere) {
 					if (sphere && sphere->Get3D()) { sphere->Get3D()->local.scale = radius; }
 				});
 			}
 			else
 			{
-				AddModel("DrawExtents.nif", true,
+				AddModel(kDebugBoxModelPath, true,
 					[extents = this->extents](ArtAddon* box) { helper::DrawBox(box, extents); });
 			}
 		}
@@ -840,7 +841,7 @@ namespace vr_gui
 		if (!object || !target) { return; }
 
 		const auto transform = target->world.Invert() * GetWorld();
-		auto addon = art_addon::ArtAddon::Make(a_path, object, target, transform,
+		auto       addon = art_addon::ArtAddon::Make(a_path, object, target, transform,
 			[this, callback = std::move(a_callback)](art_addon::ArtAddon* a_addon) {
 				if (IsHidden() && a_addon && a_addon->Get3D())
 				{

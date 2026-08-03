@@ -48,6 +48,12 @@ namespace settings
 			return saved;
 		}
 
+		bool PapyrusResetHiddenQuests(RE::StaticFunctionTag*)
+		{
+			vr3dirp::ResetHiddenQuests();
+			return true;
+		}
+
 		std::vector<RE::BSFixedString> PapyrusGetProfiles(RE::StaticFunctionTag*)
 		{
 			std::vector<RE::BSFixedString> result;
@@ -267,6 +273,7 @@ namespace settings
 		a_vm->RegisterFunction("LoadProfile", kPapyrusScript, PapyrusLoadProfile);
 		a_vm->RegisterFunction("CreateProfile", kPapyrusScript, PapyrusCreateProfile);
 		a_vm->RegisterFunction("SaveSettings", kPapyrusScript, PapyrusSaveSettings);
+		a_vm->RegisterFunction("ResetHiddenQuests", kPapyrusScript, PapyrusResetHiddenQuests);
 		a_vm->RegisterFunction("GetProfiles", kPapyrusScript, PapyrusGetProfiles);
 		a_vm->RegisterFunction("GetActiveProfile", kPapyrusScript, PapyrusGetActiveProfile);
 		return true;

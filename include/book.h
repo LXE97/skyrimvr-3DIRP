@@ -23,11 +23,12 @@ namespace vr3dirp
 	struct BookSettings
 	{
 		float light_fade = 1.f;
+		float page_brightness = 0.5f;
 		float font_size = 1.f;
 		float book_scale = 1.0f;
-		float rightpage_text_z_offset = 1.f;
+		float rightpage_text_z_offset = 1.25f;
 		float leftpage_text_z_offset = 0.03f;
-		float rightpage_text_z_offset_righthand = 1.f;
+		float rightpage_text_z_offset_righthand = 1.25f;
 		float leftpage_text_z_offset_righthand = 0.03f;
 		float horizontal_margin = 0.9f;
 		float top_margin = 1.0f;
@@ -263,7 +264,6 @@ namespace vr3dirp
 
 		bool        isGrabbed = false;
 		bool        isGrabButtonHeld = false;
-		bool        isLeft = false;
 		float       grabHoldTime = 0.0f;
 		Hand*       grabHand{};
 		NiAVObject* follow_target{};
