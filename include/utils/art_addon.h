@@ -10,7 +10,7 @@
 namespace art_addon
 {
 	static constexpr const char* kEmptyNif = "effects/fxemptyobject.nif";
-	static constexpr const char* kFontAtlas = "3DIRP/char_2048.nif";
+	static constexpr const char* kFontAtlas = "3DIRP/vr_gui/char_2048.nif";
 
 	class ArtAddon;
 	using ArtAddonPtr = std::shared_ptr<ArtAddon>;
@@ -51,6 +51,7 @@ namespace art_addon
 		/** Returns: Pointer to the attached NiAVObject. nullptr if initialization hasn't finished. */
 		RE::NiAVObject* Get3D() { return root3D; }
 		RE::NiAVObject* GetParent() { return attach_node; }
+		RE::TESObjectREFR* GetTarget() { return target; }
 
 		/** Keeps the addon at the requested world transform regardless of its physical parent. */
 		void SetWorldTransform(const RE::NiTransform& a_world);
@@ -130,6 +131,7 @@ namespace art_addon
 	};
 
 	/* For creation of floating text.*/
+	/* deprecated- use TextManager */
 	class AddonTextBox
 	{
 	public:

@@ -1,4 +1,5 @@
 #pragma once
+#include "equipment_checker.h"
 #include "Windows.h"
 
 #include <filesystem>
@@ -16,8 +17,6 @@ namespace helper
 	void InstallPlayerUpdateHook(std::function<void(void)> a_func);
 
 	typedef bool (*_DrawWeapon)(RE::Actor* actor, bool draw);
-
-	bool IsHandEmpty(bool a_isLeft);
 
 	inline void PlayerDrawWeapon(bool draw)
 	{
@@ -47,6 +46,7 @@ namespace helper
 
 	void SetGlowMult(RE::NiAVObject* a_target, float a_glow_mult);
 	void SetGlowColor(RE::NiAVObject* a_target, int a_color_hex);
+	void SetVertexColor(RE::BSTriShape* a_shape, const RE::Color& a_color);
 	void SetSpecularMult();
 	void SetSpecularColor();
 	void SetTintColor();
@@ -122,9 +122,13 @@ namespace helper
 
 	std::filesystem::path GetGamePath();
 	float                 ReadFloatFromIni(std::ifstream& a_file, std::string a_setting);
-	int                   ReadIntFromIni(std::ifstream& a_file, std::string a_setting);
-	std::string           ReadStringFromIni(std::ifstream& a_file, std::string a_setting);
-	bool                  ReadConfig(const char* a_ini_path);
+	bool                  WriteFloatToIni(
+		const std::filesystem::path& a_path, std::string_view a_setting, float a_value);
+	bool WriteStringToIni(
+		const std::filesystem::path& a_path, std::string_view a_setting, std::string_view a_value);
+	int         ReadIntFromIni(std::ifstream& a_file, std::string a_setting);
+	std::string ReadStringFromIni(std::ifstream& a_file, std::string a_setting);
+	bool        ReadConfig(const char* a_ini_path);
 
 	template <typename T>
 	T* GetForm(const RE::FormID a_lower_id, std::string a_mod_name)
@@ -218,5 +222,15 @@ namespace helper
 
 	std::string ResolveGlobalValue(
 		const RE::TESQuest* a_quest, std::uint32_t a_instanceID, std::string_view a_editorID);
+
+	RE::NiPointer<RE::NiPointLight> MakeLight(RE::TESObjectREFR* target, RE::NiNode* attach_node,
+		const RE::NiTransform& local, float radius, float fade);
+
+	void DestroyLight(RE::NiPointer<RE::NiPointLight>& runtimeLight);
+
+	std::unordered_set<RE::FormID> ParseFormIDList(
+		std::string_view a_list, std::string_view a_setting_name);
+
+	std::string SerializeFormIDList(const std::unordered_set<RE::FormID>& a_form_ids);
 
 }

@@ -4,9 +4,18 @@
 
 #include <deque>
 #include <optional>
+#include <unordered_map>
 
 namespace vr_gui
 {
+	int FormatParagraph(
+		std::string& a_text, float a_char_scale, float a_char_spacing, float a_max_width);
+	float GetTextWidth(
+		std::string_view a_text, float a_char_scale, float a_char_spacing);
+	void TrimToLine(
+		std::string& a_text, float a_char_scale, float a_char_spacing, float a_max_width);
+
+
 	class TextManager : public Widget
 	{
 	public:
@@ -20,6 +29,7 @@ namespace vr_gui
 		void Update(float a_delta) override;
 		void Hide() override;
 		void Show() override;
+		static float GetGlyphWidth(char a_character);
 
 	private:
 		struct GlyphLocation
@@ -61,6 +71,8 @@ namespace vr_gui
 		void PlaceCharacter(PoolModel& a_model, const PendingText& a_text, char a_character);
 		void SetCharacterUV(PoolModel& a_model, std::size_t a_quadIndex, char a_character);
 		bool UploadVertices(PoolModel& a_model);
+
+		static const std::unordered_map<char, float> glyph_widths;
 
 		std::shared_ptr<LifetimeToken>            token = std::make_shared<LifetimeToken>();
 		std::string                               model_path;

@@ -8,6 +8,29 @@ namespace vr3dirp
 	using namespace vr_gui;
 	using QuestType = RE::QUEST_DATA::Type;
 	using HiddenQuestSet = std::unordered_set<RE::FormID>;
+	using NewQuestSet = std::unordered_set<RE::FormID>;
+
+	struct JournalSettings
+	{
+		float journal_scale = 0.9f;
+		float quest_line_spacing = 0.6f;
+		int   show_misc_all = 0;
+		bool  highlight_new_quests = true;
+		int   hide_button = 1;
+		int   font = 0;
+	};
+
+	struct JournalState
+	{
+		HiddenQuestSet hidden_quests;
+		NewQuestSet    new_quests;
+	};
+
+	struct JournalCallbacks
+	{
+		std::function<void(RE::FormID)>         quest_hidden;
+		std::function<void(const NewQuestSet&)> new_quests_removed;
+	};
 
 	class Journal;
 
@@ -17,32 +40,36 @@ namespace vr3dirp
 		std::string_view chapter_model_path;
 	};
 
-	inline constexpr std::string_view kAllQuestsChapterModelPath = "3DIRP/Chapters/All.nif";
+	inline constexpr std::string_view kAllQuestsChapterModelPath = "3DIRP/Journal/Chapters/All.nif";
+	inline constexpr std::string_view kFavoritesChapterModelPath =
+		"3DIRP/Journal/Chapters/Favorites.nif";
 
 	inline constexpr std::array<QuestTypeInfo, 12> kQuestTypeInfo{ {
-		{ 12, "3DIRP/Chapters/None.nif" },            // kNone
-		{ 1, "3DIRP/Chapters/MainQuest.nif" },        // kMainQuest
-		{ 6, "3DIRP/Chapters/MagesGuild.nif" },       // kMagesGuild
-		{ 7, "3DIRP/Chapters/ThievesGuild.nif" },     // kThievesGuild
-		{ 8, "3DIRP/Chapters/DarkBrotherhood.nif" },  // kDarkBrotherhood
-		{ 9, "3DIRP/Chapters/Companions.nif" },       // kCompanionsQuest
-		{ 3, "3DIRP/Chapters/Miscellaneous.nif" },    // kMiscellaneous
-		{ 4, "3DIRP/Chapters/Daedric.nif" },          // kDaedric
-		{ 2, "3DIRP/Chapters/SideQuest.nif" },        // kSideQuest
-		{ 5, "3DIRP/Chapters/CivilWar.nif" },         // kCivilWar
-		{ 10, "3DIRP/Chapters/Dawnguard.nif" },       // kDLC01_Vampire
-		{ 11, "3DIRP/Chapters/Dragonborn.nif" },      // kDLC02_Dragonborn
+		{ 12, "3DIRP/Journal/Chapters/None.nif" },            // kNone
+		{ 3, "3DIRP/Journal/Chapters/MainQuest.nif" },        // kMainQuest
+		{ 6, "3DIRP/Journal/Chapters/College.nif" },          // kMagesGuild
+		{ 7, "3DIRP/Journal/Chapters/ThievesGuild.nif" },     // kThievesGuild
+		{ 8, "3DIRP/Journal/Chapters/DarkBrotherhood.nif" },  // kDarkBrotherhood
+		{ 9, "3DIRP/Journal/Chapters/Companions.nif" },       // kCompanionsQuest
+		{ 1, "3DIRP/Journal/Chapters/Miscellaneous.nif" },    // kMiscellaneous
+		{ 4, "3DIRP/Journal/Chapters/Daedric.nif" },          // kDaedric
+		{ 2, "3DIRP/Journal/Chapters/SideQuest.nif" },        // kSideQuest
+		{ 5, "3DIRP/Journal/Chapters/CivilWar.nif" },         // kCivilWar
+		{ 10, "3DIRP/Journal/Chapters/Dawnguard.nif" },       // kDLC01_Vampire
+		{ 11, "3DIRP/Journal/Chapters/Dragonborn.nif" },      // kDLC02_Dragonborn
 	} };
 
 	struct JournalQuestData
 	{
-		RE::TESQuest*                                owner;
+		RE::TESQuest*                               owner;
+		std::string                                 name;
 		std::vector<RE::BGSInstancedQuestObjective> current_objectives;
 		std::vector<RE::BGSInstancedQuestObjective> completed_objectives;
 		std::vector<RE::BGSInstancedQuestObjective> failed_objectives;
 
 		bool tracked{ false };
 		bool completed{ false };
+		bool unseen{ false };
 	};
 
 	constexpr QuestTypeInfo GetQuestTypeInfo(QuestType a_type) noexcept
@@ -51,25 +78,30 @@ namespace vr3dirp
 
 		if (index < kQuestTypeInfo.size()) { return kQuestTypeInfo[index]; }
 
-		return { std::numeric_limits<std::uint8_t>::max(), "3DIRP/Chapters/None.nif" };
+		return { std::numeric_limits<std::uint8_t>::max(), "3DIRP/Journal/Chapters/None.nif" };
 	}
 
 	class QuestChapter : public Chapter
 	{
 	public:
-		QuestChapter(std::optional<QuestType> a_type, Journal& a_journal) :
-			Chapter(std::string{
-				a_type ? GetQuestTypeInfo(*a_type).chapter_model_path : "3DIRP/Chapters/All.nif" }),
+		QuestChapter(
+			std::optional<QuestType> a_type, Journal& a_journal, bool a_tracked_only = false) :
+			Chapter(std::string{ a_type ? GetQuestTypeInfo(*a_type).chapter_model_path :
+					a_tracked_only      ? kFavoritesChapterModelPath :
+										  kAllQuestsChapterModelPath }),
 			type(a_type),
-			journal(a_journal)
+			journal(a_journal),
+			favorites(a_tracked_only)
 		{}
 
 		void MakePages(const Book::Layout& a_layout) override;
+		void OnSelected(const Book::Layout& a_layout) override;
 
 		std::optional<QuestType> type;
 
 	private:
 		Journal& journal;
+		bool     favorites{ false };
 	};
 
 	class QuestPage : public Page
@@ -80,6 +112,7 @@ namespace vr3dirp
 			journal(a_journal)
 		{}
 
+		void OnSelected() override { selected_quest_index = 0; }
 		void Draw(Book::PageContext a_context, bool a_left_page) override;
 		void HideQuest(const JournalQuestData& a_quest, Book::PageContext a_context);
 
@@ -113,25 +146,34 @@ namespace vr3dirp
 		OnActivate onActivate;
 		MenuAction action;
 		float      elapsed{};
-		bool       buttonHeld{};
+		bool       button_held{};
 		bool       armed{};
 	};
 
 	class Journal : public Book
 	{
 	public:
-		static constexpr std::string_view kModelPath = "3DIRP/journal.nif";
+		static constexpr std::string_view kModelPath = "3DIRP/Journal/journal.nif";
 
 		Journal(bool a_isLeft, TESObjectREFR* a_objectReference, NiAVObject* a_root,
-			NiTransform a_local);
+			BookSettings a_book_settings, BookCallbacks a_book_callbacks,
+			JournalSettings a_journal_settings, JournalState a_state,
+			JournalCallbacks a_journal_callbacks);
 
 		bool IsQuestHidden(const RE::TESQuest* a_quest) const;
 		bool HideQuest(const RE::TESQuest* a_quest);
+		bool IsQuestUnseen(const RE::TESQuest* a_quest) const;
+		void MarkQuestSeen(const RE::TESQuest* a_quest);
+		void PruneNewQuests(const NewQuestSet& a_visible_quests);
 
-		const HiddenQuestSet& GetHiddenQuests() const { return hiddenQuests; }
+		const HiddenQuestSet&  GetHiddenQuests() const { return hidden_quests; }
+		const JournalSettings& GetJournalSettings() const { return journal_settings; }
 
 	private:
-		HiddenQuestSet hiddenQuests;
+		JournalSettings  journal_settings;
+		JournalCallbacks journal_callbacks;
+		HiddenQuestSet   hidden_quests;
+		NewQuestSet      new_quests;
 	};
 
 }

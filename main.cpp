@@ -1,5 +1,7 @@
 #include "main_plugin.h"
 
+#include "settings.h"
+
 #include <spdlog/sinks/basic_file_sink.h>
 
 void MessageListener(SKSE::MessagingInterface::Message* message);
@@ -22,6 +24,13 @@ SKSEPluginLoad(const SKSE::LoadInterface* skse)
 {
 	SKSE::Init(skse);
 	SetupLog();
+	vr3dirp::InitSerialization();
+	auto* papyrus = SKSE::GetPapyrusInterface();
+	if (!papyrus || !papyrus->Register(settings::RegisterPapyrusFunctions))
+	{
+		SKSE::log::critical("Unable to register settings Papyrus functions");
+		return false;
+	}
 
 	SKSE::GetMessagingInterface()->RegisterListener(MessageListener);
 
@@ -59,27 +68,12 @@ void MessageListener(SKSE::MessagingInterface::Message* message)
 		if (g_vrikInterface) { info("Got VRIK interface"); }
 		else
 		{
-			error("VRIK interface not found");
+			error("Plugin disabled: VRIK interface not found");
 			g_plugin_error = true;
 		}
 		break;
 
 	case SKSE::MessagingInterface::kDataLoaded:
-		if (false)
-		{
-			if (auto file =
-					RE::TESDataHandler::GetSingleton()->LookupModByName(vr3dirp::kPluginName))
-			{
-				vr3dirp::g_esp_index = file->GetPartialIndex();
-				info("kDataLoaded: esp ID = {}", vr3dirp::g_esp_index);
-				if (!vr3dirp::g_esp_index)
-				{
-					g_plugin_error = true;
-					critical("Plugin disabled, no esp");
-				}
-			}
-		}
-
 		if (!g_plugin_error) { vr3dirp::Init(); }
 
 		break;
@@ -91,6 +85,8 @@ void MessageListener(SKSE::MessagingInterface::Message* message)
 	case SKSE::MessagingInterface::kNewGame:
 		if (!g_plugin_error) { vr3dirp::OnGameLoad(); }
 		break;
+	case SKSE::MessagingInterface::kSaveGame:
+		if (!g_plugin_error) { vr3dirp::OnSaveGame(); }
 	default:
 		break;
 	}

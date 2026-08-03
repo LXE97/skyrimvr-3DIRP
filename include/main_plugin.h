@@ -9,17 +9,17 @@
 
 namespace vr3dirp
 {
-	constexpr const char* kPluginName = "Real_Spellbook_VR";
-
-	extern uint32_t g_esp_index;
-
 	extern PapyrusVRAPI* g_papyrusvr;
 
 	void Init();
+	void InitSerialization();
 
 	void OnGameLoad();
 
 	void PreLoadGame();
 
-	void ShowHands(bool a_show);
+	void OnSaveGame();
+
+	void ApplySettings();
+	void ResetHiddenQuests();
 }

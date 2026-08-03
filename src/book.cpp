@@ -1,17 +1,76 @@
 #include "book.h"
 
+#include "equipment_checker.h"
 #include "helper_game.h"
 
 namespace vr3dirp
 {
 	using namespace art_addon;
-	static constexpr float kHiddenSpellScale = 0.001f;
+
+	static constexpr float kChapterGlow = 1.9f;
+
+	namespace
+	{
+		std::optional<vr::EVRButtonId> GetBookButton(
+			const Controller::Settings& a_settings, int a_button)
+		{
+			switch (a_button)
+			{
+			case 0:
+				return a_settings.primary;
+			case 1:
+				return a_settings.secondary;
+			default:
+				return std::nullopt;
+			}
+		}
+
+		NiTransform MakeBookLocalTransform(
+			bool a_isLeft, const BookSettings& a_settings, float a_scale)
+		{
+			NiTransform result{};
+			result.scale = a_scale;
+
+			NiQuaternion rotation;
+			if (a_isLeft)
+			{
+				result.translate = { a_settings.left_offset_x, a_settings.left_offset_y,
+					a_settings.left_offset_z };
+				rotation = { a_settings.left_rotate_w, a_settings.left_rotate_x,
+					a_settings.left_rotate_y, a_settings.left_rotate_z };
+			}
+			else
+			{
+				result.translate = { a_settings.right_offset_x, a_settings.right_offset_y,
+					a_settings.right_offset_z };
+				rotation = { a_settings.right_rotate_w, a_settings.right_rotate_x,
+					a_settings.right_rotate_y, a_settings.right_rotate_z };
+			}
+
+			const float length_squared = rotation.Dot(rotation);
+			if (length_squared > 0.0f)
+			{
+				const float inverse_length = 1.0f / std::sqrt(length_squared);
+				rotation.w *= inverse_length;
+				rotation.x *= inverse_length;
+				rotation.y *= inverse_length;
+				rotation.z *= inverse_length;
+			}
+			else
+			{
+				rotation = { 1.0f, 0.0f, 0.0f, 0.0f };
+			}
+
+			result.rotate = rotation.ToRotation();
+			return result;
+		}
+	}
 
 	Book::~Book()
 	{
 		if (auto* actor = GetObjectReference()->As<RE::Actor>())
 		{
-			if (stored_spell && helper::IsHandEmpty(isLeft))
+			if (stored_spell && equipment_checker::IsHandEmpty(isLeft))
 			{
 				if (auto* equip_manager = RE::ActorEquipManager::GetSingleton())
 				{
@@ -20,13 +79,20 @@ namespace vr3dirp
 				}
 			}
 		}
+
+		if (book_light) { helper::DestroyLight(book_light); }
 	}
+
+	BookSettingsOwner::BookSettingsOwner(BookSettings a_settings, BookCallbacks a_callbacks) :
+		settings(std::move(a_settings)),
+		callbacks(std::move(a_callbacks))
+	{}
 
 	void Book::Close()
 	{
 		if (animator.HasQueued()) { animator.ClearQueue(); }
 		animator.PlayImmediately(close, animation_speed * 1.2,
-			[this]() { Controller::GetSingleton()->MarkForDelete(this); });
+			{ { close.end, [this]() { Controller::GetSingleton()->MarkForDelete(this); } } });
 
 		RE::BSSoundHandle sound;
 		auto              world_pos = GetWorld().translate;
@@ -35,15 +101,34 @@ namespace vr3dirp
 	}
 
 	Book::Book(std::string_view a_model_path, bool a_isLeft, TESObjectREFR* a_objectReference,
-		NiAVObject* a_root, NiTransform a_local) :
-		Widget(kDefaultWindowRadius, a_objectReference, a_root, a_local),
+		NiAVObject* a_root, BookSettings a_settings, BookCallbacks a_callbacks,
+		std::optional<float> a_scale_override) :
+		BookSettingsOwner(std::move(a_settings), std::move(a_callbacks)),
+		Widget(kDefaultWindowRadius, a_objectReference, a_root,
+			MakeBookLocalTransform(
+				a_isLeft, settings, a_scale_override.value_or(settings.book_scale))),
 		isLeft(a_isLeft)
 	{
+		layout.right_page_origin.z = a_isLeft ? settings.rightpage_text_z_offset :
+												settings.rightpage_text_z_offset_righthand;
+		layout.left_page_origin.z -=
+			a_isLeft ? settings.leftpage_text_z_offset : settings.leftpage_text_z_offset_righthand;
+		layout.top_margin = settings.top_margin;
+		layout.horizontal_margin = settings.horizontal_margin;
+		layout.body_text_scale = settings.font_size;
+		layout.heading_text_scale *= settings.font_size;
+		layout.objective_spacing =
+			0.2f + art_addon::AddonTextBox::kLineSpacing * layout.body_text_scale;
+		secondary_double_tap_threshold = settings.close_timing;
+
 		// store state of dismissal button when summoned to avoid instant closing
-		const auto settings = Controller::GetSingleton()->GetSettings();
-		secondary_pressed_during_creation =
-			vrinput::GetButtonState(settings.secondary, vrinput::Hand(a_isLeft),
-				vrinput::ActionType::kPress) == vrinput::ButtonState::kButtonDown;
+		const auto vrgui_settings = Controller::GetSingleton()->GetSettings();
+		if (const auto close_button = GetBookButton(vrgui_settings, settings.close_button))
+		{
+			secondary_pressed_during_creation =
+				vrinput::GetButtonState(*close_button, vrinput::Hand(a_isLeft),
+					vrinput::ActionType::kPress) == vrinput::ButtonState::kButtonDown;
+		}
 
 		auto* pc = RE::PlayerCharacter::GetSingleton();
 
@@ -77,11 +162,45 @@ namespace vr3dirp
 				return;
 			}
 
+			constexpr std::array<std::string_view, 7> kNodesToDarken{
+				"HighPolyJournal01:1",
+				"HighPolyJournal01:3",
+				"Base Page1",
+				"Base Page2",
+				"Base Page3",
+				"Base Page4",
+				"Base Page5",
+			};
+			const auto brightness = std::clamp(settings.page_brightness, 0.3f, 1.0f);
+			const RE::NiColor pageColor{ brightness, brightness, brightness };
+			const RE::Color vertexColor{ pageColor.ToInt() };
+
+			for (auto& nodename : kNodesToDarken)
+			{
+				if (auto node = a->Get3D()->GetObjectByName(nodename))
+				{
+					helper::SetVertexColor(node->AsTriShape(), vertexColor);
+				}
+				else
+				{
+					SKSE::log::trace("dark set node not found");
+				}
+			}
+
 			NiTransform t;
 
+			// Light
+			if (settings.light_fade > 0.01f)
+			{
+				NiTransform book_transform;
+				book_transform.translate = { -10, 0, 15 };
+				book_light = helper::MakeLight(a->GetTarget(), a->Get3D()->AsNode(), book_transform,
+					10.0, settings.light_fade);
+			}
+
 			// Interaction Volume
-			t.translate = { -9, -2, 4 };
-			auto interaction_volume = AddChild<BasicHitbox>(t, NiPoint3(18, 14, 5));
+			t.translate = { -8, -2, 4 };
+			auto interaction_volume = AddChild<BasicHitbox>(t, NiPoint3(19, 14, 5));
 			interaction_volume->AddBehavior<HandInteractionMode>();
 			interaction_volume->AddBehavior<BlockInputOnHover>(InputBlock::kAll);
 			interaction_volume->AddBehavior<BookPageTurn>();
@@ -89,7 +208,7 @@ namespace vr3dirp
 
 			// Chapter tabs
 			auto chapter_parent = Get3D()->GetObjectByName(kChapterParent);
-			t.translate = { 0.1f, 0, -0.1f };
+			t.translate = { -0.05f, 0, -0.1f };
 			tab_container = AddChild<Widget>(
 				t, NiPoint3(1.0, layout.kRightPageHeight * 0.5f, 0.5), chapter_parent);
 			tab_container->SetPriority(10);
@@ -98,13 +217,13 @@ namespace vr3dirp
 			for (std::size_t i = 0; i < chapters.size(); ++i) AddChapterTab(i);
 
 			// Page Content anchors
-			t.translate = layout.kRightPageOrigin;
+			t.translate = layout.right_page_origin;
 			right_page_parent = AddChild<Widget>(t,
 				NiPoint3(layout.kRightPageWidth * 0.5f, layout.kRightPageHeight * 0.5f, 1),
 				right_parent);
 			right_page_parent->AddBehavior<ExclusiveHoverGroup>();
 
-			t.translate = layout.kLeftPageOrigin;
+			t.translate = layout.left_page_origin;
 
 			// left parent is upside down
 			t.rotate = {
@@ -119,23 +238,36 @@ namespace vr3dirp
 			left_page_parent->AddBehavior<ExclusiveHoverGroup>();
 
 			// Grab Node
-			t.translate = { 7, 14, -1 };
+			if (isLeft) { t.translate = { 7, 16, -4 }; }
+			else
+			{
+				t.translate = { -23, 16, -4 };
+			}
+
 			t.rotate = {
 				{ 1.0000000, 0.0000000, 0.0000000 },
 				{ 0.0000000, -1.0000000, 0.0000000 },
 				{ 0.0000000, 0.0000000, -1.0000000 },
 			};
-			grab_node = AddChild<GrabNode>(t, NiPoint3(3, 3, 3));
+			grab_node = AddChild<GrabNode>(t, NiPoint3(2, 2, 4));
 			grab_node->SetPriority(5);
 
-			animator.PlayImmediately(open, animation_speed, [this]() { DrawCurrentPage(true); });
+			const auto initial_chapter = static_cast<int>(chapter_index);
+			const auto initial_page = static_cast<int>(page_index);
+
+			animator.PlayImmediately(open, animation_speed,
+				{ { open.end * 0.1f,
+					  [this, initial_chapter, initial_page]() {
+						  DrawPage(initial_chapter, initial_page, false);
+					  } },
+					{ open.end * 0.6f, [this, initial_chapter, initial_page]() {
+						 DrawPage(initial_chapter, initial_page, true);
+					 } } });
 
 			RE::BSSoundHandle sound;
 			auto              world_pos = GetWorld().translate;
 			helper::InitializeSound(sound, kBookOpenSd);
 			helper::PlaySound(sound, 1, world_pos, Get3D());
-
-			DrawCurrentPage(false);
 		});
 	}
 
@@ -173,9 +305,14 @@ namespace vr3dirp
 
 	void Book::TurnToChapter(int a_index)
 	{
-		if (a_index == (int)chapter_index) { return; }
+		if (chapters.empty()) { return; }
 		if (a_index >= (int)chapters.size()) a_index = 0;
 		if (a_index < 0) a_index = (int)chapters.size() - 1;
+		if (a_index == (int)chapter_index) { return; }
+
+		auto* chapter = chapters[static_cast<std::size_t>(a_index)].get();
+		if (!chapter) { return; }
+
 		TurnToPage(a_index, 0,
 			a_index > (int)chapter_index ? TurnDirection::kLeft : TurnDirection::kRight);
 	}
@@ -184,32 +321,48 @@ namespace vr3dirp
 		std::size_t a_chapter_index, std::size_t a_page_index, TurnDirection a_direction)
 	{
 		if (a_chapter_index >= chapters.size() || !chapters[a_chapter_index] ||
-			a_page_index >= chapters[a_chapter_index]->pages.size() ||
-			!chapters[a_chapter_index]->pages[a_page_index] ||
 			(a_chapter_index == chapter_index && a_page_index == page_index))
 		{
 			return;
 		}
 
+		if (chapter_index != a_chapter_index) { chapters[a_chapter_index]->OnSelected(layout); }
 		chapter_index = a_chapter_index;
+
+		if (a_page_index >= chapters[a_chapter_index]->pages.size() ||
+			!chapters[a_chapter_index]->pages[a_page_index])
+		{
+			return;
+		}
+		chapters[a_chapter_index]->pages[a_page_index]->OnSelected();
 		page_index = a_page_index;
 
 		const bool turn_left = a_direction == TurnDirection::kLeft;
-		ClearPageView();
-		DrawCurrentPage(!turn_left);
 
 		float anim_speed_adjust = animation_speed;
 		if (animator.IsBusy())
 		{
-			anim_speed_adjust *= 1.2f;
+			anim_speed_adjust *= 1.3f;
 			animator.SetSpeed(anim_speed_adjust);
 		}
 
 		animator.ClearQueue();
 
 		const auto& animation = turn_left ? flip_left : flip_right;
-		animator.Queue(
-			animation, anim_speed_adjust, [this, turn_left] { DrawCurrentPage(turn_left); });
+		const auto  draw_chapter = static_cast<int>(a_chapter_index);
+		const auto  draw_page = static_cast<int>(a_page_index);
+
+		animator.Queue(animation, anim_speed_adjust,
+			{ { std::lerp(animation.start, animation.end, 0.2f),
+				  [this, turn_left, draw_chapter, draw_page] {
+					  ClearPageView(!turn_left);
+					  DrawPage(draw_chapter, draw_page, !turn_left);
+				  } },
+				{ std::lerp(animation.start, animation.end, 0.7f),
+					[this, turn_left, draw_chapter, draw_page] {
+						ClearPageView(turn_left);
+						DrawPage(draw_chapter, draw_page, turn_left);
+					} } });
 
 		RE::BSSoundHandle sound;
 		auto              world_pos = GetWorld().translate;
@@ -220,7 +373,6 @@ namespace vr3dirp
 	void Book::AddChapter(std::unique_ptr<Chapter> a_chapter)
 	{
 		if (!a_chapter) { return; }
-		a_chapter->MakePages(layout);
 		chapters.emplace_back(std::move(a_chapter));
 		AddChapterTab(chapters.size() - 1);
 	}
@@ -234,20 +386,24 @@ namespace vr3dirp
 		}
 
 		NiTransform transform;
-		transform.translate = layout.kTabOffset;
+		transform.scale = layout.tab_scale;
+		transform.translate = layout.tab_origin;
 		transform.translate.y -= static_cast<float>(a_index) * layout.tab_spacing;
-		transform.translate.x -= (a_index % 2) * 0.3;
-		transform.translate.z -= 0.1 * a_index;
+		transform.translate.x += 0.1;
+		transform.translate.x -= (a_index % 2) * 0.16;
+		transform.translate.z -= 0.07 * a_index;
 
-		auto* tab = tab_container->AddChild<Widget>(transform, NiPoint3(1.0, 0.3, 0.25));
+		auto* tab = tab_container->AddChild<Widget>(transform, NiPoint3(0.8, 0.3, 0.45));
 		tab->AddModel(chapters[a_index]->model_path, false, [this, a_index](ArtAddon* a_model) {
-			helper::SetGlowMult(
-				a_model ? a_model->Get3D() : nullptr, chapter_index == a_index ? 0.9f : 0.0f);
+			helper::SetGlowMult(a_model ? a_model->Get3D() : nullptr,
+				chapter_index == a_index ? kChapterGlow : 0.0f);
 		});
 		tab->SetPriority(tab_container->GetPriority() + 1);
 		tab->AddBehavior<SelectionHighlight>(
 			tab_container->GetBehavior<ExclusiveHoverGroup>(),
-			[tab](bool highlight) { helper::SetGlowMult(tab->Get3D(), highlight ? 0.9f : 0.0f); },
+			[tab](bool highlight) {
+				helper::SetGlowMult(tab->Get3D(), highlight ? kChapterGlow : 0.0f);
+			},
 			[this, a_index] { TurnToChapter((int)a_index); },
 			[this, a_index] { return GetChapterIndex() == a_index; });
 
@@ -256,7 +412,7 @@ namespace vr3dirp
 
 	void SelectionHighlight::Update(float)
 	{
-		if (!parent) { return; }
+		if (!parent || (can_interact && !can_interact())) { return; }
 
 		const bool selected = is_selected && is_selected();
 		const bool should_highlight = selected ||
@@ -273,6 +429,7 @@ namespace vr3dirp
 
 	void SelectionHighlight::OnClick(bool a_activate, Hand& a_hand, MenuAction a_action)
 	{
+		if (can_interact && !can_interact()) { return; }
 		if (!a_activate || a_action != MenuAction::kPrimary) { return; }
 		if (hover_group) { hover_group->Update(0.0f); }
 		if (hover_group && !hover_group->IsExclusivelyHovered(parent, a_hand.IsLeft())) { return; }
@@ -280,22 +437,30 @@ namespace vr3dirp
 		if (on_activate) on_activate();
 	}
 
-	void Book::DrawCurrentPage(bool a_left_page)
+	void Book::DrawPage(int a_chapter, int a_page, bool a_left_page)
 	{
-		if (chapter_index >= chapters.size() || !chapters[chapter_index]) { return; }
+		if (a_chapter < 0 || a_page < 0) { return; }
 
-		auto& pages = chapters[chapter_index]->pages;
-		if (page_index >= pages.size() || !pages[page_index]) { return; }
+		const auto chapter = static_cast<std::size_t>(a_chapter);
+		const auto page = static_cast<std::size_t>(a_page);
+		if (chapter >= chapters.size() || !chapters[chapter]) { return; }
 
-		PageContext context{ layout, *left_page_parent, *right_page_parent, (int)page_index, (int)pages.size() };
+		auto& pages = chapters[chapter]->pages;
+		if (page >= pages.size() || !pages[page]) { return; }
 
-		pages[page_index]->Draw(context, a_left_page);
+		PageContext context{ layout, *left_page_parent, *right_page_parent, a_page, a_chapter,
+			(int)pages.size() };
+
+		pages[page]->Draw(context, a_left_page);
 	}
 
-	void Book::ClearPageView()
+	void Book::ClearPageView(bool a_left)
 	{
-		left_page_parent->ClearChildren();
-		right_page_parent->ClearChildren();
+		if (a_left) { left_page_parent->ClearChildren(); }
+		else
+		{
+			right_page_parent->ClearChildren();
+		}
 	}
 
 	void Page::Draw(Book::PageContext a_context, bool a_left_page)
@@ -308,31 +473,62 @@ namespace vr3dirp
 	void Book::Update(float a_delta)
 	{
 		animator.Update(Get3D(), a_delta);
-		if (secondary_press_elapsed)
+
+		const auto vrgui_settings = Controller::GetSingleton()->GetSettings();
+		const auto close_button = GetBookButton(vrgui_settings, settings.close_button);
+		if (!close_button)
 		{
-			*secondary_press_elapsed += a_delta;
-			if (*secondary_press_elapsed > secondary_double_tap_threshold)
-			{
-				secondary_press_elapsed.reset();
-			}
+			secondary_press_elapsed.reset();
+			return;
 		}
 
-		const auto settings = Controller::GetSingleton()->GetSettings();
-
 		const bool secondary_pressed =
-			vrinput::GetButtonState(settings.secondary, vrinput::Hand(isLeft),
+			vrinput::GetButtonState(*close_button, vrinput::Hand(isLeft),
 				vrinput::ActionType::kPress) == vrinput::ButtonState::kButtonDown;
 
-		if (secondary_pressed && !secondary_pressed_during_creation)
+		if (settings.close_action == 0)
+		{
+			if (secondary_pressed)
+			{
+				if (!secondary_pressed_during_creation && !secondary_press_elapsed)
+				{
+					secondary_press_elapsed = 0.0f;
+				}
+
+				if (secondary_press_elapsed)
+				{
+					*secondary_press_elapsed += a_delta;
+					if (*secondary_press_elapsed >= secondary_double_tap_threshold)
+					{
+						secondary_press_elapsed.reset();
+						Close();
+					}
+				}
+			}
+			else if (!secondary_pressed) { secondary_press_elapsed.reset(); }
+		}
+		else
 		{
 			if (secondary_press_elapsed)
 			{
-				secondary_press_elapsed.reset();
-				Close();
+				*secondary_press_elapsed += a_delta;
+				if (*secondary_press_elapsed > secondary_double_tap_threshold)
+				{
+					secondary_press_elapsed.reset();
+				}
 			}
-			else
+
+			if (secondary_pressed && !secondary_pressed_during_creation)
 			{
-				secondary_press_elapsed = 0.0f;
+				if (secondary_press_elapsed)
+				{
+					secondary_press_elapsed.reset();
+					Close();
+				}
+				else
+				{
+					secondary_press_elapsed = 0.0f;
+				}
 			}
 		}
 
@@ -366,18 +562,7 @@ namespace vr3dirp
 			}
 			else
 			{
-				if (isGrabbed) { helper::PrintTransform(parent->GetTransform()); }
-				isGrabButtonHeld = false;
-				grabHoldTime = 0.0f;
-				grabHand = nullptr;
-				isGrabbed = false;
-				follow_target = nullptr;
-
-				if (!IsHovered(a_hand.IsLeft())) { hand_mode.Release(); }
-				else
-				{
-					hand_mode = a_hand.RequestMode(Hand::Mode::kOpen, Hand::ModePriority::kGrab);
-				}
+				if (isGrabbed) { Release(); }
 			}
 		}
 	}
@@ -402,11 +587,63 @@ namespace vr3dirp
 
 		if (isGrabbed && follow_target)
 		{
+			if (vrinput::GetButtonState(Controller::GetSingleton()->GetSettings().secondary,
+					vrinput::Hand(grabHand->IsLeft()),
+					vrinput::ActionType::kPress) == vrinput::ButtonState::kButtonUp)
+			{
+				Release();
+				return;
+			}
 			if (auto* book = dynamic_cast<Book*>(parent))
 			{
 				book->VirtualParent(follow_target, parent_store);
 			}
 		}
+	}
+
+	void GrabNode::Release()
+	{
+		auto*      book = static_cast<Book*>(GetRoot());
+		const auto transform = book->GetTransform();
+		const auto quat = helper::Mat2Quat(transform.rotate);
+
+		if (book->isLeft)
+		{
+			book->settings.left_offset_x = transform.translate.x;
+			book->settings.left_offset_y = transform.translate.y;
+			book->settings.left_offset_z = transform.translate.z;
+
+			book->settings.left_rotate_w = quat.w;
+			book->settings.left_rotate_x = quat.x;
+			book->settings.left_rotate_y = quat.y;
+			book->settings.left_rotate_z = quat.z;
+		}
+		else
+		{
+			book->settings.right_offset_x = transform.translate.x;
+			book->settings.right_offset_y = transform.translate.y;
+			book->settings.right_offset_z = transform.translate.z;
+
+			book->settings.right_rotate_w = quat.w;
+			book->settings.right_rotate_x = quat.x;
+			book->settings.right_rotate_y = quat.y;
+			book->settings.right_rotate_z = quat.z;
+		}
+
+		if (book->callbacks.transform_changed)
+		{
+			book->callbacks.transform_changed(book->isLeft, transform);
+		}
+
+		helper::PrintTransform(parent->GetTransform());
+
+		isGrabButtonHeld = false;
+		grabHoldTime = 0.0f;
+		grabHand = nullptr;
+		isGrabbed = false;
+		follow_target = nullptr;
+
+		if (!IsHovered(!book->isLeft)) { hand_mode.Release(); }
 	}
 
 	void GrabNode::OnHover(bool a_activate, Hand& a_hand)
@@ -415,7 +652,7 @@ namespace vr3dirp
 		{
 			hand_mode = a_hand.RequestMode(Hand::Mode::kOpen, Hand::ModePriority::kGrab);
 		}
-		if (!a_activate)
+		if (!a_activate && !isGrabbed)
 		{
 			isGrabButtonHeld = false;
 			grabHoldTime = 0.0f;

@@ -2,69 +2,14 @@
 
 #include "helper_game.h"
 #include "helper_math.h"
+#include "text_manager.h"
 #include "vr_gui_input_block.h"
 
 namespace vr_gui
 {
-	static const char* kHelperModelPath = "HelperSphere.nif";
-	static const char* kDebugModelPath = "DebugSphere.nif";
-
-	int FormatParagraph(
-		std::string& a_text, float a_char_scale, float a_char_spacing, float a_max_width)
-	{
-		if (a_text.empty()) { return 0; }
-
-		int line_count = 1;
-		if (a_char_scale <= 0.0f || a_max_width <= 0.0f) {
-			return line_count + static_cast<int>(std::ranges::count(a_text, '\n'));
-		}
-
-		const float character_width = a_char_scale * 0.5f;
-		const float character_spacing = a_char_spacing * a_char_scale;
-		const float character_advance = character_width + character_spacing;
-		if (character_advance <= 0.0f) {
-			return line_count + static_cast<int>(std::ranges::count(a_text, '\n'));
-		}
-
-		auto get_width = [character_width, character_spacing](std::size_t a_character_count) {
-			if (a_character_count == 0) { return 0.0f; }
-			return character_width * static_cast<float>(a_character_count) +
-				character_spacing * static_cast<float>(a_character_count - 1);
-		};
-
-		std::size_t line_start = 0;
-		std::size_t last_break = std::string::npos;
-
-		for (std::size_t i = 0; i < a_text.size(); ++i)
-		{
-			if (a_text[i] == '\n')
-			{
-				++line_count;
-				line_start = i + 1;
-				last_break = std::string::npos;
-				continue;
-			}
-
-			if (a_text[i] == ' ' || a_text[i] == '\t')
-			{
-				last_break = i;
-				continue;
-			}
-
-			const auto characters_on_line = i - line_start + 1;
-			if (get_width(characters_on_line) <= a_max_width || last_break == std::string::npos)
-			{
-				continue;
-			}
-
-			a_text[last_break] = '\n';
-			++line_count;
-			line_start = last_break + 1;
-			last_break = std::string::npos;
-		}
-
-		return line_count;
-	}
+	static const char* kHelperModelPath = "3DIRP/vr_gui/HelperSphere.nif";
+	static const char* kDebugModelPath = "3DIRP/vr_gui/DebugSphere.nif";
+	static const char* kDebugBoxModelPath = "3DIRP/vr_gui/DrawExtents.nif";
 
 	void Controller::Cleanup()
 	{
@@ -708,13 +653,13 @@ namespace vr_gui
 		{
 			if (!parent)
 			{
-				AddModel("DebugSphere.nif", true, [radius = this->radius](ArtAddon* sphere) {
+				AddModel(kDebugModelPath, true, [radius = this->radius](ArtAddon* sphere) {
 					if (sphere && sphere->Get3D()) { sphere->Get3D()->local.scale = radius; }
 				});
 			}
 			else
 			{
-				AddModel("DrawExtents.nif", true,
+				AddModel(kDebugBoxModelPath, true,
 					[extents = this->extents](ArtAddon* box) { helper::DrawBox(box, extents); });
 			}
 		}
@@ -896,8 +841,16 @@ namespace vr_gui
 		if (!object || !target) { return; }
 
 		const auto transform = target->world.Invert() * GetWorld();
-		auto       addon =
-			art_addon::ArtAddon::Make(a_path, object, target, transform, std::move(a_callback));
+		auto       addon = art_addon::ArtAddon::Make(a_path, object, target, transform,
+			[this, callback = std::move(a_callback)](art_addon::ArtAddon* a_addon) {
+				if (IsHidden() && a_addon && a_addon->Get3D())
+				{
+					a_addon->Get3D()->SetAppCulled(true);
+				}
+
+				if (callback) { callback(a_addon); }
+			});
+
 		if (a_temporaryEffect) { visual_effects.emplace_back(std::move(addon)); }
 		else
 		{

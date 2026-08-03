@@ -20,39 +20,90 @@ namespace vr3dirp
 	class BasicHitbox;
 	class SelectionHighlight;
 
-	class Book : public Widget
+	struct BookSettings
 	{
+		float light_fade = 1.f;
+		float page_brightness = 0.5f;
+		float font_size = 1.f;
+		float book_scale = 1.0f;
+		float rightpage_text_z_offset = 1.25f;
+		float leftpage_text_z_offset = 0.03f;
+		float rightpage_text_z_offset_righthand = 1.25f;
+		float leftpage_text_z_offset_righthand = 0.03f;
+		float horizontal_margin = 0.9f;
+		float top_margin = 1.0f;
+		int   close_button = 1;
+		int   close_action = 1;
+		float close_timing = 1.0f;
+
+		float right_offset_x = 8.862305f;
+		float right_offset_y = 4.031250f;
+		float right_offset_z = 12.304688f;
+		float right_rotate_w = 0.569704532f;
+		float right_rotate_x = 0.552828061f;
+		float right_rotate_y = 0.424522750f;
+		float right_rotate_z = 0.435428886f;
+
+		float left_offset_x = 10.912109f;
+		float left_offset_y = -11.599609f;
+		float left_offset_z = 6.068359f;
+		float left_rotate_w = 0.655093787f;
+		float left_rotate_x = 0.717480487f;
+		float left_rotate_y = -0.110829458f;
+		float left_rotate_z = -0.209262307f;
+	};
+
+	struct BookCallbacks
+	{
+		std::function<void(bool, const NiTransform&)> transform_changed;
+	};
+
+	class BookSettingsOwner
+	{
+	protected:
+		BookSettingsOwner(BookSettings a_settings, BookCallbacks a_callbacks);
+
+		BookSettings  settings;
+		BookCallbacks callbacks;
+	};
+
+	class Book : private BookSettingsOwner, public Widget
+	{
+		friend class GrabNode;
+
 	public:
 		Book(std::string_view a_model_path, bool a_isLeft, TESObjectREFR* a_objectReference,
-			NiAVObject* a_root, NiTransform a_local);
+			NiAVObject* a_root, BookSettings a_settings, BookCallbacks a_callbacks = {},
+			std::optional<float> a_scale_override = std::nullopt);
 		~Book() override;
 
 		struct Layout
 		{
-			const NiPoint3 kLeftPageOrigin = { -3.8, 0.0, -0.03 };
-			const NiPoint3 kRightPageOrigin = { 9.05, -0.2, 1.25 };
-			const NiPoint3 kTabOffset = { 0.0f, 9.5f, 1.1f };
+			NiPoint3 left_page_origin = { -3.8, 0.0, 0 };
+			NiPoint3 right_page_origin = { 9.05, -0.2, 0 };
+			NiPoint3 tab_origin = { 0.0f, 9.5f, 1.1f };
+			float tab_scale = 1.f;
 
 			static constexpr float kRightPageWidth = 16;
 			static constexpr float kLeftPageWidth = 6.94 * 2;
 			static constexpr float kRightPageHeight = 11.9 * 2;
 			static constexpr float kLeftPageHeight = 11.69 * 2;
 
-			static constexpr float tab_spacing = 1.8f;
-			static constexpr float top_margin = 1.0f;
-			static constexpr float bottom_margin = 0.0f;
-			static constexpr float horizontal_margin = 0.9f;
+			float tab_spacing = 1.8f;
+			float bottom_margin = 0.0f;
+			float top_margin = 1.0f;
+			float horizontal_margin = 0.9f;
+			float body_text_scale = 1.0f;
+			float heading_text_scale = 1.2f;
 
-			static constexpr float body_text_scale = 1.7f;
-			static constexpr float heading_text_scale = 1.0f;
-			static constexpr float body_character_spacing = -0.15f;
+			static constexpr float body_character_spacing = 0.0f;
 			static constexpr float page_number_character_spacing = -0.15f;
 
-			static constexpr float quest_line_spacing = 0.6f;
-			static constexpr float objective_spacing =
+			float quest_line_spacing = 0.6f;
+			float objective_spacing =
 				0.2f + art_addon::AddonTextBox::kLineSpacing * body_text_scale;
 
-			std::string_view body_font_model_path = "3DIRP/char_2048.nif";
+			std::string_view body_font_model_path = "3DIRP/vr_gui/char_2048.nif";
 		};
 
 		struct PageContext
@@ -61,15 +112,17 @@ namespace vr3dirp
 			Widget&       left_page;
 			Widget&       right_page;
 			int           page_index;
+			int           chapter_index;
 			int           num_pages;
 		};
 
-		static constexpr std::string_view kModelPath = "3DIRP/custom.nif";
-		static constexpr const char*      kDefaultParent = "Book Pages Nub";
-		static constexpr const char*      kChapterParent = "Book Pages Nub";
-		static constexpr const char*      kRightParent = "Book Pages";
-		static constexpr const char*      kLeftParent = "Book CoverPage Turn04";
-		static constexpr float            kDefaultWindowRadius = 40.f;
+		static constexpr std::string_view kModelPath =
+			"clutter/books/book02/character assets/spelltomealteration.nif";
+		static constexpr const char* kDefaultParent = "Book Pages Nub";
+		static constexpr const char* kChapterParent = "Book Pages Nub";
+		static constexpr const char* kRightParent = "Book Pages";
+		static constexpr const char* kLeftParent = "Book CoverPage Turn04";
+		static constexpr float       kDefaultWindowRadius = 40.f;
 
 		static constexpr const char* kBookOpenSd = "ITMBookOpenSD";
 		static constexpr const char* kBookCloseSd = "ITMBookCloseSD";
@@ -98,6 +151,8 @@ namespace vr3dirp
 
 		bool HandStateFilter(Hand& a_hand) const override { return a_hand.IsLeft() != isLeft; }
 
+		bool IsAnimating() const { return animator.IsBusy(); }
+
 	protected:
 		enum class TurnDirection
 		{
@@ -120,17 +175,17 @@ namespace vr3dirp
 		void TurnToPage(
 			std::size_t a_chapter_index, std::size_t a_page_index, TurnDirection a_direction);
 
-		void DrawCurrentPage(bool a_left_page);
+		void DrawPage(int a_chapter, int a_page, bool a_left_page);
 
-		void ClearPageView();
+		void ClearPageView(bool a_left);
 		void RestoreSpellVisual();
 
 		GrabNode* grab_node;
 
 		ni_animator::NiAnimator animator{};
 
-		bool   isLeft;
-		Layout layout;
+		bool          isLeft;
+		Layout        layout;
 
 		float animation_speed = 2;
 
@@ -145,12 +200,15 @@ namespace vr3dirp
 		RE::SpellItem* stored_spell{};
 
 		ModeHandle hand_mode;
+
+		RE::NiPointer<RE::NiPointLight> book_light;
 	};
 
 	class Page
 	{
 	public:
 		virtual ~Page() = default;
+		virtual void OnSelected() {}
 		virtual void Draw(Book::PageContext a_context, bool a_left_page);
 	};
 
@@ -166,6 +224,7 @@ namespace vr3dirp
 			pages.emplace_back(std::make_unique<Page>());
 			pages.emplace_back(std::make_unique<Page>());
 		};
+		virtual void OnSelected(const Book::Layout& layout) {MakePages(layout);}
 
 		std::vector<std::unique_ptr<Page>> pages;
 		Widget*                            tab{};
@@ -201,9 +260,10 @@ namespace vr3dirp
 		// TODO: make setting
 		static constexpr float kGrabHoldTime = 1.0f;
 
+		void Release();
+
 		bool        isGrabbed = false;
 		bool        isGrabButtonHeld = false;
-		bool        isLeft = false;
 		float       grabHoldTime = 0.0f;
 		Hand*       grabHand{};
 		NiAVObject* follow_target{};
@@ -347,15 +407,17 @@ namespace vr3dirp
 		using OnHighlight = std::function<void(bool)>;
 		using OnActivate = std::function<void()>;
 		using IsSelected = std::function<bool()>;
+		using CanInteract = std::function<bool()>;
 
 		SelectionHighlight(Widget* a_parent, ExclusiveHoverGroup* a_hover_group,
 			OnHighlight a_on_highlight, OnActivate a_on_activate = {},
-			IsSelected a_is_selected = {}) :
+			IsSelected a_is_selected = {}, CanInteract a_can_interact = {}) :
 			Behavior(a_parent),
 			hover_group(a_hover_group),
-			on_highlight(std::move(a_on_highlight)),
 			is_selected(std::move(a_is_selected)),
-			on_activate(std::move(a_on_activate))
+			on_activate(std::move(a_on_activate)),
+			on_highlight(std::move(a_on_highlight)),
+			can_interact(std::move(a_can_interact))
 		{}
 
 		void Update(float a_delta) override;
@@ -367,6 +429,7 @@ namespace vr3dirp
 		IsSelected           is_selected{};
 		OnActivate           on_activate{};
 		OnHighlight          on_highlight{};
+		CanInteract          can_interact{};
 	};
 
 }
