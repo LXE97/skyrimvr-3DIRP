@@ -31,6 +31,9 @@ namespace vr3dirp
 		float leftpage_text_z_offset_righthand = 0.03f;
 		float horizontal_margin = 0.9f;
 		float top_margin = 1.0f;
+		int   close_button = 1;
+		int   close_action = 1;
+		float close_timing = 1.0f;
 
 		float right_offset_x = 8.862305f;
 		float right_offset_y = 4.031250f;
@@ -49,14 +52,21 @@ namespace vr3dirp
 		float left_rotate_z = -0.209262307f;
 	};
 
-	class Book : public Widget
+	class BookSettingsOwner
+	{
+	protected:
+		BookSettingsOwner();
+
+		BookSettings settings;
+	};
+
+	class Book : private BookSettingsOwner, public Widget
 	{
 		friend class GrabNode;
 
 	public:
 		Book(std::string_view a_model_path, bool a_isLeft, TESObjectREFR* a_objectReference,
-			NiAVObject* a_root, BookSettings& a_settings,
-			std::optional<float> a_scale_override = std::nullopt);
+			NiAVObject* a_root, std::optional<float> a_scale_override = std::nullopt);
 		~Book() override;
 
 		struct Layout
@@ -166,7 +176,6 @@ namespace vr3dirp
 
 		ni_animator::NiAnimator animator{};
 
-		BookSettings& settings;
 		bool          isLeft;
 		Layout        layout;
 

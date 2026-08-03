@@ -9,10 +9,6 @@
 
 namespace vr3dirp
 {
-	constexpr const char* kPluginName = "3DIRP.esp";
-
-	extern uint32_t g_esp_index;
-
 	extern PapyrusVRAPI* g_papyrusvr;
 
 	void Init();
@@ -23,5 +19,5 @@ namespace vr3dirp
 
 	void OnSaveGame();
 
-	void ShowHands(bool a_show);
+	void ApplySettings();
 }

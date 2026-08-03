@@ -12,7 +12,7 @@ namespace vr_gui
 	class ExclusiveHoverGroup : public Behavior
 	{
 	public:
-		static constexpr float kDefaultPositionalHysteresisFactor = 0.8f;
+		static constexpr float kDefaultPositionalHysteresisFactor = 0.9f;
 
 		explicit ExclusiveHoverGroup(Widget* a_parent,
 			float a_positional_hysteresis_factor = kDefaultPositionalHysteresisFactor) :

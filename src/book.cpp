@@ -2,6 +2,7 @@
 
 #include "equipment_checker.h"
 #include "helper_game.h"
+#include "settings.h"
 
 namespace vr3dirp
 {
@@ -11,6 +12,59 @@ namespace vr3dirp
 
 	namespace
 	{
+		BookSettings ReadBookSettings()
+		{
+			auto* manager = settings::Manager::GetSingleton();
+			BookSettings result;
+
+			result.light_fade = manager->Get("fLightIntensity");
+			result.font_size = manager->Get("fFontSize");
+			result.book_scale = manager->Get("fBookScale");
+			result.rightpage_text_z_offset = manager->Get("fRightPageTextZOffset");
+			result.leftpage_text_z_offset = manager->Get("fLeftPageTextZOffset");
+			result.rightpage_text_z_offset_righthand =
+				manager->Get("fRightPageTextZOffsetRight");
+			result.leftpage_text_z_offset_righthand =
+				manager->Get("fLeftPageTextZOffsetRight");
+			result.horizontal_margin = manager->Get("fHorizontalMargin");
+			result.top_margin = manager->Get("fTopMargin");
+			result.close_button = static_cast<int>(manager->Get("iCloseButton"));
+			result.close_action = static_cast<int>(manager->Get("iCloseAction"));
+			result.close_timing = manager->Get("fCloseTiming");
+
+			result.right_offset_x = manager->Get("fRightOffsetX");
+			result.right_offset_y = manager->Get("fRightOffsetY");
+			result.right_offset_z = manager->Get("fRightOffsetZ");
+			result.right_rotate_w = manager->Get("fRightRotateW");
+			result.right_rotate_x = manager->Get("fRightRotateX");
+			result.right_rotate_y = manager->Get("fRightRotateY");
+			result.right_rotate_z = manager->Get("fRightRotateZ");
+
+			result.left_offset_x = manager->Get("fLeftOffsetX");
+			result.left_offset_y = manager->Get("fLeftOffsetY");
+			result.left_offset_z = manager->Get("fLeftOffsetZ");
+			result.left_rotate_w = manager->Get("fLeftRotateW");
+			result.left_rotate_x = manager->Get("fLeftRotateX");
+			result.left_rotate_y = manager->Get("fLeftRotateY");
+			result.left_rotate_z = manager->Get("fLeftRotateZ");
+
+			return result;
+		}
+
+		std::optional<vr::EVRButtonId> GetBookButton(
+			const Controller::Settings& a_settings, int a_button)
+		{
+			switch (a_button)
+			{
+			case 0:
+				return a_settings.primary;
+			case 1:
+				return a_settings.secondary;
+			default:
+				return std::nullopt;
+			}
+		}
+
 		NiTransform MakeBookLocalTransform(
 			bool a_isLeft, const BookSettings& a_settings, float a_scale)
 		{
@@ -69,6 +123,10 @@ namespace vr3dirp
 		if (book_light) { helper::DestroyLight(book_light); }
 	}
 
+	BookSettingsOwner::BookSettingsOwner() :
+		settings(ReadBookSettings())
+	{}
+
 	void Book::Close()
 	{
 		if (animator.HasQueued()) { animator.ClearQueue(); }
@@ -82,11 +140,11 @@ namespace vr3dirp
 	}
 
 	Book::Book(std::string_view a_model_path, bool a_isLeft, TESObjectREFR* a_objectReference,
-		NiAVObject* a_root, BookSettings& a_settings, std::optional<float> a_scale_override) :
+		NiAVObject* a_root, std::optional<float> a_scale_override) :
+		BookSettingsOwner(),
 		Widget(kDefaultWindowRadius, a_objectReference, a_root,
 			MakeBookLocalTransform(
-				a_isLeft, a_settings, a_scale_override.value_or(a_settings.book_scale))),
-		settings(a_settings),
+				a_isLeft, settings, a_scale_override.value_or(settings.book_scale))),
 		isLeft(a_isLeft)
 	{
 		layout.right_page_origin.z = a_isLeft ? settings.rightpage_text_z_offset :
@@ -99,12 +157,16 @@ namespace vr3dirp
 		layout.heading_text_scale *= settings.font_size;
 		layout.objective_spacing =
 			0.2f + art_addon::AddonTextBox::kLineSpacing * layout.body_text_scale;
+		secondary_double_tap_threshold = settings.close_timing;
 
 		// store state of dismissal button when summoned to avoid instant closing
 		const auto vrgui_settings = Controller::GetSingleton()->GetSettings();
-		secondary_pressed_during_creation =
-			vrinput::GetButtonState(vrgui_settings.secondary, vrinput::Hand(a_isLeft),
-				vrinput::ActionType::kPress) == vrinput::ButtonState::kButtonDown;
+		if (const auto close_button = GetBookButton(vrgui_settings, settings.close_button))
+		{
+			secondary_pressed_during_creation =
+				vrinput::GetButtonState(*close_button, vrinput::Hand(a_isLeft),
+					vrinput::ActionType::kPress) == vrinput::ButtonState::kButtonDown;
+		}
 
 		auto* pc = RE::PlayerCharacter::GetSingleton();
 
@@ -424,31 +486,65 @@ namespace vr3dirp
 	void Book::Update(float a_delta)
 	{
 		animator.Update(Get3D(), a_delta);
-		if (secondary_press_elapsed)
+
+		const auto vrgui_settings = Controller::GetSingleton()->GetSettings();
+		const auto close_button = GetBookButton(vrgui_settings, settings.close_button);
+		if (!close_button)
 		{
-			*secondary_press_elapsed += a_delta;
-			if (*secondary_press_elapsed > secondary_double_tap_threshold)
+			secondary_press_elapsed.reset();
+			return;
+		}
+
+		const bool secondary_pressed =
+			vrinput::GetButtonState(*close_button, vrinput::Hand(isLeft),
+				vrinput::ActionType::kPress) == vrinput::ButtonState::kButtonDown;
+
+		if (settings.close_action == 0)
+		{
+			if (secondary_pressed)
+			{
+				if (!secondary_pressed_during_creation && !secondary_press_elapsed)
+				{
+					secondary_press_elapsed = 0.0f;
+				}
+
+				if (secondary_press_elapsed)
+				{
+					*secondary_press_elapsed += a_delta;
+					if (*secondary_press_elapsed >= secondary_double_tap_threshold)
+					{
+						secondary_press_elapsed.reset();
+						Close();
+					}
+				}
+			}
+			else if (!secondary_pressed)
 			{
 				secondary_press_elapsed.reset();
 			}
 		}
-
-		const auto vrgui_settings = Controller::GetSingleton()->GetSettings();
-
-		const bool secondary_pressed =
-			vrinput::GetButtonState(vrgui_settings.secondary, vrinput::Hand(isLeft),
-				vrinput::ActionType::kPress) == vrinput::ButtonState::kButtonDown;
-
-		if (secondary_pressed && !secondary_pressed_during_creation)
+		else
 		{
 			if (secondary_press_elapsed)
 			{
-				secondary_press_elapsed.reset();
-				Close();
+				*secondary_press_elapsed += a_delta;
+				if (*secondary_press_elapsed > secondary_double_tap_threshold)
+				{
+					secondary_press_elapsed.reset();
+				}
 			}
-			else
+
+			if (secondary_pressed && !secondary_pressed_during_creation)
 			{
-				secondary_press_elapsed = 0.0f;
+				if (secondary_press_elapsed)
+				{
+					secondary_press_elapsed.reset();
+					Close();
+				}
+				else
+				{
+					secondary_press_elapsed = 0.0f;
+				}
 			}
 		}
 
@@ -537,6 +633,15 @@ namespace vr3dirp
 			book->settings.left_rotate_x = quat.x;
 			book->settings.left_rotate_y = quat.y;
 			book->settings.left_rotate_z = quat.z;
+
+			auto* manager = settings::Manager::GetSingleton();
+			manager->Set("fLeftOffsetX", transform.translate.x);
+			manager->Set("fLeftOffsetY", transform.translate.y);
+			manager->Set("fLeftOffsetZ", transform.translate.z);
+			manager->Set("fLeftRotateW", quat.w);
+			manager->Set("fLeftRotateX", quat.x);
+			manager->Set("fLeftRotateY", quat.y);
+			manager->Set("fLeftRotateZ", quat.z);
 		}
 		else
 		{
@@ -548,6 +653,15 @@ namespace vr3dirp
 			book->settings.right_rotate_x = quat.x;
 			book->settings.right_rotate_y = quat.y;
 			book->settings.right_rotate_z = quat.z;
+
+			auto* manager = settings::Manager::GetSingleton();
+			manager->Set("fRightOffsetX", transform.translate.x);
+			manager->Set("fRightOffsetY", transform.translate.y);
+			manager->Set("fRightOffsetZ", transform.translate.z);
+			manager->Set("fRightRotateW", quat.w);
+			manager->Set("fRightRotateX", quat.x);
+			manager->Set("fRightRotateY", quat.y);
+			manager->Set("fRightRotateZ", quat.z);
 		}
 
 		helper::PrintTransform(parent->GetTransform());

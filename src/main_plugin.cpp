@@ -15,87 +15,119 @@
 #include "vr_gui.h"
 #include "vrinput.h"
 
-#include <charconv>
-
-constexpr const char* g_ini_path = "SKSE/Plugins/3DIRP.ini";
-
 namespace vr3dirp
 {
 	using namespace RE;
-	using namespace art_addon;
-	using namespace vr_gui;
 
 	enum class BookType
 	{
-		kJournal = 0,
+		kDisabled = 0,
+		kJournal,
 		kSpellbook,
-		kNone,
-		kDisabled
+		kNone
 	};
 
-	BookType ParseBookType(const std::string& a_value)
+	BookType ParseBookType(float a_value)
 	{
-		if (a_value == "Book") { return BookType::kNone; }
-		if (a_value == "Journal") { return BookType::kJournal; }
-		if (a_value == "Spellbook") { return BookType::kSpellbook; }
-
-		return BookType::kDisabled;
+		switch (static_cast<int>(a_value))
+		{
+		case static_cast<int>(BookType::kJournal):
+			return BookType::kJournal;
+		case static_cast<int>(BookType::kSpellbook):
+			return BookType::kSpellbook;
+		case static_cast<int>(BookType::kNone):
+			return BookType::kNone;
+		default:
+			return BookType::kDisabled;
+		}
 	}
 
-	JournalSettings settings{};
+	struct HolsterSettings
+	{
+		bool     allow_empty_arrow_hand;
+		float    shoulder_radius;
+		NiPoint3 shoulder_offset;
+		float    belly_radius;
+		NiPoint3 belly_offset;
+		BookType left_shoulder_primary;
+		BookType left_shoulder_secondary;
+		BookType left_shoulder_both;
+		BookType right_shoulder_primary;
+		BookType right_shoulder_secondary;
+		BookType right_shoulder_both;
+		BookType belly_primary;
+		BookType belly_secondary;
+		BookType belly_both;
+	};
 
-	bool ReadConfig(const char* a_ini_path);
+	HolsterSettings ReadHolsterSettings()
+	{
+		auto* manager = settings::Manager::GetSingleton();
+
+		return {
+			.allow_empty_arrow_hand = static_cast<bool>(manager->Get("bAllowEmptyArrowHand")),
+			.shoulder_radius = manager->Get("fShoulderRadius"),
+			.shoulder_offset = { manager->Get("fShoulderX"), manager->Get("fShoulderY"),
+				manager->Get("fShoulderZ") },
+			.belly_radius = manager->Get("fBellyRadius"),
+			.belly_offset = { manager->Get("fBellyX"), manager->Get("fBellyY"),
+				manager->Get("fBellyZ") },
+			.left_shoulder_primary = ParseBookType(manager->Get("iLeftShoulderPrimary")),
+			.left_shoulder_secondary = ParseBookType(manager->Get("iLeftShoulderSecondary")),
+			.left_shoulder_both = ParseBookType(manager->Get("iLeftShoulderBoth")),
+			.right_shoulder_primary = ParseBookType(manager->Get("iRightShoulderPrimary")),
+			.right_shoulder_secondary = ParseBookType(manager->Get("iRightShoulderSecondary")),
+			.right_shoulder_both = ParseBookType(manager->Get("iRightShoulderBoth")),
+			.belly_primary = ParseBookType(manager->Get("iBellyPrimary")),
+			.belly_secondary = ParseBookType(manager->Get("iBellySecondary")),
+			.belly_both = ParseBookType(manager->Get("iBellyBoth")),
+		};
+	}
+
+	vr::EVRButtonId ReadControllerButton(std::string_view a_key)
+	{
+		switch (static_cast<int>(settings::Manager::GetSingleton()->Get(a_key)))
+		{
+		case 1:
+			return vr::EVRButtonId::k_EButton_Grip;
+		case 2:
+			return vr::EVRButtonId::k_EButton_A;
+		case 3:
+			return vr::EVRButtonId::k_EButton_ApplicationMenu;
+		default:
+			return vr::EVRButtonId::k_EButton_SteamVR_Trigger;
+		}
+	}
+
+	void ApplyInputSettings()
+	{
+		vr_gui::Controller::GetSingleton()->SetSettings({
+			.primary = ReadControllerButton("iPrimaryButton"),
+			.secondary = ReadControllerButton("iSecondaryButton"),
+		});
+	}
 
 	static void RegisterVRInputCallback();
 	static void PlayerUpdate();
 
 	static bool OnDebugButton(const vrinput::ModInputEvent& e);
 	static bool OnSecondaryDebugButton(const vrinput::ModInputEvent& e);
-	static void OnMenuOpenClose(RE::MenuOpenCloseEvent const* evn);
+
 	static void OnEquipped(const RE::TESEquipEvent* event);
 	static void OnQuestStartStop(const RE::TESQuestStartStopEvent* a_event);
 
 	void        SummonBook(bool isLeft, BookType a_type);
-	static void UpdateHandDebugModels();
 	static void CreateHolsters();
 
-	uint32_t      g_esp_index{};
 	PapyrusVRAPI* g_papyrusvr{};
 
-	bool g_debug_print = true;
 	bool g_left_hand_mode = false;
 	bool g_use_firstperson = false;
 	bool g_show_debug_spheres = false;
-
 	bool g_createHolstersPending = false;
+	std::vector<vr_gui::Holster*> g_holsters;
 
 	PlayerCharacter* pc{};
-
-	ArtAddonPtr g_left_hand_center{};
-	ArtAddonPtr g_left_hand_extents{};
-	ArtAddonPtr g_right_hand_center{};
-	ArtAddonPtr g_right_hand_extents{};
-	static bool show_hands{};
-
-	// settings
-	bool     allow_empty_arrow_hand = false;
-	float    shoulder_holster_radius = 10.f;
-	float    shoulder_holster_x = -20.f;
-	float    shoulder_holster_y = 0.f;
-	float    shoulder_holster_z = 0.f;
-	float    belly_holster_radius = 9.f;
-	float    belly_holster_x = 0.f;
-	float    belly_holster_y = 13.f;
-	float    belly_holster_z = -3.f;
-	BookType left_shoulder_primary = BookType::kJournal;
-	BookType left_shoulder_secondary = BookType::kDisabled;
-	BookType left_shoulder_both = BookType::kDisabled;
-	BookType right_shoulder_primary = BookType::kJournal;
-	BookType right_shoulder_secondary = BookType::kDisabled;
-	BookType right_shoulder_both = BookType::kDisabled;
-	BookType belly_primary = BookType::kDisabled;
-	BookType belly_secondary = BookType::kDisabled;
-	BookType belly_both = BookType::kJournal;
 
 	void VrikActionSummonBookLeft(int) { SummonBook(true, BookType::kJournal); }
 
@@ -103,12 +135,14 @@ namespace vr3dirp
 
 	void Init()
 	{
+		settings::Manager::GetSingleton()->Init(
+			helper::GetGamePath() / "SKSE/Plugins/3DIRP_VR_UI.json");
+
 		helper::InstallPlayerUpdateHook(PlayerUpdate);
+
 		g_createHolstersPending = true;
 
 		hooks::ModelReferenceEffect_SaveGameHook::Install();
-
-		ReadConfig(g_ini_path);
 
 		menuchecker::begin();
 
@@ -116,10 +150,6 @@ namespace vr3dirp
 
 		g_vrikInterface->addGestureAction(VrikActionSummonBookLeft, "Journal Left");
 		g_vrikInterface->addGestureAction(VrikActionSummonBookRight, "Journal Right");
-
-		auto menu_sink = EventSink<RE::MenuOpenCloseEvent>::GetSingleton();
-		menu_sink->AddCallback(OnMenuOpenClose);
-		RE::UI::GetSingleton()->AddEventSink(menu_sink);
 
 		auto equip_sink = EventSink<RE::TESEquipEvent>::GetSingleton();
 		equip_sink->AddCallback(OnEquipped);
@@ -130,25 +160,37 @@ namespace vr3dirp
 		RE::ScriptEventSourceHolder::GetSingleton()->AddEventSink(quest_sink);
 	}
 
-	void OnMenuOpenClose(RE::MenuOpenCloseEvent const* evn)
+	void ApplySettings()
 	{
-		if (!evn->opening && std::strcmp(evn->menuName.data(), "Journal Menu") == 0)
-		{
-			ReadConfig(g_ini_path);
+		ApplyInputSettings();
+		vr_gui::Controller::GetSingleton()->ShowHitboxes(
+			settings::Manager::GetSingleton()->Get("bShowDebugSpheres") != 0.0f);
 
-			vr_gui::Controller::GetSingleton()->ShowHitboxes(g_show_debug_spheres);
+		auto* controller = vr_gui::Controller::GetSingleton();
+		for (auto* holster : g_holsters) { controller->MarkForDelete(holster); }
+		g_holsters.clear();
+		g_createHolstersPending = true;
+
+		if (settings::Manager::GetSingleton()->Get("bDebugLog") != 0.0f)
+		{
+			settings::Manager::GetSingleton()->PrintSettings();
+			spdlog::set_level(spdlog::level::trace);
+		}
+		else
+		{
+			spdlog::set_level(spdlog::level::info);
 		}
 	}
 
 	void OnQuestStartStop(const RE::TESQuestStartStopEvent* a_event)
 	{
-		if (!a_event) { return; }
+		if (!a_event || !a_event->started) { return; }
 		SKSE::log::trace("quest started {}", a_event->formID);
 
 		auto* quest = RE::TESForm::LookupByID<RE::TESQuest>(a_event->formID);
 		if (!quest) { return; }
 
-		settings.new_quests.insert(a_event->formID);
+		settings::PushNewQuest(quest->GetFormID());
 	}
 
 	void OnEquipped(const RE::TESEquipEvent* event) { equipment_checker::OnEquipEvent(event); }
@@ -167,110 +209,19 @@ namespace vr3dirp
 
 	void PreLoadGame()
 	{
-		ShowHands(false);
 		vr_gui::Controller::GetSingleton()->Cleanup();
+		g_holsters.clear();
 		g_createHolstersPending = true;
 	}
 
-	void OnSaveGame()
-	{
-		using namespace helper;
-
-		const auto config_path = GetGamePath() / g_ini_path;
-
-		WriteFloatToIni(config_path, "fRightOffsetX", settings.right_offset_x);
-		WriteFloatToIni(config_path, "fRightOffsetY", settings.right_offset_y);
-		WriteFloatToIni(config_path, "fRightOffsetZ", settings.right_offset_z);
-		WriteFloatToIni(config_path, "fRightRotateW", settings.right_rotate_w);
-		WriteFloatToIni(config_path, "fRightRotateX", settings.right_rotate_x);
-		WriteFloatToIni(config_path, "fRightRotateY", settings.right_rotate_y);
-		WriteFloatToIni(config_path, "fRightRotateZ", settings.right_rotate_z);
-
-		WriteFloatToIni(config_path, "fLeftOffsetX", settings.left_offset_x);
-		WriteFloatToIni(config_path, "fLeftOffsetY", settings.left_offset_y);
-		WriteFloatToIni(config_path, "fLeftOffsetZ", settings.left_offset_z);
-		WriteFloatToIni(config_path, "fLeftRotateW", settings.left_rotate_w);
-		WriteFloatToIni(config_path, "fLeftRotateX", settings.left_rotate_x);
-		WriteFloatToIni(config_path, "fLeftRotateY", settings.left_rotate_y);
-		WriteFloatToIni(config_path, "fLeftRotateZ", settings.left_rotate_z);
-
-		WriteStringToIni(
-			config_path, "sHiddenQuests", SerializeFormIDList(settings.hidden_quests));
-		WriteStringToIni(
-			config_path, "sNewQuests", SerializeFormIDList(settings.new_quests));
-	}
+	void OnSaveGame() { settings::Manager::GetSingleton()->Save(); }
 
 	void OnGameLoad()
 	{
+		settings::Manager::GetSingleton()->Reload();
+		ApplySettings();
 		vr_gui::Controller::GetSingleton()->Init();
 		pc = PlayerCharacter::GetSingleton();
-		//art_addon::ArtAddonManager::GetSingleton()->OnGameLoad();
-	}
-
-	void ShowHands(bool a_show)
-	{
-		show_hands = a_show;
-
-		if (!a_show)
-		{
-			g_left_hand_center.reset();
-			g_left_hand_extents.reset();
-			g_right_hand_center.reset();
-			g_right_hand_extents.reset();
-			return;
-		}
-
-		auto* player = PlayerCharacter::GetSingleton();
-		auto* player_root = player ? player->Get3D() : nullptr;
-		if (!player || !player_root) { return; }
-
-		NiTransform local{};
-		if (!g_left_hand_center)
-		{
-			g_left_hand_center = ArtAddon::Make("DebugSphere.nif", player, player_root, local);
-		}
-		if (!g_left_hand_extents)
-		{
-			g_left_hand_extents = ArtAddon::Make("DrawExtents.nif", player, player_root, local);
-		}
-		if (!g_right_hand_center)
-		{
-			g_right_hand_center = ArtAddon::Make("DebugSphere.nif", player, player_root, local);
-		}
-		if (!g_right_hand_extents)
-		{
-			g_right_hand_extents = ArtAddon::Make("DrawExtents.nif", player, player_root, local);
-		}
-
-		UpdateHandDebugModels();
-	}
-
-	static void UpdateHandDebugModels()
-	{
-		auto* controller = Controller::GetSingleton();
-
-		auto update_hand = [controller](
-							   bool a_isLeft, ArtAddonPtr& a_center, ArtAddonPtr& a_extents) {
-			auto* hand = controller->GetHand(a_isLeft);
-
-			if (a_center && a_center->Get3D())
-			{
-				auto sphere_world = hand->GetTransform();
-				sphere_world.scale *= hand->GetRadius();
-				a_center->SetWorldTransform(sphere_world);
-			}
-
-			if (a_extents && a_extents->Get3D())
-			{
-				a_extents->SetWorldTransform(hand->GetBoxTransform());
-				helper::DrawBox(a_extents.get(), *hand->GetExtents());
-				NiUpdateData context{};
-				a_extents->Get3D()->Update(context);
-			}
-		};
-
-		update_hand(true, g_left_hand_center, g_left_hand_extents);
-		update_hand(false, g_right_hand_center, g_right_hand_extents);
 	}
 
 	void SummonBook(bool isLeft, BookType a_type)
@@ -286,7 +237,7 @@ namespace vr3dirp
 			switch (a_type)
 			{
 			case BookType::kJournal:
-				temp = std::make_unique<Journal>(isLeft, pc->AsReference(), hand_node, settings);
+				temp = std::make_unique<Journal>(isLeft, pc->AsReference(), hand_node);
 
 				break;
 
@@ -294,8 +245,8 @@ namespace vr3dirp
 				break;
 
 			default:
-				temp = std::make_unique<Book>(
-					Book::kModelPath, isLeft, pc->AsReference(), hand_node, settings);
+				temp =
+					std::make_unique<Book>(Book::kModelPath, isLeft, pc->AsReference(), hand_node);
 			}
 
 			if (temp) { vr_gui::Controller::GetSingleton()->AddRoot(std::move(temp)); }
@@ -304,6 +255,14 @@ namespace vr3dirp
 
 	static void CreateHolsters()
 	{
+		const auto holster_settings = ReadHolsterSettings();
+		auto*      controller = vr_gui::Controller::GetSingleton();
+
+		auto add_holster = [controller](std::unique_ptr<vr_gui::Holster> a_holster) {
+			auto* holster = static_cast<vr_gui::Holster*>(controller->AddRoot(std::move(a_holster)));
+			g_holsters.push_back(holster);
+		};
+
 		auto has_action = [](BookType a_primary, BookType a_secondary, BookType a_both) {
 			return a_primary != BookType::kDisabled || a_secondary != BookType::kDisabled ||
 				a_both != BookType::kDisabled;
@@ -320,18 +279,20 @@ namespace vr3dirp
 				.both = make_callback(a_both) };
 		};
 
-		if (has_action(belly_primary, belly_secondary, belly_both))
+		if (has_action(holster_settings.belly_primary, holster_settings.belly_secondary,
+				holster_settings.belly_both))
 		{
 			auto belly_node = pc->Get3D()->GetObjectByName("NPC Spine1 [Spn1]");
 			if (belly_node)
 			{
 				NiTransform t{};
-				t.translate = { belly_holster_x, belly_holster_y, belly_holster_z };
+				t.translate = holster_settings.belly_offset;
 
-				auto temp = std::make_unique<vr_gui::Holster>(belly_holster_radius, pc, belly_node,
-					t, vrinput::Hand::kBoth,
-					make_callbacks(belly_primary, belly_secondary, belly_both));
-				vr_gui::Controller::GetSingleton()->AddRoot(std::move(temp));
+				auto temp = std::make_unique<vr_gui::Holster>(holster_settings.belly_radius, pc,
+					belly_node, t, vrinput::Hand::kBoth,
+					make_callbacks(holster_settings.belly_primary, holster_settings.belly_secondary,
+						holster_settings.belly_both));
+				add_holster(std::move(temp));
 			}
 			else
 			{
@@ -339,10 +300,10 @@ namespace vr3dirp
 			}
 		}
 
-		const bool create_left =
-			has_action(left_shoulder_primary, left_shoulder_secondary, left_shoulder_both);
-		const bool create_right =
-			has_action(right_shoulder_primary, right_shoulder_secondary, right_shoulder_both);
+		const bool create_left = has_action(holster_settings.left_shoulder_primary,
+			holster_settings.left_shoulder_secondary, holster_settings.left_shoulder_both);
+		const bool create_right = has_action(holster_settings.right_shoulder_primary,
+			holster_settings.right_shoulder_secondary, holster_settings.right_shoulder_both);
 		if (!create_left && !create_right) { return; }
 
 		auto head_node = pc->Get3D()->GetObjectByName("NPC Head [Head]");
@@ -351,24 +312,27 @@ namespace vr3dirp
 			NiTransform t{};
 			if (create_left)
 			{
-				t.translate = { shoulder_holster_x, shoulder_holster_y, shoulder_holster_z };
-				auto temp = std::make_unique<vr_gui::Holster>(shoulder_holster_radius, pc,
+				t.translate = holster_settings.shoulder_offset;
+				auto temp = std::make_unique<vr_gui::Holster>(holster_settings.shoulder_radius, pc,
 					head_node, t, vrinput::Hand::kLeft,
-					make_callbacks(
-						left_shoulder_primary, left_shoulder_secondary, left_shoulder_both),
-					allow_empty_arrow_hand);
-				vr_gui::Controller::GetSingleton()->AddRoot(std::move(temp));
+					make_callbacks(holster_settings.left_shoulder_primary,
+						holster_settings.left_shoulder_secondary,
+						holster_settings.left_shoulder_both),
+					holster_settings.allow_empty_arrow_hand);
+				add_holster(std::move(temp));
 			}
 
 			if (create_right)
 			{
-				t.translate = { -shoulder_holster_x, shoulder_holster_y, shoulder_holster_z };
-				auto temp = std::make_unique<vr_gui::Holster>(shoulder_holster_radius, pc,
+				t.translate = holster_settings.shoulder_offset;
+				t.translate.x = -t.translate.x;
+				auto temp = std::make_unique<vr_gui::Holster>(holster_settings.shoulder_radius, pc,
 					head_node, t, vrinput::Hand::kRight,
-					make_callbacks(
-						right_shoulder_primary, right_shoulder_secondary, right_shoulder_both),
-					allow_empty_arrow_hand);
-				vr_gui::Controller::GetSingleton()->AddRoot(std::move(temp));
+					make_callbacks(holster_settings.right_shoulder_primary,
+						holster_settings.right_shoulder_secondary,
+						holster_settings.right_shoulder_both),
+					holster_settings.allow_empty_arrow_hand);
+				add_holster(std::move(temp));
 			}
 		}
 	}
@@ -404,116 +368,4 @@ namespace vr3dirp
 		}
 	}
 
-	bool ReadConfig(const char* a_ini_path)
-	{
-		using namespace helper;
-		using namespace std::filesystem;
-		static std::filesystem::file_time_type last_read = {};
-
-		auto config_path = GetGamePath() / a_ini_path;
-
-		if (auto setting = RE::GetINISetting("bLeftHandedMode:VRInput"))
-		{
-			g_left_hand_mode = setting->GetBool();
-		}
-
-		try
-		{
-			auto last_write = last_write_time(config_path);
-
-			if (last_write > last_read)
-			{
-				std::ifstream config(config_path);
-				if (config.is_open())
-				{
-					allow_empty_arrow_hand =
-						(bool)ReadIntFromIni(config, "bAllowEmptyArrowHand");
-					shoulder_holster_radius = ReadFloatFromIni(config, "fShoulderRadius");
-					belly_holster_radius = ReadFloatFromIni(config, "fBellyRadius");
-					shoulder_holster_x = ReadFloatFromIni(config, "fShoulderX");
-					shoulder_holster_y = ReadFloatFromIni(config, "fShoulderY");
-					shoulder_holster_z = ReadFloatFromIni(config, "fShoulderZ");
-					belly_holster_x = ReadFloatFromIni(config, "fBellyX");
-					belly_holster_y = ReadFloatFromIni(config, "fBellyY");
-					belly_holster_z = ReadFloatFromIni(config, "fBellyZ");
-					left_shoulder_primary =
-						ParseBookType(ReadStringFromIni(config, "sLeftShoulderPrimary"));
-					left_shoulder_secondary =
-						ParseBookType(ReadStringFromIni(config, "sLeftShoulderSecondary"));
-					left_shoulder_both =
-						ParseBookType(ReadStringFromIni(config, "sLeftShoulderBoth"));
-					right_shoulder_primary =
-						ParseBookType(ReadStringFromIni(config, "sRightShoulderPrimary"));
-					right_shoulder_secondary =
-						ParseBookType(ReadStringFromIni(config, "sRightShoulderSecondary"));
-					right_shoulder_both =
-						ParseBookType(ReadStringFromIni(config, "sRightShoulderBoth"));
-					belly_primary =
-						ParseBookType(ReadStringFromIni(config, "sBellyPrimary"));
-					belly_secondary =
-						ParseBookType(ReadStringFromIni(config, "sBellySecondary"));
-					belly_both = ParseBookType(ReadStringFromIni(config, "sBellyBoth"));
-
-					settings.light_fade = ReadFloatFromIni(config, "fLightIntensity");
-					settings.font_size = ReadFloatFromIni(config, "fFontSize");
-					settings.book_scale = ReadFloatFromIni(config, "fBookScale");
-					settings.journal_scale = ReadFloatFromIni(config, "fJournalScale");
-					settings.quest_line_spacing =
-						ReadFloatFromIni(config, "fQuestLineSpacing");
-					settings.rightpage_text_z_offset =
-						ReadFloatFromIni(config, "fRightPageTextZOffset");
-					settings.rightpage_text_z_offset_righthand =
-						ReadFloatFromIni(config, "fRightPageTextZOffsetRight");
-					settings.leftpage_text_z_offset =
-						ReadFloatFromIni(config, "fLeftPageTextZOffset");
-					settings.leftpage_text_z_offset_righthand =
-						ReadFloatFromIni(config, "fLeftPageTextZOffsetRight");
-					settings.horizontal_margin =
-						ReadFloatFromIni(config, "fHorizontalMargin");
-					settings.top_margin = ReadFloatFromIni(config, "fTopMargin");
-					settings.show_misc_all = ReadIntFromIni(config, "iShowMiscInAll");
-					settings.hidden_quests = ParseFormIDList(
-						ReadStringFromIni(config, "sHiddenQuests"), "sHiddenQuests");
-					settings.new_quests = ParseFormIDList(
-						ReadStringFromIni(config, "sNewQuests"), "sNewQuests");
-
-					settings.right_offset_x = ReadFloatFromIni(config, "fRightOffsetX");
-					settings.right_offset_y = ReadFloatFromIni(config, "fRightOffsetY");
-					settings.right_offset_z = ReadFloatFromIni(config, "fRightOffsetZ");
-					settings.right_rotate_w = ReadFloatFromIni(config, "fRightRotateW");
-					settings.right_rotate_x = ReadFloatFromIni(config, "fRightRotateX");
-					settings.right_rotate_y = ReadFloatFromIni(config, "fRightRotateY");
-					settings.right_rotate_z = ReadFloatFromIni(config, "fRightRotateZ");
-
-					settings.left_offset_x = ReadFloatFromIni(config, "fLeftOffsetX");
-					settings.left_offset_y = ReadFloatFromIni(config, "fLeftOffsetY");
-					settings.left_offset_z = ReadFloatFromIni(config, "fLeftOffsetZ");
-					settings.left_rotate_w = ReadFloatFromIni(config, "fLeftRotateW");
-					settings.left_rotate_x = ReadFloatFromIni(config, "fLeftRotateX");
-					settings.left_rotate_y = ReadFloatFromIni(config, "fLeftRotateY");
-					settings.left_rotate_z = ReadFloatFromIni(config, "fLeftRotateZ");
-
-					g_show_debug_spheres = (bool)ReadIntFromIni(config, "bShowHitboxes");
-
-					config.close();
-					last_read = last_write_time(config_path);
-					return true;
-				}
-				else
-				{
-					SKSE::log::error("error opening ini");
-					last_read = file_time_type{};
-				}
-			}
-			else
-			{
-				SKSE::log::trace("ini not read (no changes)");
-			}
-		} catch (const filesystem_error&)
-		{
-			SKSE::log::error("ini not found, using defaults");
-			last_read = file_time_type{};
-		}
-		return false;
-	}
 }

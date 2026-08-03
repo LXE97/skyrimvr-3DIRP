@@ -15,8 +15,10 @@ namespace vr3dirp
 		float          journal_scale = 0.9f;
 		float          quest_line_spacing = 0.6f;
 		HiddenQuestSet hidden_quests{ 0x3372b };
-		NewQuestSet    new_quests;
 		int            show_misc_all = 0;
+		bool           highlight_new_quests = true;
+		int            hide_button = 1;
+		int            font = 0;
 	};
 
 	class Journal;
@@ -142,8 +144,7 @@ namespace vr3dirp
 	public:
 		static constexpr std::string_view kModelPath = "3DIRP/Journal/journal.nif";
 
-		Journal(bool a_isLeft, TESObjectREFR* a_objectReference, NiAVObject* a_root,
-			JournalSettings& a_settings);
+		Journal(bool a_isLeft, TESObjectREFR* a_objectReference, NiAVObject* a_root);
 		~Journal() override;
 
 		bool IsQuestHidden(const RE::TESQuest* a_quest) const;
@@ -156,7 +157,7 @@ namespace vr3dirp
 		const JournalSettings& GetJournalSettings() const { return journal_settings; }
 
 	private:
-		JournalSettings& journal_settings;
+		JournalSettings journal_settings;
 		HiddenQuestSet   hidden_quests;
 		NewQuestSet      new_quests;
 		NewQuestSet      new_quests_at_open;

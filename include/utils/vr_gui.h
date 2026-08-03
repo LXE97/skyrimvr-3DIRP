@@ -27,7 +27,8 @@ namespace vr_gui
 		kScrollUp,
 		kScrollDown,
 		kScrollLeft,
-		kScrollRight
+		kScrollRight,
+		kNone
 	};
 
 	struct ActivatorOverride
