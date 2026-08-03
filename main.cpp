@@ -24,7 +24,7 @@ SKSEPluginLoad(const SKSE::LoadInterface* skse)
 {
 	SKSE::Init(skse);
 	SetupLog();
-	settings::InitQuestSerialization();
+	vr3dirp::InitSerialization();
 	auto* papyrus = SKSE::GetPapyrusInterface();
 	if (!papyrus || !papyrus->Register(settings::RegisterPapyrusFunctions))
 	{

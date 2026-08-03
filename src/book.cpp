@@ -2,7 +2,6 @@
 
 #include "equipment_checker.h"
 #include "helper_game.h"
-#include "settings.h"
 
 namespace vr3dirp
 {
@@ -12,45 +11,6 @@ namespace vr3dirp
 
 	namespace
 	{
-		BookSettings ReadBookSettings()
-		{
-			auto* manager = settings::Manager::GetSingleton();
-			BookSettings result;
-
-			result.light_fade = manager->Get("fLightIntensity");
-			result.font_size = manager->Get("fFontSize");
-			result.book_scale = manager->Get("fBookScale");
-			result.rightpage_text_z_offset = manager->Get("fRightPageTextZOffset");
-			result.leftpage_text_z_offset = manager->Get("fLeftPageTextZOffset");
-			result.rightpage_text_z_offset_righthand =
-				manager->Get("fRightPageTextZOffsetRight");
-			result.leftpage_text_z_offset_righthand =
-				manager->Get("fLeftPageTextZOffsetRight");
-			result.horizontal_margin = manager->Get("fHorizontalMargin");
-			result.top_margin = manager->Get("fTopMargin");
-			result.close_button = static_cast<int>(manager->Get("iCloseButton"));
-			result.close_action = static_cast<int>(manager->Get("iCloseAction"));
-			result.close_timing = manager->Get("fCloseTiming");
-
-			result.right_offset_x = manager->Get("fRightOffsetX");
-			result.right_offset_y = manager->Get("fRightOffsetY");
-			result.right_offset_z = manager->Get("fRightOffsetZ");
-			result.right_rotate_w = manager->Get("fRightRotateW");
-			result.right_rotate_x = manager->Get("fRightRotateX");
-			result.right_rotate_y = manager->Get("fRightRotateY");
-			result.right_rotate_z = manager->Get("fRightRotateZ");
-
-			result.left_offset_x = manager->Get("fLeftOffsetX");
-			result.left_offset_y = manager->Get("fLeftOffsetY");
-			result.left_offset_z = manager->Get("fLeftOffsetZ");
-			result.left_rotate_w = manager->Get("fLeftRotateW");
-			result.left_rotate_x = manager->Get("fLeftRotateX");
-			result.left_rotate_y = manager->Get("fLeftRotateY");
-			result.left_rotate_z = manager->Get("fLeftRotateZ");
-
-			return result;
-		}
-
 		std::optional<vr::EVRButtonId> GetBookButton(
 			const Controller::Settings& a_settings, int a_button)
 		{
@@ -123,8 +83,9 @@ namespace vr3dirp
 		if (book_light) { helper::DestroyLight(book_light); }
 	}
 
-	BookSettingsOwner::BookSettingsOwner() :
-		settings(ReadBookSettings())
+	BookSettingsOwner::BookSettingsOwner(BookSettings a_settings, BookCallbacks a_callbacks) :
+		settings(std::move(a_settings)),
+		callbacks(std::move(a_callbacks))
 	{}
 
 	void Book::Close()
@@ -140,8 +101,9 @@ namespace vr3dirp
 	}
 
 	Book::Book(std::string_view a_model_path, bool a_isLeft, TESObjectREFR* a_objectReference,
-		NiAVObject* a_root, std::optional<float> a_scale_override) :
-		BookSettingsOwner(),
+		NiAVObject* a_root, BookSettings a_settings, BookCallbacks a_callbacks,
+		std::optional<float> a_scale_override) :
+		BookSettingsOwner(std::move(a_settings), std::move(a_callbacks)),
 		Widget(kDefaultWindowRadius, a_objectReference, a_root,
 			MakeBookLocalTransform(
 				a_isLeft, settings, a_scale_override.value_or(settings.book_scale))),
@@ -634,14 +596,6 @@ namespace vr3dirp
 			book->settings.left_rotate_y = quat.y;
 			book->settings.left_rotate_z = quat.z;
 
-			auto* manager = settings::Manager::GetSingleton();
-			manager->Set("fLeftOffsetX", transform.translate.x);
-			manager->Set("fLeftOffsetY", transform.translate.y);
-			manager->Set("fLeftOffsetZ", transform.translate.z);
-			manager->Set("fLeftRotateW", quat.w);
-			manager->Set("fLeftRotateX", quat.x);
-			manager->Set("fLeftRotateY", quat.y);
-			manager->Set("fLeftRotateZ", quat.z);
 		}
 		else
 		{
@@ -654,14 +608,11 @@ namespace vr3dirp
 			book->settings.right_rotate_y = quat.y;
 			book->settings.right_rotate_z = quat.z;
 
-			auto* manager = settings::Manager::GetSingleton();
-			manager->Set("fRightOffsetX", transform.translate.x);
-			manager->Set("fRightOffsetY", transform.translate.y);
-			manager->Set("fRightOffsetZ", transform.translate.z);
-			manager->Set("fRightRotateW", quat.w);
-			manager->Set("fRightRotateX", quat.x);
-			manager->Set("fRightRotateY", quat.y);
-			manager->Set("fRightRotateZ", quat.z);
+		}
+
+		if (book->callbacks.transform_changed)
+		{
+			book->callbacks.transform_changed(book->isLeft, transform);
 		}
 
 		helper::PrintTransform(parent->GetTransform());

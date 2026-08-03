@@ -52,12 +52,18 @@ namespace vr3dirp
 		float left_rotate_z = -0.209262307f;
 	};
 
+	struct BookCallbacks
+	{
+		std::function<void(bool, const NiTransform&)> transform_changed;
+	};
+
 	class BookSettingsOwner
 	{
 	protected:
-		BookSettingsOwner();
+		BookSettingsOwner(BookSettings a_settings, BookCallbacks a_callbacks);
 
-		BookSettings settings;
+		BookSettings  settings;
+		BookCallbacks callbacks;
 	};
 
 	class Book : private BookSettingsOwner, public Widget
@@ -66,7 +72,8 @@ namespace vr3dirp
 
 	public:
 		Book(std::string_view a_model_path, bool a_isLeft, TESObjectREFR* a_objectReference,
-			NiAVObject* a_root, std::optional<float> a_scale_override = std::nullopt);
+			NiAVObject* a_root, BookSettings a_settings, BookCallbacks a_callbacks = {},
+			std::optional<float> a_scale_override = std::nullopt);
 		~Book() override;
 
 		struct Layout

@@ -10,15 +10,26 @@ namespace vr3dirp
 	using HiddenQuestSet = std::unordered_set<RE::FormID>;
 	using NewQuestSet = std::unordered_set<RE::FormID>;
 
-	struct JournalSettings : BookSettings
+	struct JournalSettings
 	{
-		float          journal_scale = 0.9f;
-		float          quest_line_spacing = 0.6f;
-		HiddenQuestSet hidden_quests{ 0x3372b };
-		int            show_misc_all = 0;
-		bool           highlight_new_quests = true;
-		int            hide_button = 1;
-		int            font = 0;
+		float journal_scale = 0.9f;
+		float quest_line_spacing = 0.6f;
+		int   show_misc_all = 0;
+		bool  highlight_new_quests = true;
+		int   hide_button = 1;
+		int   font = 0;
+	};
+
+	struct JournalState
+	{
+		HiddenQuestSet hidden_quests;
+		NewQuestSet    new_quests;
+	};
+
+	struct JournalCallbacks
+	{
+		std::function<void(RE::FormID)>         quest_hidden;
+		std::function<void(const NewQuestSet&)> new_quests_removed;
 	};
 
 	class Journal;
@@ -144,8 +155,10 @@ namespace vr3dirp
 	public:
 		static constexpr std::string_view kModelPath = "3DIRP/Journal/journal.nif";
 
-		Journal(bool a_isLeft, TESObjectREFR* a_objectReference, NiAVObject* a_root);
-		~Journal() override;
+		Journal(bool a_isLeft, TESObjectREFR* a_objectReference, NiAVObject* a_root,
+			BookSettings a_book_settings, BookCallbacks a_book_callbacks,
+			JournalSettings a_journal_settings, JournalState a_state,
+			JournalCallbacks a_journal_callbacks);
 
 		bool IsQuestHidden(const RE::TESQuest* a_quest) const;
 		bool HideQuest(const RE::TESQuest* a_quest);
@@ -157,10 +170,10 @@ namespace vr3dirp
 		const JournalSettings& GetJournalSettings() const { return journal_settings; }
 
 	private:
-		JournalSettings journal_settings;
+		JournalSettings  journal_settings;
+		JournalCallbacks journal_callbacks;
 		HiddenQuestSet   hidden_quests;
 		NewQuestSet      new_quests;
-		NewQuestSet      new_quests_at_open;
 	};
 
 }

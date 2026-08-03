@@ -12,6 +12,7 @@ namespace vr3dirp
 	extern PapyrusVRAPI* g_papyrusvr;
 
 	void Init();
+	void InitSerialization();
 
 	void OnGameLoad();
 

@@ -60,6 +60,208 @@ namespace vr3dirp
 		BookType belly_both;
 	};
 
+	namespace
+	{
+		constexpr RE::FormID kDefaultHiddenQuest = 0x3372b;
+		constexpr std::uint32_t kSerializationID =
+			static_cast<std::uint32_t>('3') | (static_cast<std::uint32_t>('D') << 8) |
+			(static_cast<std::uint32_t>('I') << 16) | (static_cast<std::uint32_t>('R') << 24);
+		constexpr std::uint32_t kNewQuestsRecord =
+			static_cast<std::uint32_t>('N') | (static_cast<std::uint32_t>('Q') << 8) |
+			(static_cast<std::uint32_t>('S') << 16) | (static_cast<std::uint32_t>('T') << 24);
+		constexpr std::uint32_t kHiddenQuestsRecord =
+			static_cast<std::uint32_t>('H') | (static_cast<std::uint32_t>('Q') << 8) |
+			(static_cast<std::uint32_t>('S') << 16) | (static_cast<std::uint32_t>('T') << 24);
+		constexpr std::uint32_t kQuestRecordVersion = 1;
+
+		std::shared_mutex g_quest_state_mutex;
+		NewQuestSet      g_new_quests;
+		HiddenQuestSet   g_hidden_quests{ kDefaultHiddenQuest };
+
+		bool WriteQuestForms(SKSE::SerializationInterface* a_intfc, std::uint32_t a_type,
+			const std::unordered_set<RE::FormID>& a_forms)
+		{
+			if (!a_intfc->OpenRecord(a_type, kQuestRecordVersion)) { return false; }
+
+			const auto count = static_cast<std::uint32_t>(a_forms.size());
+			if (!a_intfc->WriteRecordData(count)) { return false; }
+			for (const auto form_id : a_forms)
+			{
+				if (!a_intfc->WriteRecordData(form_id)) { return false; }
+			}
+			return true;
+		}
+
+		bool ReadQuestForms(SKSE::SerializationInterface* a_intfc, std::uint32_t a_length,
+			std::unordered_set<RE::FormID>& a_forms)
+		{
+			std::uint32_t count{};
+			if (a_length < sizeof(count) || a_intfc->ReadRecordData(count) != sizeof(count))
+			{
+				return false;
+			}
+
+			const auto available_form_ids =
+				(a_length - static_cast<std::uint32_t>(sizeof(count))) / sizeof(RE::FormID);
+			if (count > available_form_ids) { return false; }
+
+			std::unordered_set<RE::FormID> loaded_forms;
+			for (std::uint32_t index = 0; index < count; ++index)
+			{
+				RE::FormID form_id{};
+				if (a_intfc->ReadRecordData(form_id) != sizeof(form_id)) { return false; }
+				if (a_intfc->ResolveFormID(form_id, form_id)) { loaded_forms.insert(form_id); }
+			}
+
+			a_forms = std::move(loaded_forms);
+			return true;
+		}
+
+		void SaveQuestForms(SKSE::SerializationInterface* a_intfc)
+		{
+			JournalState state;
+			{
+				std::shared_lock lock(g_quest_state_mutex);
+				state.hidden_quests = g_hidden_quests;
+				state.new_quests = g_new_quests;
+			}
+
+			if (!WriteQuestForms(a_intfc, kNewQuestsRecord, state.new_quests))
+			{
+				SKSE::log::error("Unable to serialize new quests");
+			}
+			if (!WriteQuestForms(a_intfc, kHiddenQuestsRecord, state.hidden_quests))
+			{
+				SKSE::log::error("Unable to serialize hidden quests");
+			}
+		}
+
+		void LoadQuestForms(SKSE::SerializationInterface* a_intfc)
+		{
+			NewQuestSet    new_quests;
+			HiddenQuestSet hidden_quests{ kDefaultHiddenQuest };
+			std::uint32_t  type{};
+			std::uint32_t  version{};
+			std::uint32_t  length{};
+
+			while (a_intfc->GetNextRecordInfo(type, version, length))
+			{
+				if (type != kNewQuestsRecord && type != kHiddenQuestsRecord) { continue; }
+				if (version != kQuestRecordVersion)
+				{
+					SKSE::log::warn("Unsupported quest serialization version {}", version);
+					continue;
+				}
+
+				auto& destination = type == kNewQuestsRecord ?
+					static_cast<std::unordered_set<RE::FormID>&>(new_quests) :
+					static_cast<std::unordered_set<RE::FormID>&>(hidden_quests);
+				if (!ReadQuestForms(a_intfc, length, destination))
+				{
+					SKSE::log::error("Unable to deserialize quest form record {:x}", type);
+				}
+			}
+
+			std::unique_lock lock(g_quest_state_mutex);
+			g_new_quests = std::move(new_quests);
+			g_hidden_quests = std::move(hidden_quests);
+		}
+
+		void RevertQuestForms(SKSE::SerializationInterface*)
+		{
+			std::unique_lock lock(g_quest_state_mutex);
+			g_new_quests.clear();
+			g_hidden_quests = { kDefaultHiddenQuest };
+		}
+	}
+
+	BookSettings ReadBookSettings()
+	{
+		auto* manager = settings::Manager::GetSingleton();
+		BookSettings result;
+
+		result.light_fade = manager->Get("fLightIntensity");
+		result.font_size = manager->Get("fFontSize");
+		result.book_scale = manager->Get("fBookScale");
+		result.rightpage_text_z_offset = manager->Get("fRightPageTextZOffset");
+		result.leftpage_text_z_offset = manager->Get("fLeftPageTextZOffset");
+		result.rightpage_text_z_offset_righthand = manager->Get("fRightPageTextZOffsetRight");
+		result.leftpage_text_z_offset_righthand = manager->Get("fLeftPageTextZOffsetRight");
+		result.horizontal_margin = manager->Get("fHorizontalMargin");
+		result.top_margin = manager->Get("fTopMargin");
+		result.close_button = static_cast<int>(manager->Get("iCloseButton"));
+		result.close_action = static_cast<int>(manager->Get("iCloseAction"));
+		result.close_timing = manager->Get("fCloseTiming");
+
+		result.right_offset_x = manager->Get("fRightOffsetX");
+		result.right_offset_y = manager->Get("fRightOffsetY");
+		result.right_offset_z = manager->Get("fRightOffsetZ");
+		result.right_rotate_w = manager->Get("fRightRotateW");
+		result.right_rotate_x = manager->Get("fRightRotateX");
+		result.right_rotate_y = manager->Get("fRightRotateY");
+		result.right_rotate_z = manager->Get("fRightRotateZ");
+
+		result.left_offset_x = manager->Get("fLeftOffsetX");
+		result.left_offset_y = manager->Get("fLeftOffsetY");
+		result.left_offset_z = manager->Get("fLeftOffsetZ");
+		result.left_rotate_w = manager->Get("fLeftRotateW");
+		result.left_rotate_x = manager->Get("fLeftRotateX");
+		result.left_rotate_y = manager->Get("fLeftRotateY");
+		result.left_rotate_z = manager->Get("fLeftRotateZ");
+
+		return result;
+	}
+
+	JournalSettings ReadJournalSettings()
+	{
+		auto* manager = settings::Manager::GetSingleton();
+		return {
+			.journal_scale = manager->Get("fJournalScale"),
+			.quest_line_spacing = manager->Get("fQuestLineSpacing"),
+			.show_misc_all = static_cast<int>(manager->Get("iShowMiscInAll")),
+			.highlight_new_quests = manager->Get("bHighlightNewQuests") != 0.0f,
+			.hide_button = static_cast<int>(manager->Get("iHideButton")),
+			.font = static_cast<int>(manager->Get("iFont")),
+		};
+	}
+
+	BookCallbacks MakeBookCallbacks()
+	{
+		return { .transform_changed = [](bool a_is_left, const NiTransform& a_transform) {
+			auto* manager = settings::Manager::GetSingleton();
+			const auto rotation = helper::Mat2Quat(a_transform.rotate);
+			const auto side = a_is_left ? "Left" : "Right";
+
+			manager->Set(std::format("f{}OffsetX", side), a_transform.translate.x);
+			manager->Set(std::format("f{}OffsetY", side), a_transform.translate.y);
+			manager->Set(std::format("f{}OffsetZ", side), a_transform.translate.z);
+			manager->Set(std::format("f{}RotateW", side), rotation.w);
+			manager->Set(std::format("f{}RotateX", side), rotation.x);
+			manager->Set(std::format("f{}RotateY", side), rotation.y);
+			manager->Set(std::format("f{}RotateZ", side), rotation.z);
+		} };
+	}
+
+	JournalState GetJournalState()
+	{
+		std::shared_lock lock(g_quest_state_mutex);
+		return { .hidden_quests = g_hidden_quests, .new_quests = g_new_quests };
+	}
+
+	JournalCallbacks MakeJournalCallbacks()
+	{
+		return {
+			.quest_hidden = [](RE::FormID a_form_id) {
+				std::unique_lock lock(g_quest_state_mutex);
+				g_hidden_quests.insert(a_form_id);
+			},
+			.new_quests_removed = [](const NewQuestSet& a_form_ids) {
+				std::unique_lock lock(g_quest_state_mutex);
+				for (const auto form_id : a_form_ids) { g_new_quests.erase(form_id); }
+			},
+		};
+	}
+
 	HolsterSettings ReadHolsterSettings()
 	{
 		auto* manager = settings::Manager::GetSingleton();
@@ -133,6 +335,15 @@ namespace vr3dirp
 
 	void VrikActionSummonBookRight(int) { SummonBook(false, BookType::kJournal); }
 
+	void InitSerialization()
+	{
+		auto* serialization = SKSE::GetSerializationInterface();
+		serialization->SetUniqueID(kSerializationID);
+		serialization->SetSaveCallback(SaveQuestForms);
+		serialization->SetLoadCallback(LoadQuestForms);
+		serialization->SetRevertCallback(RevertQuestForms);
+	}
+
 	void Init()
 	{
 		settings::Manager::GetSingleton()->Init(
@@ -190,7 +401,8 @@ namespace vr3dirp
 		auto* quest = RE::TESForm::LookupByID<RE::TESQuest>(a_event->formID);
 		if (!quest) { return; }
 
-		settings::PushNewQuest(quest->GetFormID());
+		std::unique_lock lock(g_quest_state_mutex);
+		g_new_quests.insert(quest->GetFormID());
 	}
 
 	void OnEquipped(const RE::TESEquipEvent* event) { equipment_checker::OnEquipEvent(event); }
@@ -237,7 +449,9 @@ namespace vr3dirp
 			switch (a_type)
 			{
 			case BookType::kJournal:
-				temp = std::make_unique<Journal>(isLeft, pc->AsReference(), hand_node);
+				temp = std::make_unique<Journal>(isLeft, pc->AsReference(), hand_node,
+					ReadBookSettings(), MakeBookCallbacks(), ReadJournalSettings(),
+					GetJournalState(), MakeJournalCallbacks());
 
 				break;
 
@@ -245,8 +459,8 @@ namespace vr3dirp
 				break;
 
 			default:
-				temp =
-					std::make_unique<Book>(Book::kModelPath, isLeft, pc->AsReference(), hand_node);
+				temp = std::make_unique<Book>(Book::kModelPath, isLeft, pc->AsReference(),
+					hand_node, ReadBookSettings(), MakeBookCallbacks());
 			}
 
 			if (temp) { vr_gui::Controller::GetSingleton()->AddRoot(std::move(temp)); }

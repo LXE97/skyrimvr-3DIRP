@@ -6,21 +6,10 @@
 #include <shared_mutex>
 #include <string>
 #include <string_view>
-#include <unordered_set>
 #include <vector>
 
 namespace settings
 {
-	using QuestFormList = std::unordered_set<RE::FormID>;
-
-	extern QuestFormList g_new_quests_list;
-
-	void PushNewQuest(RE::FormID a_form_id);
-	QuestFormList GetNewQuestList();
-	void CommitNewQuestList(
-		const QuestFormList& a_list_at_open, const QuestFormList& a_current_list);
-	void InitQuestSerialization();
-
 	class Manager
 	{
 	public:

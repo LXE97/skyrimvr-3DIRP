@@ -1,7 +1,5 @@
 #include "journal.h"
 
-#include "settings.h"
-
 #include "text_manager.h"
 
 namespace vr3dirp
@@ -551,26 +549,22 @@ namespace vr3dirp
 		if (onActivate) { onActivate(); }
 	}
 
-	Journal::Journal(bool a_isLeft, TESObjectREFR* a_objectReference, NiAVObject* a_root) :
+	Journal::Journal(bool a_isLeft, TESObjectREFR* a_objectReference, NiAVObject* a_root,
+		BookSettings a_book_settings, BookCallbacks a_book_callbacks,
+		JournalSettings a_journal_settings, JournalState a_state,
+		JournalCallbacks a_journal_callbacks) :
 		Book(Journal::kModelPath, a_isLeft, a_objectReference, a_root,
-			settings::Manager::GetSingleton()->Get("fJournalScale"))
+			std::move(a_book_settings), std::move(a_book_callbacks),
+			a_journal_settings.journal_scale),
+		journal_settings(std::move(a_journal_settings)),
+		journal_callbacks(std::move(a_journal_callbacks)),
+		hidden_quests(std::move(a_state.hidden_quests)),
+		new_quests(std::move(a_state.new_quests))
 	{
-		auto* manager = settings::Manager::GetSingleton();
-		journal_settings.journal_scale = manager->Get("fJournalScale");
-		journal_settings.quest_line_spacing = manager->Get("fQuestLineSpacing");
-		journal_settings.show_misc_all = static_cast<int>(manager->Get("iShowMiscInAll"));
-		journal_settings.highlight_new_quests = manager->Get("bHighlightNewQuests") != 0.0f;
-		journal_settings.hide_button = static_cast<int>(manager->Get("iHideButton"));
-		journal_settings.font = static_cast<int>(manager->Get("iFont"));
-
 		layout.quest_line_spacing = journal_settings.quest_line_spacing;
 		layout.tab_spacing = 1.8f;
 		layout.tab_scale = 1.1f;
 		layout.tab_origin.y = 10.7f;
-
-		hidden_quests = journal_settings.hidden_quests;
-		new_quests = settings::GetNewQuestList();
-		new_quests_at_open = new_quests;
 
 		auto seen_types = GetPlayerQuestTypes();
 
@@ -584,11 +578,6 @@ namespace vr3dirp
 		chapters[0]->OnSelected(layout);
 	}
 
-	Journal::~Journal()
-	{
-		settings::CommitNewQuestList(new_quests_at_open, new_quests);
-	}
-
 	bool Journal::IsQuestHidden(const RE::TESQuest* a_quest) const
 	{ return a_quest && hidden_quests.contains(a_quest->GetFormID()); }
 
@@ -599,7 +588,7 @@ namespace vr3dirp
 		const auto form_id = a_quest->GetFormID();
 		if (!hidden_quests.insert(form_id).second) { return false; }
 
-		journal_settings.hidden_quests.insert(form_id);
+		if (journal_callbacks.quest_hidden) { journal_callbacks.quest_hidden(form_id); }
 
 		SKSE::log::trace("hiding quest {:x}", form_id);
 		return true;
@@ -613,15 +602,30 @@ namespace vr3dirp
 
 	void Journal::MarkQuestSeen(const RE::TESQuest* a_quest)
 	{
-		if (a_quest) { new_quests.erase(a_quest->GetFormID()); }
+		if (!a_quest) { return; }
+
+		const auto form_id = a_quest->GetFormID();
+		if (new_quests.erase(form_id) == 0) { return; }
+		if (journal_callbacks.new_quests_removed)
+		{
+			journal_callbacks.new_quests_removed(NewQuestSet{ form_id });
+		}
 	}
 
 	void Journal::PruneNewQuests(const NewQuestSet& a_visible_quests)
 	{
+		NewQuestSet removed_quests;
 		std::erase_if(new_quests,
-			[&a_visible_quests](const FormID a_form_id) {
-				return !a_visible_quests.contains(a_form_id);
+			[&a_visible_quests, &removed_quests](const FormID a_form_id) {
+				if (a_visible_quests.contains(a_form_id)) { return false; }
+				removed_quests.insert(a_form_id);
+				return true;
 			});
+
+		if (!removed_quests.empty() && journal_callbacks.new_quests_removed)
+		{
+			journal_callbacks.new_quests_removed(removed_quests);
+		}
 	}
 
 }

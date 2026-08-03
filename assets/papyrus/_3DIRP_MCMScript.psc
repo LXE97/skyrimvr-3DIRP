@@ -1,4 +1,4 @@
-Scriptname _3DIRP_MCMScript extends SKI_ConfigBase
+ScriptName _3DIRP_MCMScript extends SKI_ConfigBase
 
 String[] BookTypes
 String[] MiscQuestOptions
@@ -8,58 +8,36 @@ String[] CloseActions
 String[] Fonts
 String[] Profiles
 
-Int[] ToggleOptions
-String[] ToggleKeys
-Int ToggleCount
-
-Int[] MenuOptions
-String[] MenuKeys
-Int[] MenuChoiceTypes
-Int MenuCount
-
-Int[] SliderOptions
-String[] SliderKeys
-Float[] SliderMinimums
-Float[] SliderMaximums
-Float[] SliderIntervals
-Int SliderCount
-
-Int ProfileOption
-Int NewProfileOption
-Int ResetHiddenQuestsOption
 Bool SettingsLoaded
+String kNewProfileCommand = "Write to New"
 String SelectedProfile = "Default"
 
 Int Function GetVersion()
 	Return 1
 EndFunction
 
+; -------------------------------------------------------------------------------------------------
+; MAIN EVENTS
+; -------------------------------------------------------------------------------------------------
+Event OnVersionUpdate(Int a_version)
+	If a_version > CurrentVersion
+		Debug.Trace(ModName + " update from " + CurrentVersion + " to " + a_version)
+		OnConfigInit()
+	EndIf
+EndEvent
+
 Event OnConfigInit()
 	Pages = New String[3]
-	Pages[0] = "General"
+	Pages[0] = "Mod Settings"
 	Pages[1] = "Holsters"
 	Pages[2] = "Journal"
 
 	InitializeMenuChoices()
-
-	ToggleOptions = New Int[8]
-	ToggleKeys = New String[8]
-	MenuOptions = New Int[16]
-	MenuKeys = New String[16]
-	MenuChoiceTypes = New Int[16]
-	SliderOptions = New Int[40]
-	SliderKeys = New String[40]
-	SliderMinimums = New Float[40]
-	SliderMaximums = New Float[40]
-	SliderIntervals = New Float[40]
-
-	SettingsLoaded = _3DIRP_Settings.ReloadSettings()
-	RefreshProfiles()
 EndEvent
 
 Function InitializeMenuChoices()
 	BookTypes = New String[2]
-	BookTypes[0] = "None"
+	BookTypes[0] = "Disabled"
 	BookTypes[1] = "Journal"
 
 	MiscQuestOptions = New String[4]
@@ -74,10 +52,9 @@ Function InitializeMenuChoices()
 	ControllerButtons[2] = "A"
 	ControllerButtons[3] = "B"
 
-	BookButtons = New String[3]
+	BookButtons = New String[2]
 	BookButtons[0] = "Primary"
 	BookButtons[1] = "Secondary"
-	BookButtons[2] = "None"
 
 	CloseActions = New String[2]
 	CloseActions[0] = "Hold"
@@ -103,15 +80,10 @@ Event OnConfigClose()
 	_3DIRP_Settings.SaveSettings()
 EndEvent
 
-Event OnPageReset(String page)
-	ToggleCount = 0
-	MenuCount = 0
-	MenuChoiceTypes = New Int[16]
-	SliderCount = 0
-	ProfileOption = -1
-	NewProfileOption = -1
-	ResetHiddenQuestsOption = -1
-
+; -------------------------------------------------------------------------------------------------
+; PAGE DEFINITIONS
+; -------------------------------------------------------------------------------------------------
+Event OnPageReset(String a_page)
 	If !SettingsLoaded
 		SetCursorFillMode(TOP_TO_BOTTOM)
 		AddTextOption("Settings file could not be loaded", "")
@@ -119,253 +91,467 @@ Event OnPageReset(String page)
 		Return
 	EndIf
 
-	If page == "" || page == "General"
+	If a_page == "" || a_page == "Mod Settings"
 		DrawGeneralPage()
-	ElseIf page == "Holsters"
+	ElseIf a_page == "Holsters"
 		DrawHolstersPage()
-	ElseIf page == "Journal"
+	ElseIf a_page == "Journal"
 		DrawJournalPage()
 	EndIf
 EndEvent
 
 Function DrawGeneralPage()
 	SetCursorFillMode(TOP_TO_BOTTOM)
-	AddMenuSetting("iPrimaryButton", "Primary Button", ControllerButtons)
-	AddMenuSetting("iSecondaryButton", "Secondary Button", ControllerButtons)
-	AddToggleSetting("bShowDebugSpheres", "Show Hitboxes")
+	AddMenuOptionST("iPrimaryButton", "Primary Button", ControllerButtons[GetMenuIndex("iPrimaryButton", ControllerButtons)])
+	AddMenuOptionST("iSecondaryButton", "Secondary Button", ControllerButtons[GetMenuIndex("iSecondaryButton", ControllerButtons)])
+	AddToggleOptionST("bShowDebugSpheres", "Show Hitboxes", GetToggleSetting("bShowDebugSpheres"))
 
 	SetCursorPosition(1)
-	ProfileOption = AddMenuOption("Profile", _3DIRP_Settings.GetActiveProfile())
-	AddToggleSetting("bDebugLog", "Debug Log")
+	AddMenuOptionST("Profile", "Profile", _3DIRP_Settings.GetActiveProfile())
+	AddToggleOptionST("bDebugLog", "Debug Log", GetToggleSetting("bDebugLog"))
 EndFunction
 
 Function DrawHolstersPage()
 	SetCursorFillMode(TOP_TO_BOTTOM)
-	AddToggleSetting("bAllowEmptyArrowHand", "Allow Empty Arrow Hand")
-	AddMenuSetting("iLeftShoulderPrimary", "Left Primary", BookTypes, 1)
-	AddMenuSetting("iLeftShoulderSecondary", "Left Secondary", BookTypes, 1)
-	AddMenuSetting("iLeftShoulderBoth", "Left Both", BookTypes, 1)
-	AddMenuSetting("iRightShoulderPrimary", "Right Primary", BookTypes, 1)
-	AddMenuSetting("iRightShoulderSecondary", "Right Secondary", BookTypes, 1)
-	AddMenuSetting("iRightShoulderBoth", "Right Both", BookTypes, 1)
-	AddMenuSetting("iBellyPrimary", "Belly Primary", BookTypes, 1)
-	AddMenuSetting("iBellySecondary", "Belly Secondary", BookTypes, 1)
-	AddMenuSetting("iBellyBoth", "Belly Both", BookTypes, 1)
+	AddMenuOptionST("iLeftShoulderPrimary", "Left Primary", BookTypes[GetMenuIndex("iLeftShoulderPrimary", BookTypes)])
+	AddMenuOptionST("iLeftShoulderSecondary", "Left Secondary", BookTypes[GetMenuIndex("iLeftShoulderSecondary", BookTypes)])
+	AddMenuOptionST("iLeftShoulderBoth", "Left Both", BookTypes[GetMenuIndex("iLeftShoulderBoth", BookTypes)])
+	AddMenuOptionST("iRightShoulderPrimary", "Right Primary", BookTypes[GetMenuIndex("iRightShoulderPrimary", BookTypes)])
+	AddMenuOptionST("iRightShoulderSecondary", "Right Secondary", BookTypes[GetMenuIndex("iRightShoulderSecondary", BookTypes)])
+	AddMenuOptionST("iRightShoulderBoth", "Right Both", BookTypes[GetMenuIndex("iRightShoulderBoth", BookTypes)])
+	AddMenuOptionST("iBellyPrimary", "Belly Primary", BookTypes[GetMenuIndex("iBellyPrimary", BookTypes)])
+	AddMenuOptionST("iBellySecondary", "Belly Secondary", BookTypes[GetMenuIndex("iBellySecondary", BookTypes)])
+	AddMenuOptionST("iBellyBoth", "Belly Both", BookTypes[GetMenuIndex("iBellyBoth", BookTypes)])
 
 	SetCursorPosition(1)
-	AddSliderSetting("fShoulderRadius", "Shoulder Radius", 0.0, 50.0, 0.5)
-	AddSliderSetting("fShoulderX", "Shoulder X", -20.0, 20.0, 0.5)
-	AddSliderSetting("fShoulderY", "Shoulder Y", -20.0, 20.0, 0.5)
-	AddSliderSetting("fShoulderZ", "Shoulder Z", -20.0, 20.0, 0.5)
-	AddSliderSetting("fBellyRadius", "Belly Radius", 0.0, 50.0, 0.5)
-	AddSliderSetting("fBellyX", "Belly X", -20.0, 20.0, 0.5)
-	AddSliderSetting("fBellyY", "Belly Y", -20.0, 20.0, 0.5)
-	AddSliderSetting("fBellyZ", "Belly Z", -20.0, 20.0, 0.5)
+	AddToggleOptionST("bAllowEmptyArrowHand", "Allow Empty Arrow Hand", GetToggleSetting("bAllowEmptyArrowHand"))
+	AddSliderOptionST("fShoulderRadius", "Shoulder Radius", _3DIRP_Settings.GetSetting("fShoulderRadius"), "{1}")
+	AddSliderOptionST("fShoulderX", "Shoulder X", _3DIRP_Settings.GetSetting("fShoulderX"), "{1}")
+	AddSliderOptionST("fShoulderY", "Shoulder Y", _3DIRP_Settings.GetSetting("fShoulderY"), "{1}")
+	AddSliderOptionST("fShoulderZ", "Shoulder Z", _3DIRP_Settings.GetSetting("fShoulderZ"), "{1}")
+	AddSliderOptionST("fBellyRadius", "Belly Radius", _3DIRP_Settings.GetSetting("fBellyRadius"), "{1}")
+	AddSliderOptionST("fBellyX", "Belly X", _3DIRP_Settings.GetSetting("fBellyX"), "{1}")
+	AddSliderOptionST("fBellyY", "Belly Y", _3DIRP_Settings.GetSetting("fBellyY"), "{1}")
+	AddSliderOptionST("fBellyZ", "Belly Z", _3DIRP_Settings.GetSetting("fBellyZ"), "{1}")
 EndFunction
 
 Function DrawJournalPage()
 	SetCursorFillMode(TOP_TO_BOTTOM)
-	AddMenuSetting("iShowMiscInAll", "Show Misc Quests", MiscQuestOptions)
-	AddToggleSetting("bHighlightNewQuests", "Highlight New Quests")
-		AddMenuSetting("iTrackButton", "Track Button", BookButtons)
-	AddMenuSetting("iHideButton", "Hide Button", BookButtons)
-	AddMenuSetting("iCloseButton", "Close Button", BookButtons)
-	AddMenuSetting("iCloseAction", "Close Action", CloseActions)
-	AddSliderSetting("fCloseTiming", "Close Timing", 0.2, 3.0, 0.1)
-	ResetHiddenQuestsOption = AddTextOption("Reset Hidden Quest List", "Reset")
+	AddMenuOptionST("iShowMiscInAll", "Show Misc Quests", MiscQuestOptions[GetMenuIndex("iShowMiscInAll", MiscQuestOptions)])
+	AddToggleOptionST("bHighlightNewQuests", "Highlight New Quests", GetToggleSetting("bHighlightNewQuests"))
+	AddMenuOptionST("iHideButton", "Hide Button", BookButtons[GetMenuIndex("iHideButton", BookButtons)])
+	AddMenuOptionST("iCloseButton", "Close Button", BookButtons[GetMenuIndex("iCloseButton", BookButtons)])
+	AddMenuOptionST("iCloseAction", "Close Action", CloseActions[GetMenuIndex("iCloseAction", CloseActions)])
+	AddSliderOptionST("fCloseTiming", "Close Timing", _3DIRP_Settings.GetSetting("fCloseTiming"), "{1}")
+	AddTextOptionST("bResetHiddenQuests", "Reset Hidden Quest List", "Reset")
 
 	SetCursorPosition(1)
-	AddSliderSetting("fLightIntensity", "Light Intensity", 0.0, 3.0, 0.1)
-	AddSliderSetting("fJournalScale", "Book Scale", 0.5, 2.0, 0.05)
-	AddSliderSetting("fFontSize", "Font Scale", 0.5, 3.0, 0.05)
-	AddSliderSetting("fTopMargin", "Top Margin", 0.0, 5.0, 0.05)
-	AddSliderSetting("fHorizontalMargin", "Left Margin", 0.0, 5.0, 0.05)
-	AddSliderSetting("fQuestLineSpacing", "Quest Spacing", 0.0, 3.0, 0.05)
-	AddMenuSetting("iFont", "Font", Fonts)
+	AddSliderOptionST("fLightIntensity", "Light Intensity", _3DIRP_Settings.GetSetting("fLightIntensity"), "{1}")
+	AddSliderOptionST("fJournalScale", "Book Scale", _3DIRP_Settings.GetSetting("fJournalScale"), "{2}")
+	AddSliderOptionST("fFontSize", "Font Scale", _3DIRP_Settings.GetSetting("fFontSize"), "{2}")
+	AddSliderOptionST("fTopMargin", "Top Margin", _3DIRP_Settings.GetSetting("fTopMargin"), "{2}")
+	AddSliderOptionST("fHorizontalMargin", "Left Margin", _3DIRP_Settings.GetSetting("fHorizontalMargin"), "{2}")
+	AddSliderOptionST("fQuestLineSpacing", "Quest Spacing", _3DIRP_Settings.GetSetting("fQuestLineSpacing"), "{2}")
+	AddMenuOptionST("iFont", "Font", Fonts[GetMenuIndex("iFont", Fonts)])
 EndFunction
 
-Function AddToggleSetting(String settingName, String label)
-	ToggleKeys[ToggleCount] = settingName
-	ToggleOptions[ToggleCount] = AddToggleOption(label, _3DIRP_Settings.GetSetting(settingName) != 0.0)
-	ToggleCount += 1
-EndFunction
+; -------------------------------------------------------------------------------------------------
+; STATE OPTION EVENTS - GENERAL
+; -------------------------------------------------------------------------------------------------
+State iPrimaryButton
+	Event OnMenuOpenST()
+		OpenMenuSetting("iPrimaryButton", ControllerButtons)
+	EndEvent
+	Event OnMenuAcceptST(Int a_index)
+		AcceptMenuSetting("iPrimaryButton", ControllerButtons, a_index)
+	EndEvent
+EndState
 
-Function AddMenuSetting(String settingName, String label, String[] choices, Int choiceType = 0)
-	Int index = _3DIRP_Settings.GetSetting(settingName) As Int
-	If index < 0 || index >= choices.Length
-		index = 0
-		_3DIRP_Settings.SetSetting(settingName, 0.0)
-	EndIf
-	MenuKeys[MenuCount] = settingName
-	MenuChoiceTypes[MenuCount] = choiceType
-	MenuOptions[MenuCount] = AddMenuOption(label, choices[index])
-	MenuCount += 1
-EndFunction
+State iSecondaryButton
+	Event OnMenuOpenST()
+		OpenMenuSetting("iSecondaryButton", ControllerButtons)
+	EndEvent
+	Event OnMenuAcceptST(Int a_index)
+		AcceptMenuSetting("iSecondaryButton", ControllerButtons, a_index)
+	EndEvent
+EndState
 
-Function AddSliderSetting(String settingName, String label, Float minimum, Float maximum, Float interval)
-	SliderKeys[SliderCount] = settingName
-	SliderMinimums[SliderCount] = minimum
-	SliderMaximums[SliderCount] = maximum
-	SliderIntervals[SliderCount] = interval
-	SliderOptions[SliderCount] = AddSliderOption(label, _3DIRP_Settings.GetSetting(settingName), "{3}")
-	SliderCount += 1
-EndFunction
+State bShowDebugSpheres
+	Event OnSelectST()
+		ToggleSetting("bShowDebugSpheres")
+	EndEvent
+EndState
 
-Event OnOptionSelect(Int option)
-	If option == ResetHiddenQuestsOption
-		_3DIRP_Settings.SetSetting("bResetHiddenQuests", 1.0)
-		SetTextOptionValue(option, "Queued")
-		Return
-	EndIf
+State bDebugLog
+	Event OnSelectST()
+		ToggleSetting("bDebugLog")
+	EndEvent
+EndState
 
-	Int index = FindOption(ToggleOptions, ToggleCount, option)
-	If index >= 0
-		Bool value = _3DIRP_Settings.GetSetting(ToggleKeys[index]) == 0.0
-		If value
-			_3DIRP_Settings.SetSetting(ToggleKeys[index], 1.0)
-		Else
-			_3DIRP_Settings.SetSetting(ToggleKeys[index], 0.0)
-		EndIf
-		SetToggleOptionValue(option, value)
-	EndIf
-EndEvent
-
-Event OnOptionMenuOpen(Int option)
-	If option == ProfileOption
-		SetMenuDialogOptions(Profiles)
-		SetMenuDialogStartIndex(FindProfile(_3DIRP_Settings.GetActiveProfile()))
-		SetMenuDialogDefaultIndex(0)
-		Return
-	EndIf
-
-	Int index = FindOption(MenuOptions, MenuCount, option)
-	If index >= 0
-		String settingName = MenuKeys[index]
-		If MenuChoiceTypes[index] == 1
-			String[] bookChoices = New String[2]
-			bookChoices[0] = "None"
-			bookChoices[1] = "Journal"
-			Int bookValue = _3DIRP_Settings.GetSetting(settingName) As Int
-			If bookValue < 0 || bookValue >= bookChoices.Length
-				bookValue = 0
-			EndIf
-			SetMenuDialogOptions(bookChoices)
-			SetMenuDialogStartIndex(bookValue)
-			SetMenuDialogDefaultIndex(bookValue)
-			Return
-		EndIf
-
-		String[] choices = GetMenuChoices(MenuKeys[index])
-		Int value = _3DIRP_Settings.GetSetting(MenuKeys[index]) As Int
-		If value < 0 || value >= choices.Length
-			value = 0
-		EndIf
-		SetMenuDialogOptions(choices)
-		SetMenuDialogStartIndex(value)
-		SetMenuDialogDefaultIndex(value)
-	EndIf
-EndEvent
-
-Event OnOptionMenuAccept(Int option, Int value)
-	If option == ProfileOption
-		If value >= 0 && value < Profiles.Length && _3DIRP_Settings.LoadProfile(Profiles[value])
-			SelectedProfile = Profiles[value]
-			SetMenuOptionValue(option, Profiles[value])
-			ForcePageReset()
-		EndIf
-		Return
-	EndIf
-
-	Int index = FindOption(MenuOptions, MenuCount, option)
-	If index >= 0
-		String settingName = MenuKeys[index]
-		If MenuChoiceTypes[index] == 1
-			If value == 0
-				_3DIRP_Settings.SetSetting(settingName, 0.0)
-				SetMenuOptionValue(option, "None")
-			ElseIf value == 1
-				_3DIRP_Settings.SetSetting(settingName, 1.0)
-				SetMenuOptionValue(option, "Journal")
-			EndIf
-			Return
-		EndIf
-
-		String[] choices = GetMenuChoices(MenuKeys[index])
-		If value >= 0 && value < choices.Length
-			_3DIRP_Settings.SetSetting(MenuKeys[index], value As Float)
-			SetMenuOptionValue(option, choices[value])
-		EndIf
-	EndIf
-EndEvent
-
-Event OnOptionSliderOpen(Int option)
-	Int index = FindOption(SliderOptions, SliderCount, option)
-	If index >= 0
-		Float value = _3DIRP_Settings.GetSetting(SliderKeys[index])
-		SetSliderDialogStartValue(value)
-		SetSliderDialogDefaultValue(value)
-		SetSliderDialogRange(SliderMinimums[index], SliderMaximums[index])
-		SetSliderDialogInterval(SliderIntervals[index])
-	EndIf
-EndEvent
-
-Event OnOptionSliderAccept(Int option, Float value)
-	Int index = FindOption(SliderOptions, SliderCount, option)
-	If index >= 0
-		_3DIRP_Settings.SetSetting(SliderKeys[index], value)
-		SetSliderOptionValue(option, value, "{3}")
-	EndIf
-EndEvent
-
-Event OnOptionInputOpen(Int option)
-	If option == NewProfileOption
-		SetInputDialogStartText("")
-	EndIf
-EndEvent
-
-Event OnOptionInputAccept(Int option, String value)
-	If option == NewProfileOption && value != "" && _3DIRP_Settings.CreateProfile(value)
-		SelectedProfile = value
-		_3DIRP_Settings.SaveSettings()
+State Profile
+	Event OnMenuOpenST()
+		Int index
 		RefreshProfiles()
-		SetInputOptionValue(option, value)
-		SetMenuOptionValue(ProfileOption, value)
-		ForcePageReset()
-	EndIf
-EndEvent
-
-String[] Function GetMenuChoices(String settingName)
-	If settingName == "iShowMiscInAll"
-		Return MiscQuestOptions
-	ElseIf settingName == "iPrimaryButton" || settingName == "iSecondaryButton"
-		Return ControllerButtons
-	ElseIf settingName == "iHideButton" || settingName == "iCloseButton" || settingName == "iTrackButton"
-		Return BookButtons
-	ElseIf settingName == "iCloseAction"
-		Return CloseActions
-	ElseIf settingName == "iFont"
-		Return Fonts
-	EndIf
-	String[] noChoices = New String[1]
-	noChoices[0] = "Invalid setting"
-	Return noChoices
-EndFunction
-
-Int Function FindOption(Int[] options, Int count, Int option)
-	Int index = 0
-	While index < count
-		If options[index] == option
-			Return index
+		index = FindProfile(_3DIRP_Settings.GetActiveProfile())
+		SetMenuDialogStartIndex(index)
+		SetMenuDialogDefaultIndex(index)
+		SetMenuDialogOptions(Profiles)
+	EndEvent
+	Event OnMenuAcceptST(Int a_index)
+		If a_index >= 0 && a_index < Profiles.Length
+			If Profiles[a_index] == kNewProfileCommand
+				CreateNextProfile()
+			ElseIf _3DIRP_Settings.LoadProfile(Profiles[a_index])
+				SelectedProfile = Profiles[a_index]
+				SetMenuOptionValueST(SelectedProfile)
+				ForcePageReset()
+			EndIf
 		EndIf
-		index += 1
-	EndWhile
-	Return -1
+	EndEvent
+EndState
+
+; -------------------------------------------------------------------------------------------------
+; STATE OPTION EVENTS - HOLSTERS
+; -------------------------------------------------------------------------------------------------
+State iLeftShoulderPrimary
+	Event OnMenuOpenST()
+		OpenMenuSetting("iLeftShoulderPrimary", BookTypes)
+	EndEvent
+	Event OnMenuAcceptST(Int a_index)
+		AcceptMenuSetting("iLeftShoulderPrimary", BookTypes, a_index)
+	EndEvent
+EndState
+
+State iLeftShoulderSecondary
+	Event OnMenuOpenST()
+		OpenMenuSetting("iLeftShoulderSecondary", BookTypes)
+	EndEvent
+	Event OnMenuAcceptST(Int a_index)
+		AcceptMenuSetting("iLeftShoulderSecondary", BookTypes, a_index)
+	EndEvent
+EndState
+
+State iLeftShoulderBoth
+	Event OnMenuOpenST()
+		OpenMenuSetting("iLeftShoulderBoth", BookTypes)
+	EndEvent
+	Event OnMenuAcceptST(Int a_index)
+		AcceptMenuSetting("iLeftShoulderBoth", BookTypes, a_index)
+	EndEvent
+EndState
+
+State iRightShoulderPrimary
+	Event OnMenuOpenST()
+		OpenMenuSetting("iRightShoulderPrimary", BookTypes)
+	EndEvent
+	Event OnMenuAcceptST(Int a_index)
+		AcceptMenuSetting("iRightShoulderPrimary", BookTypes, a_index)
+	EndEvent
+EndState
+
+State iRightShoulderSecondary
+	Event OnMenuOpenST()
+		OpenMenuSetting("iRightShoulderSecondary", BookTypes)
+	EndEvent
+	Event OnMenuAcceptST(Int a_index)
+		AcceptMenuSetting("iRightShoulderSecondary", BookTypes, a_index)
+	EndEvent
+EndState
+
+State iRightShoulderBoth
+	Event OnMenuOpenST()
+		OpenMenuSetting("iRightShoulderBoth", BookTypes)
+	EndEvent
+	Event OnMenuAcceptST(Int a_index)
+		AcceptMenuSetting("iRightShoulderBoth", BookTypes, a_index)
+	EndEvent
+EndState
+
+State iBellyPrimary
+	Event OnMenuOpenST()
+		OpenMenuSetting("iBellyPrimary", BookTypes)
+	EndEvent
+	Event OnMenuAcceptST(Int a_index)
+		AcceptMenuSetting("iBellyPrimary", BookTypes, a_index)
+	EndEvent
+EndState
+
+State iBellySecondary
+	Event OnMenuOpenST()
+		OpenMenuSetting("iBellySecondary", BookTypes)
+	EndEvent
+	Event OnMenuAcceptST(Int a_index)
+		AcceptMenuSetting("iBellySecondary", BookTypes, a_index)
+	EndEvent
+EndState
+
+State iBellyBoth
+	Event OnMenuOpenST()
+		OpenMenuSetting("iBellyBoth", BookTypes)
+	EndEvent
+	Event OnMenuAcceptST(Int a_index)
+		AcceptMenuSetting("iBellyBoth", BookTypes, a_index)
+	EndEvent
+EndState
+
+State bAllowEmptyArrowHand
+	Event OnSelectST()
+		ToggleSetting("bAllowEmptyArrowHand")
+	EndEvent
+EndState
+
+State fShoulderRadius
+	Event OnSliderOpenST()
+		OpenSliderSetting("fShoulderRadius", 0.0, 50.0, 0.5)
+	EndEvent
+	Event OnSliderAcceptST(Float a_value)
+		AcceptSliderSetting("fShoulderRadius", a_value, "{1}")
+	EndEvent
+EndState
+
+State fShoulderX
+	Event OnSliderOpenST()
+		OpenSliderSetting("fShoulderX", -20.0, 20.0, 0.5)
+	EndEvent
+	Event OnSliderAcceptST(Float a_value)
+		AcceptSliderSetting("fShoulderX", a_value, "{1}")
+	EndEvent
+EndState
+
+State fShoulderY
+	Event OnSliderOpenST()
+		OpenSliderSetting("fShoulderY", -20.0, 20.0, 0.5)
+	EndEvent
+	Event OnSliderAcceptST(Float a_value)
+		AcceptSliderSetting("fShoulderY", a_value, "{1}")
+	EndEvent
+EndState
+
+State fShoulderZ
+	Event OnSliderOpenST()
+		OpenSliderSetting("fShoulderZ", -20.0, 20.0, 0.5)
+	EndEvent
+	Event OnSliderAcceptST(Float a_value)
+		AcceptSliderSetting("fShoulderZ", a_value, "{1}")
+	EndEvent
+EndState
+
+State fBellyRadius
+	Event OnSliderOpenST()
+		OpenSliderSetting("fBellyRadius", 0.0, 50.0, 0.5)
+	EndEvent
+	Event OnSliderAcceptST(Float a_value)
+		AcceptSliderSetting("fBellyRadius", a_value, "{1}")
+	EndEvent
+EndState
+
+State fBellyX
+	Event OnSliderOpenST()
+		OpenSliderSetting("fBellyX", -20.0, 20.0, 0.5)
+	EndEvent
+	Event OnSliderAcceptST(Float a_value)
+		AcceptSliderSetting("fBellyX", a_value, "{1}")
+	EndEvent
+EndState
+
+State fBellyY
+	Event OnSliderOpenST()
+		OpenSliderSetting("fBellyY", -20.0, 20.0, 0.5)
+	EndEvent
+	Event OnSliderAcceptST(Float a_value)
+		AcceptSliderSetting("fBellyY", a_value, "{1}")
+	EndEvent
+EndState
+
+State fBellyZ
+	Event OnSliderOpenST()
+		OpenSliderSetting("fBellyZ", -20.0, 20.0, 0.5)
+	EndEvent
+	Event OnSliderAcceptST(Float a_value)
+		AcceptSliderSetting("fBellyZ", a_value, "{1}")
+	EndEvent
+EndState
+
+; -------------------------------------------------------------------------------------------------
+; STATE OPTION EVENTS - JOURNAL
+; -------------------------------------------------------------------------------------------------
+State iShowMiscInAll
+	Event OnMenuOpenST()
+		OpenMenuSetting("iShowMiscInAll", MiscQuestOptions)
+	EndEvent
+	Event OnMenuAcceptST(Int a_index)
+		AcceptMenuSetting("iShowMiscInAll", MiscQuestOptions, a_index)
+	EndEvent
+EndState
+
+State bHighlightNewQuests
+	Event OnSelectST()
+		ToggleSetting("bHighlightNewQuests")
+	EndEvent
+EndState
+
+State iHideButton
+	Event OnMenuOpenST()
+		OpenMenuSetting("iHideButton", BookButtons)
+	EndEvent
+	Event OnMenuAcceptST(Int a_index)
+		AcceptMenuSetting("iHideButton", BookButtons, a_index)
+	EndEvent
+EndState
+
+State iCloseButton
+	Event OnMenuOpenST()
+		OpenMenuSetting("iCloseButton", BookButtons)
+	EndEvent
+	Event OnMenuAcceptST(Int a_index)
+		AcceptMenuSetting("iCloseButton", BookButtons, a_index)
+	EndEvent
+EndState
+
+State iCloseAction
+	Event OnMenuOpenST()
+		OpenMenuSetting("iCloseAction", CloseActions)
+	EndEvent
+	Event OnMenuAcceptST(Int a_index)
+		AcceptMenuSetting("iCloseAction", CloseActions, a_index)
+	EndEvent
+EndState
+
+State fCloseTiming
+	Event OnSliderOpenST()
+		OpenSliderSetting("fCloseTiming", 0.2, 3.0, 0.1)
+	EndEvent
+	Event OnSliderAcceptST(Float a_value)
+		AcceptSliderSetting("fCloseTiming", a_value, "{1}")
+	EndEvent
+EndState
+
+State bResetHiddenQuests
+	Event OnSelectST()
+		_3DIRP_Settings.SetSetting("bResetHiddenQuests", 1.0)
+		SetTextOptionValueST("Queued")
+	EndEvent
+EndState
+
+State fLightIntensity
+	Event OnSliderOpenST()
+		OpenSliderSetting("fLightIntensity", 0.0, 3.0, 0.1)
+	EndEvent
+	Event OnSliderAcceptST(Float a_value)
+		AcceptSliderSetting("fLightIntensity", a_value, "{1}")
+	EndEvent
+EndState
+
+State fJournalScale
+	Event OnSliderOpenST()
+		OpenSliderSetting("fJournalScale", 0.5, 2.0, 0.05)
+	EndEvent
+	Event OnSliderAcceptST(Float a_value)
+		AcceptSliderSetting("fJournalScale", a_value, "{2}")
+	EndEvent
+EndState
+
+State fFontSize
+	Event OnSliderOpenST()
+		OpenSliderSetting("fFontSize", 0.5, 3.0, 0.05)
+	EndEvent
+	Event OnSliderAcceptST(Float a_value)
+		AcceptSliderSetting("fFontSize", a_value, "{2}")
+	EndEvent
+EndState
+
+State fTopMargin
+	Event OnSliderOpenST()
+		OpenSliderSetting("fTopMargin", 0.0, 5.0, 0.05)
+	EndEvent
+	Event OnSliderAcceptST(Float a_value)
+		AcceptSliderSetting("fTopMargin", a_value, "{2}")
+	EndEvent
+EndState
+
+State fHorizontalMargin
+	Event OnSliderOpenST()
+		OpenSliderSetting("fHorizontalMargin", 0.0, 5.0, 0.05)
+	EndEvent
+	Event OnSliderAcceptST(Float a_value)
+		AcceptSliderSetting("fHorizontalMargin", a_value, "{2}")
+	EndEvent
+EndState
+
+State fQuestLineSpacing
+	Event OnSliderOpenST()
+		OpenSliderSetting("fQuestLineSpacing", 0.0, 3.0, 0.05)
+	EndEvent
+	Event OnSliderAcceptST(Float a_value)
+		AcceptSliderSetting("fQuestLineSpacing", a_value, "{2}")
+	EndEvent
+EndState
+
+State iFont
+	Event OnMenuOpenST()
+		OpenMenuSetting("iFont", Fonts)
+	EndEvent
+	Event OnMenuAcceptST(Int a_index)
+		AcceptMenuSetting("iFont", Fonts, a_index)
+	EndEvent
+EndState
+
+; -------------------------------------------------------------------------------------------------
+; HELPERS
+; -------------------------------------------------------------------------------------------------
+Bool Function GetToggleSetting(String a_setting)
+	Return _3DIRP_Settings.GetSetting(a_setting) != 0.0
 EndFunction
 
-Int Function FindProfile(String profile)
+Function ToggleSetting(String a_setting)
+	Bool value = !GetToggleSetting(a_setting)
+	If value
+		_3DIRP_Settings.SetSetting(a_setting, 1.0)
+	Else
+		_3DIRP_Settings.SetSetting(a_setting, 0.0)
+	EndIf
+	SetToggleOptionValueST(value)
+EndFunction
+
+Int Function GetMenuIndex(String a_setting, String[] a_choices)
+	Int index = _3DIRP_Settings.GetSetting(a_setting) As Int
+	If index < 0 || index >= a_choices.Length
+		index = 0
+	EndIf
+	Return index
+EndFunction
+
+Function OpenMenuSetting(String a_setting, String[] a_choices)
+	Int index = GetMenuIndex(a_setting, a_choices)
+	SetMenuDialogStartIndex(index)
+	SetMenuDialogDefaultIndex(index)
+	SetMenuDialogOptions(a_choices)
+EndFunction
+
+Function AcceptMenuSetting(String a_setting, String[] a_choices, Int a_index)
+	If a_index >= 0 && a_index < a_choices.Length
+		_3DIRP_Settings.SetSetting(a_setting, a_index As Float)
+		SetMenuOptionValueST(a_choices[a_index])
+	EndIf
+EndFunction
+
+Function OpenSliderSetting(String a_setting, Float a_minimum, Float a_maximum, Float a_interval)
+	Float value = _3DIRP_Settings.GetSetting(a_setting)
+	SetSliderDialogStartValue(value)
+	SetSliderDialogDefaultValue(value)
+	SetSliderDialogRange(a_minimum, a_maximum)
+	SetSliderDialogInterval(a_interval)
+EndFunction
+
+Function AcceptSliderSetting(String a_setting, Float a_value, String a_format)
+	_3DIRP_Settings.SetSetting(a_setting, a_value)
+	SetSliderOptionValueST(a_value, a_format)
+EndFunction
+
+Int Function FindProfile(String a_profile)
 	Int index = 0
 	While index < Profiles.Length
-		If Profiles[index] == profile
+		If Profiles[index] == a_profile
 			Return index
 		EndIf
 		index += 1
@@ -374,5 +560,39 @@ Int Function FindProfile(String profile)
 EndFunction
 
 Function RefreshProfiles()
-	Profiles = _3DIRP_Settings.GetProfiles()
+	String[] storedProfiles = _3DIRP_Settings.GetProfiles()
+	Profiles = Utility.CreateStringArray(storedProfiles.Length + 1)
+	Int index = 0
+	While index < storedProfiles.Length
+		Profiles[index] = storedProfiles[index]
+		index += 1
+	EndWhile
+	Profiles[index] = kNewProfileCommand
+EndFunction
+
+Function CreateNextProfile()
+	Int suffix = 1
+	String profileName = "Profile " + suffix
+	While ProfileExists(profileName)
+		suffix += 1
+		profileName = "Profile " + suffix
+	EndWhile
+
+	If _3DIRP_Settings.CreateProfile(profileName)
+		SelectedProfile = profileName
+		RefreshProfiles()
+		SetMenuOptionValueST(SelectedProfile)
+		ForcePageReset()
+	EndIf
+EndFunction
+
+Bool Function ProfileExists(String a_profile)
+	Int index = 0
+	While index < Profiles.Length - 1
+		If Profiles[index] == a_profile
+			Return True
+		EndIf
+		index += 1
+	EndWhile
+	Return False
 EndFunction
