@@ -23,7 +23,10 @@ namespace helper
 	void InstallPlayerUpdateHook(std::function<void(void)> a_func)
 	{
 		PlayerCharacter_Update::my_func = a_func;
-		RE::write_vfunc<RE::PlayerCharacter, 0xAF, PlayerCharacter_Update>();
+
+		REL::Relocation<std::uintptr_t> vtbl{ RE::PlayerCharacter::VTABLE[0] };
+		PlayerCharacter_Update::func =
+			vtbl.write_vfunc(0xAF, PlayerCharacter_Update::thunk);
 	}
 
 	TESForm* LookupByName(FormType a_typeEnum, const char* a_name)
