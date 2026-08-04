@@ -311,7 +311,6 @@ namespace helper
 
 		if (auto* skinInstance = geometryData.skinInstance.get())
 		{
-			SKSE::log::trace("SetVertexColor: setting skin instance colors");
 			if (auto* skinPartition = skinInstance->skinPartition.get())
 			{
 				for (auto& partition : skinPartition->partitions)

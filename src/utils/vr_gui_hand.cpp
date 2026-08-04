@@ -1,6 +1,7 @@
 #include "vr_gui_hand.h"
 
 #include "equipment_checker.h"
+#include "main_plugin.h"
 #include "vr_gui.h"
 
 namespace vr_gui
@@ -45,7 +46,11 @@ namespace vr_gui
 		if (Init())
 		{
 			if (!g_higgsInterface->IsHandInGrabbableState(isLeft)) { state = State::kGrabbing; }
-			else if (!equipment_checker::IsHandEmpty(isLeft)) { state = State::kWeapon; }
+			else if (!equipment_checker::IsHandEmpty(
+					 isLeft, true, vr3dirp::g_left_hand_mode))
+			{
+				state = State::kWeapon;
+			}
 			else
 			{
 				state = State::kReady;

@@ -2,6 +2,7 @@
 
 #include "equipment_checker.h"
 #include "helper_game.h"
+#include "main_plugin.h"
 
 namespace vr3dirp
 {
@@ -11,6 +12,25 @@ namespace vr3dirp
 
 	namespace
 	{
+		bool UsesLeftLayout(vrinput::Hand a_hand) { return a_hand != vrinput::Hand::kRight; }
+
+		NiTransform LerpTransform(
+			const NiTransform& a_from, const NiTransform& a_to, float a_interpolation)
+		{
+			const float interpolation = std::clamp(a_interpolation, 0.0f, 1.0f);
+
+			NiTransform result{};
+			result.translate =
+				a_from.translate + (a_to.translate - a_from.translate) * interpolation;
+			result.scale = a_from.scale + (a_to.scale - a_from.scale) * interpolation;
+
+			const NiQuaternion from_rotation = helper::Mat2Quat(a_from.rotate);
+			const NiQuaternion to_rotation = helper::Mat2Quat(a_to.rotate);
+			result.rotate =
+				helper::nlerpQuat(interpolation, from_rotation, to_rotation).ToRotation();
+			return result;
+		}
+
 		std::optional<vr::EVRButtonId> GetBookButton(
 			const Controller::Settings& a_settings, int a_button)
 		{
@@ -70,7 +90,8 @@ namespace vr3dirp
 	{
 		if (auto* actor = GetObjectReference()->As<RE::Actor>())
 		{
-			if (stored_spell && equipment_checker::IsHandEmpty(isLeft))
+			if (stored_spell &&
+				equipment_checker::IsHandEmpty(isLeft, true, g_left_hand_mode))
 			{
 				if (auto* equip_manager = RE::ActorEquipManager::GetSingleton())
 				{
@@ -90,6 +111,9 @@ namespace vr3dirp
 
 	void Book::Close()
 	{
+		if (isClosing) { return; }
+		isClosing = true;
+
 		if (animator.HasQueued()) { animator.ClearQueue(); }
 		animator.PlayImmediately(close, animation_speed * 1.2,
 			{ { close.end, [this]() { Controller::GetSingleton()->MarkForDelete(this); } } });
@@ -100,19 +124,71 @@ namespace vr3dirp
 		helper::PlaySound(sound, 1, world_pos, Get3D());
 	}
 
-	Book::Book(std::string_view a_model_path, bool a_isLeft, TESObjectREFR* a_objectReference,
-		NiAVObject* a_root, BookSettings a_settings, BookCallbacks a_callbacks,
-		std::optional<float> a_scale_override) :
-		BookSettingsOwner(std::move(a_settings), std::move(a_callbacks)),
-		Widget(kDefaultWindowRadius, a_objectReference, a_root,
-			MakeBookLocalTransform(
-				a_isLeft, settings, a_scale_override.value_or(settings.book_scale))),
-		isLeft(a_isLeft)
+	void Book::InitializeHandState()
 	{
-		layout.right_page_origin.z = a_isLeft ? settings.rightpage_text_z_offset :
-												settings.rightpage_text_z_offset_righthand;
-		layout.left_page_origin.z -=
-			a_isLeft ? settings.leftpage_text_z_offset : settings.leftpage_text_z_offset_righthand;
+		// Store the dismissal button state to avoid closing immediately after creation or claiming.
+		const auto vrgui_settings = Controller::GetSingleton()->GetSettings();
+		if (const auto close_button = GetBookButton(vrgui_settings, settings.close_button))
+		{
+			secondary_pressed_during_creation =
+				vrinput::GetButtonState(*close_button, vrinput::Hand(isLeft),
+					vrinput::ActionType::kPress) == vrinput::ButtonState::kButtonDown;
+		}
+
+		auto* pc = RE::PlayerCharacter::GetSingleton();
+		if (auto equipped = pc->GetEquippedObject(isLeft); equipped && pc->IsWeaponDrawn())
+		{
+			if ((stored_spell = equipped->As<RE::SpellItem>()))
+			{
+				helper::UnequipSpell(pc, stored_spell, isLeft);
+			}
+		}
+
+		hand_mode = Controller::GetSingleton()->GetHand(isLeft)->RequestMode(
+			Hand::Mode::kFist, Hand::ModePriority::kPassive);
+
+		// Block inputs on the book hand for as long as it exists.
+		const bool is_main_hand = isLeft == g_left_hand_mode;
+		block_handle = InputBlockManager::GetSingleton()->Acquire(isLeft,
+			InputBlock::kPrimary | InputBlock::kSecondary | InputBlock::kHiggs |
+				(is_main_hand ? InputBlock::kActivatePickLength : InputBlock::kNone));
+	}
+
+	void Book::HandleInteractionHover(bool a_activate, Hand& a_hand)
+	{
+		if (isFloating)
+		{
+			const auto hovering_hand = vrinput::Hand(a_hand.IsLeft());
+			if (a_activate && hand == vrinput::Hand::kBoth)
+			{
+				hand = hovering_hand;
+				isLeft = !a_hand.IsLeft();
+			}
+			else if (!a_activate && hand == hovering_hand)
+			{
+				hand = vrinput::Hand::kBoth;
+				isLeft = usesLeftLayout;
+			}
+		}
+	}
+
+	Book::Book(std::string_view a_model_path, vrinput::Hand a_hand,
+		TESObjectREFR* a_objectReference, NiAVObject* a_root, BookSettings a_settings,
+		BookCallbacks a_callbacks, std::optional<float> a_scale_override) :
+		BookSettingsOwner(std::move(a_settings), std::move(a_callbacks)),
+		Widget(kDefaultWindowRadius * a_scale_override.value_or(settings.book_scale),
+			a_objectReference, a_root,
+			MakeBookLocalTransform(
+				UsesLeftLayout(a_hand), settings, a_scale_override.value_or(settings.book_scale))),
+		hand(a_hand),
+		isFloating(a_hand == vrinput::Hand::kBoth),
+		usesLeftLayout(UsesLeftLayout(a_hand)),
+		isLeft(usesLeftLayout)
+	{
+		layout.right_page_origin.z = usesLeftLayout ? settings.rightpage_text_z_offset :
+													  settings.rightpage_text_z_offset_righthand;
+		layout.left_page_origin.z -= usesLeftLayout ? settings.leftpage_text_z_offset :
+													  settings.leftpage_text_z_offset_righthand;
 		layout.top_margin = settings.top_margin;
 		layout.horizontal_margin = settings.horizontal_margin;
 		layout.body_text_scale = settings.font_size;
@@ -121,35 +197,22 @@ namespace vr3dirp
 			0.2f + art_addon::AddonTextBox::kLineSpacing * layout.body_text_scale;
 		secondary_double_tap_threshold = settings.close_timing;
 
-		// store state of dismissal button when summoned to avoid instant closing
-		const auto vrgui_settings = Controller::GetSingleton()->GetSettings();
-		if (const auto close_button = GetBookButton(vrgui_settings, settings.close_button))
+		if (!isFloating) { InitializeHandState(); }
+		else
 		{
-			secondary_pressed_during_creation =
-				vrinput::GetButtonState(*close_button, vrinput::Hand(a_isLeft),
-					vrinput::ActionType::kPress) == vrinput::ButtonState::kButtonDown;
-		}
-
-		auto* pc = RE::PlayerCharacter::GetSingleton();
-
-		if (auto equipped = pc->GetEquippedObject(a_isLeft); equipped && pc->IsWeaponDrawn())
-		{
-			if ((stored_spell = equipped->As<RE::SpellItem>()))
+			if (a_objectReference->Get3D())
 			{
-				helper::UnequipSpell(pc, stored_spell, a_isLeft);
+				follow_node = a_objectReference->Get3D()->GetObjectByName("NPC Head [Head]");
 			}
 		}
 
-		hand_mode = Controller::GetSingleton()->GetHand(a_isLeft)->RequestMode(
-			Hand::Mode::kFist, Hand::ModePriority::kPassive);
-
-		local.scale /= a_root->world.scale;
-
-		// Block inputs on the book hand for as long as it exists
-		block_handle = InputBlockManager::GetSingleton()->Acquire(a_isLeft,
-			InputBlock::kPrimary | InputBlock::kSecondary | InputBlock::kHiggs |
-				InputBlock::kVrikGestures |
-				(!a_isLeft ? InputBlock::kActivatePickLength : InputBlock::kNone));
+		auto* attachment_node = a_root ? a_root :
+			a_objectReference          ? a_objectReference->Get3D(false) :
+										 nullptr;
+		if (attachment_node && attachment_node->world.scale != 0.0f)
+		{
+			local.scale /= attachment_node->world.scale;
+		}
 
 		AddModel(a_model_path, false, [this](ArtAddon* a) {
 			ni_animator::SetControllerFlags(Get3D(), true, false, false, false, true);
@@ -197,8 +260,12 @@ namespace vr3dirp
 			// Interaction Volume
 			t.translate = { -8, -2, 4 };
 			auto interaction_volume = AddChild<BasicHitbox>(t, NiPoint3(19, 14, 5));
+			if (isFloating) { interaction_volume->AddBehavior<FloatingBookHandClaim>(); }
 			interaction_volume->AddBehavior<HandInteractionMode>();
-			interaction_volume->AddBehavior<BlockInputOnHover>(InputBlock::kAll);
+			interaction_volume->AddBehavior<BlockInputOnHover>(
+				static_cast<InputBlock>(std::to_underlying(InputBlock::kAll) &
+					~std::to_underlying(InputBlock::kVrikGestures)),
+				&g_left_hand_mode);
 			interaction_volume->AddBehavior<BookPageTurn>();
 			interaction_volume->SetPriority(90);
 
@@ -234,7 +301,7 @@ namespace vr3dirp
 			left_page_parent->AddBehavior<ExclusiveHoverGroup>();
 
 			// Grab Node
-			if (isLeft) { t.translate = { 7, 16, -4 }; }
+			if (usesLeftLayout) { t.translate = { 7, 16, -4 }; }
 			else
 			{
 				t.translate = { -23, 16, -4 };
@@ -469,6 +536,28 @@ namespace vr3dirp
 	void Book::Update(float a_delta)
 	{
 		animator.Update(Get3D(), a_delta);
+		if (isFloating)
+		{
+			const float despawn_distance = settings.floating_despawn_distance;
+			if (follow_node && despawn_distance > 0.0f &&
+				follow_node->world.translate.GetSquaredDistance(GetWorld().translate) >
+					despawn_distance * despawn_distance)
+			{
+				Controller::GetSingleton()->MarkForDelete(this);
+				return;
+			}
+			const float follow_speed = settings.floating_follow_speed;
+			const bool can_follow = settings.follow_while_hovered ||
+				hand == vrinput::Hand::kBoth;
+			if (can_follow && follow_node && has_floating_target && follow_speed > 0.0f)
+			{
+				const NiTransform desired_world = follow_node->world * floating_target;
+				const float       interpolation = 1.0f - std::exp(-follow_speed * a_delta);
+				SetTransform(LerpTransform(GetWorld(), desired_world, interpolation));
+			}
+
+			return;
+		}
 
 		const auto vrgui_settings = Controller::GetSingleton()->GetSettings();
 		const auto close_button = GetBookButton(vrgui_settings, settings.close_button);
@@ -546,6 +635,14 @@ namespace vr3dirp
 		}
 	}
 
+	void Book::SetFloatingTarget(const NiTransform& a_world_transform)
+	{
+		if (!isFloating || !follow_node) { return; }
+
+		floating_target = follow_node->world.Invert() * a_world_transform;
+		has_floating_target = true;
+	}
+
 	void GrabNode::OnClick(bool a_activate, Hand& a_hand, MenuAction a_action)
 	{
 		if (a_action == MenuAction::kSecondary)
@@ -603,35 +700,40 @@ namespace vr3dirp
 		const auto transform = book->GetTransform();
 		const auto quat = helper::Mat2Quat(transform.rotate);
 
-		if (book->isLeft)
+		if (!book->IsWorldAnchored())
 		{
-			book->settings.left_offset_x = transform.translate.x;
-			book->settings.left_offset_y = transform.translate.y;
-			book->settings.left_offset_z = transform.translate.z;
+			if (book->isLeft)
+			{
+				book->settings.left_offset_x = transform.translate.x;
+				book->settings.left_offset_y = transform.translate.y;
+				book->settings.left_offset_z = transform.translate.z;
 
-			book->settings.left_rotate_w = quat.w;
-			book->settings.left_rotate_x = quat.x;
-			book->settings.left_rotate_y = quat.y;
-			book->settings.left_rotate_z = quat.z;
+				book->settings.left_rotate_w = quat.w;
+				book->settings.left_rotate_x = quat.x;
+				book->settings.left_rotate_y = quat.y;
+				book->settings.left_rotate_z = quat.z;
+			}
+			else
+			{
+				book->settings.right_offset_x = transform.translate.x;
+				book->settings.right_offset_y = transform.translate.y;
+				book->settings.right_offset_z = transform.translate.z;
+
+				book->settings.right_rotate_w = quat.w;
+				book->settings.right_rotate_x = quat.x;
+				book->settings.right_rotate_y = quat.y;
+				book->settings.right_rotate_z = quat.z;
+			}
 		}
 		else
 		{
-			book->settings.right_offset_x = transform.translate.x;
-			book->settings.right_offset_y = transform.translate.y;
-			book->settings.right_offset_z = transform.translate.z;
-
-			book->settings.right_rotate_w = quat.w;
-			book->settings.right_rotate_x = quat.x;
-			book->settings.right_rotate_y = quat.y;
-			book->settings.right_rotate_z = quat.z;
+			book->SetFloatingTarget(transform);
 		}
 
 		if (book->callbacks.transform_changed)
 		{
 			book->callbacks.transform_changed(book->isLeft, transform);
 		}
-
-		helper::PrintTransform(parent->GetTransform());
 
 		isGrabButtonHeld = false;
 		grabHoldTime = 0.0f;
@@ -674,5 +776,5 @@ namespace vr3dirp
 		return false;
 	}
 
-	void Book::DrawExtents(bool show) {}
+	void Book::DrawExtents(bool show) { }
 }

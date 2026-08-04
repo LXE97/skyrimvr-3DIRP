@@ -196,6 +196,9 @@ namespace vr3dirp
 			result.close_button = static_cast<int>(manager->Get("iCloseButton"));
 			result.close_action = static_cast<int>(manager->Get("iCloseAction"));
 			result.close_timing = manager->Get("fCloseTiming");
+			result.floating_despawn_distance = manager->Get("fFloatingDespawnDistance");
+			result.floating_follow_speed = manager->Get("fFloatingFollowSpeed");
+			result.follow_while_hovered = manager->Get("bFollowWhileHovered") != 0.0f;
 
 			result.right_offset_x = manager->Get("fRightOffsetX");
 			result.right_offset_y = manager->Get("fRightOffsetY");
@@ -216,11 +219,12 @@ namespace vr3dirp
 			return result;
 		}
 
-		JournalSettings ReadJournalSettings()
+		JournalSettings ReadJournalSettings(bool a_floating = false)
 		{
 			auto* manager = settings::Manager::GetSingleton();
 			return {
-				.journal_scale = manager->Get("fJournalScale"),
+				.journal_scale =
+					manager->Get(a_floating ? "fFloatingJournalScale" : "fJournalScale"),
 				.quest_line_spacing = manager->Get("fQuestLineSpacing"),
 				.show_misc_all = static_cast<int>(manager->Get("iShowMiscInAll")),
 				.highlight_new_quests = manager->Get("bHighlightNewQuests") != 0.0f,
@@ -229,8 +233,65 @@ namespace vr3dirp
 			};
 		}
 
-		BookCallbacks MakeBookCallbacks()
+		NiTransform ReadFloatingBookTransform()
 		{
+			auto* manager = settings::Manager::GetSingleton();
+
+			NiTransform result{};
+			result.translate = { manager->Get("fFloatingBookOffsetX"),
+				manager->Get("fFloatingBookOffsetY"), manager->Get("fFloatingBookOffsetZ") };
+
+			NiQuaternion rotation{ manager->Get("fFloatingBookRotateW"),
+				manager->Get("fFloatingBookRotateX"), manager->Get("fFloatingBookRotateY"),
+				manager->Get("fFloatingBookRotateZ") };
+			const float  length_squared = rotation.Dot(rotation);
+			if (length_squared > 0.0f)
+			{
+				const float inverse_length = 1.0f / std::sqrt(length_squared);
+				rotation.w *= inverse_length;
+				rotation.x *= inverse_length;
+				rotation.y *= inverse_length;
+				rotation.z *= inverse_length;
+			}
+			else
+			{
+				rotation = { 1.0f, 0.0f, 0.0f, 0.0f };
+			}
+
+			result.rotate = rotation.ToRotation();
+			return result;
+		}
+
+		void SaveFloatingBookTransform(const NiTransform& a_transform)
+		{
+			auto*      manager = settings::Manager::GetSingleton();
+			const auto rotation = helper::Mat2Quat(a_transform.rotate);
+
+			manager->Set("fFloatingBookOffsetX", a_transform.translate.x);
+			manager->Set("fFloatingBookOffsetY", a_transform.translate.y);
+			manager->Set("fFloatingBookOffsetZ", a_transform.translate.z);
+			manager->Set("fFloatingBookRotateW", rotation.w);
+			manager->Set("fFloatingBookRotateX", rotation.x);
+			manager->Set("fFloatingBookRotateY", rotation.y);
+			manager->Set("fFloatingBookRotateZ", rotation.z);
+
+			manager->Save();
+		}
+
+		BookCallbacks MakeBookCallbacks(bool a_floating = false)
+		{
+			if (a_floating)
+			{
+				return { .transform_changed = [](bool, const NiTransform& a_world_transform) {
+					auto* player_root = RE::PlayerCharacter::GetSingleton()->Get3D();
+					auto* head_node =
+						player_root ? player_root->GetObjectByName("NPC Head [Head]") : nullptr;
+					if (!head_node) { return; }
+
+					SaveFloatingBookTransform(head_node->world.Invert() * a_world_transform);
+				} };
+			}
+
 			return { .transform_changed = [](bool a_is_left, const NiTransform& a_transform) {
 				auto*      manager = settings::Manager::GetSingleton();
 				const auto rotation = helper::Mat2Quat(a_transform.rotate);
@@ -323,7 +384,7 @@ namespace vr3dirp
 	static void OnEquipped(const RE::TESEquipEvent* event);
 	static void OnObjectiveStateChanged(const RE::ObjectiveState::Event* a_event);
 
-	void        SummonBook(bool isLeft, BookType a_type);
+	void        SummonBook(bool isLeft, BookType a_type, bool a_floating = false);
 	static void CreateHolsters();
 
 	PapyrusVRAPI* g_papyrusvr{};
@@ -336,9 +397,11 @@ namespace vr3dirp
 
 	PlayerCharacter* pc{};
 
-	void VrikActionSummonBookLeft(int) { SummonBook(true, BookType::kJournal); }
+	void VrikActionSummonJournalLeft(int) { SummonBook(true, BookType::kJournal); }
 
-	void VrikActionSummonBookRight(int) { SummonBook(false, BookType::kJournal); }
+	void VrikActionSummonJournalRight(int) { SummonBook(false, BookType::kJournal); }
+
+	void VrikActionSummonFloatingJournal(int) { SummonBook(true, BookType::kJournal, true); }
 
 	void Init()
 	{
@@ -355,8 +418,9 @@ namespace vr3dirp
 
 		RegisterVRInputCallback();
 
-		g_vrikInterface->addGestureAction(VrikActionSummonBookLeft, "Journal Left");
-		g_vrikInterface->addGestureAction(VrikActionSummonBookRight, "Journal Right");
+		g_vrikInterface->addGestureAction(VrikActionSummonJournalLeft, "Journal Left");
+		g_vrikInterface->addGestureAction(VrikActionSummonJournalRight, "Journal Right");
+		g_vrikInterface->addGestureAction(VrikActionSummonFloatingJournal, "Floating Journal");
 
 		auto equip_sink = EventSink<RE::TESEquipEvent>::GetSingleton();
 		equip_sink->AddCallback(OnEquipped);
@@ -419,10 +483,26 @@ namespace vr3dirp
 		}
 	}
 
+	void OnMenuOpenClose(RE::MenuOpenCloseEvent const* evn)
+	{
+		if (!evn->opening && std::strcmp(evn->menuName.data(), "Journal Menu") == 0)
+		{
+			if (auto setting = RE::GetINISetting("bLeftHandedMode:VRInput"))
+			{
+				g_left_hand_mode = setting->GetBool();
+			}
+		}
+	}
+
 	void OnEquipped(const RE::TESEquipEvent* event) { equipment_checker::OnEquipEvent(event); }
 
 	static void PlayerUpdate()
 	{
+		if (auto* setting = RE::GetINISetting("bLeftHandedMode:VRInput"))
+		{
+			g_left_hand_mode = setting->GetBool();
+		}
+
 		art_addon::ArtAddonManager::GetSingleton()->Update();
 		vr_gui::Controller::GetSingleton()->Update();
 
@@ -457,9 +537,6 @@ namespace vr3dirp
 			.secondary = ReadControllerButton("iSecondaryButton"),
 		});
 
-		vr_gui::Controller::GetSingleton()->ShowHitboxes(
-			settings::Manager::GetSingleton()->Get("bShowDebugSpheres") != 0.0f);
-
 		auto* controller = vr_gui::Controller::GetSingleton();
 		for (auto* holster : g_holsters) { controller->MarkForDelete(holster); }
 		g_holsters.clear();
@@ -474,9 +551,12 @@ namespace vr3dirp
 		{
 			spdlog::set_level(spdlog::level::info);
 		}
+
+		vr_gui::Controller::GetSingleton()->ShowHitboxes(
+			settings::Manager::GetSingleton()->Get("bShowDebugSpheres") != 0.0f);
 	}
 
-	void SummonBook(bool isLeft, BookType a_type)
+	void SummonBook(bool isLeft, BookType a_type, bool a_floating)
 	{
 		if (a_type == BookType::kDisabled) { return; }
 
@@ -489,8 +569,10 @@ namespace vr3dirp
 			switch (a_type)
 			{
 			case BookType::kJournal:
-				temp = std::make_unique<Journal>(isLeft, pc->AsReference(), hand_node,
-					ReadBookSettings(), MakeBookCallbacks(), ReadJournalSettings(),
+				temp = std::make_unique<Journal>(
+					a_floating ? vrinput::Hand::kBoth : vrinput::Hand(isLeft), pc->AsReference(),
+					a_floating ? nullptr : hand_node, ReadBookSettings(),
+					MakeBookCallbacks(a_floating), ReadJournalSettings(a_floating),
 					GetJournalState(), MakeJournalCallbacks());
 
 				break;
@@ -499,23 +581,45 @@ namespace vr3dirp
 				break;
 
 			default:
-				temp = std::make_unique<Book>(Book::kModelPath, isLeft, pc->AsReference(),
-					hand_node, ReadBookSettings(), MakeBookCallbacks());
+				temp = std::make_unique<Book>(Book::kModelPath,
+					a_floating ? vrinput::Hand::kBoth : vrinput::Hand(isLeft), pc->AsReference(),
+					a_floating ? nullptr : hand_node, ReadBookSettings(),
+					MakeBookCallbacks(a_floating));
 			}
 
-			if (temp) { vr_gui::Controller::GetSingleton()->AddRoot(std::move(temp)); }
+			if (temp)
+			{
+				if (a_floating)
+				{
+					auto* player_root = pc->Get3D();
+					auto* head_node =
+						player_root ? player_root->GetObjectByName("NPC Head [Head]") : nullptr;
+					if (!head_node) { return; }
+
+					NiTransform desiredWorld = head_node->world * ReadFloatingBookTransform();
+
+					// Preserve the scale calculated by the Book constructor.
+					desiredWorld.scale = temp->GetTransform().scale;
+
+					temp->SetTransform(desiredWorld);
+					temp->SetFloatingTarget(desiredWorld);
+				}
+				vr_gui::Controller::GetSingleton()->AddRoot(std::move(temp));
+			}
 		}
 	}
 
 	static void CreateHolsters()
 	{
+		bool       created = false;
 		const auto holster_settings = ReadHolsterSettings();
 		auto*      controller = vr_gui::Controller::GetSingleton();
 
-		auto add_holster = [controller](std::unique_ptr<vr_gui::Holster> a_holster) {
+		auto add_holster = [controller, &created](std::unique_ptr<vr_gui::Holster> a_holster) {
 			auto* holster =
 				static_cast<vr_gui::Holster*>(controller->AddRoot(std::move(a_holster)));
 			g_holsters.push_back(holster);
+			created = true;
 		};
 
 		auto has_action = [](BookType a_primary, BookType a_secondary, BookType a_both) {
@@ -589,6 +693,12 @@ namespace vr3dirp
 					holster_settings.allow_empty_arrow_hand);
 				add_holster(std::move(temp));
 			}
+		}
+
+		if (created)
+		{
+			vr_gui::Controller::GetSingleton()->ShowHitboxes(
+				settings::Manager::GetSingleton()->Get("bShowDebugSpheres") != 0.0f);
 		}
 	}
 

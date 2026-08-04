@@ -547,11 +547,11 @@ namespace vr3dirp
 		if (onActivate) { onActivate(); }
 	}
 
-	Journal::Journal(bool a_isLeft, TESObjectREFR* a_objectReference, NiAVObject* a_root,
+	Journal::Journal(vrinput::Hand a_hand, TESObjectREFR* a_objectReference, NiAVObject* a_root,
 		BookSettings a_book_settings, BookCallbacks a_book_callbacks,
 		JournalSettings a_journal_settings, JournalState a_state,
 		JournalCallbacks a_journal_callbacks) :
-		Book(Journal::kModelPath, a_isLeft, a_objectReference, a_root, std::move(a_book_settings),
+		Book(Journal::kModelPath, a_hand, a_objectReference, a_root, std::move(a_book_settings),
 			std::move(a_book_callbacks), a_journal_settings.journal_scale),
 		journal_settings(std::move(a_journal_settings)),
 		journal_callbacks(std::move(a_journal_callbacks)),
@@ -562,8 +562,6 @@ namespace vr3dirp
 		layout.tab_spacing = 1.8f;
 		layout.tab_scale = 1.1f;
 		layout.tab_origin.y = 10.7f;
-
-		SKSE::log::trace("quest track {}", journal_settings.highlight_new_quests);
 
 		auto seen_types = GetPlayerQuestTypes();
 

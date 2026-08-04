@@ -27,10 +27,11 @@ Event OnVersionUpdate(Int a_version)
 EndEvent
 
 Event OnConfigInit()
-	Pages = New String[3]
+	Pages = New String[4]
 	Pages[0] = "Mod Settings"
 	Pages[1] = "Holsters"
 	Pages[2] = "Journal"
+	Pages[3] = "Floating Book"
 
 	InitializeMenuChoices()
 EndEvent
@@ -94,6 +95,8 @@ Event OnPageReset(String a_page)
 		DrawHolstersPage()
 	ElseIf a_page == "Journal"
 		DrawJournalPage()
+	ElseIf a_page == "Floating Book"
+		DrawFloatingBookPage()
 	EndIf
 EndEvent
 
@@ -141,8 +144,8 @@ Function DrawJournalPage()
 	AddMenuOptionST("iCloseAction", "Close Action", CloseActions[GetMenuIndex("iCloseAction", CloseActions)])
 	AddSliderOptionST("fCloseTiming", "Close Timing", _3DIRP_Settings.GetSetting("fCloseTiming"), "{1}")
 	AddEmptyOption()
-	AddSliderOptionST("fLightIntensity", "Light Intensity", _3DIRP_Settings.GetSetting("fLightIntensity"), "{1}")
-	AddSliderOptionST("fPageBrightness", "Page Brightness", _3DIRP_Settings.GetSetting("fPageBrightness"), "{1}")
+	AddSliderOptionST("fLightIntensity", "Light Intensity", _3DIRP_Settings.GetSetting("fLightIntensity"), "{2}")
+	AddSliderOptionST("fPageBrightness", "Page Brightness", _3DIRP_Settings.GetSetting("fPageBrightness"), "{2}")
 	AddEmptyOption()
 	AddTextOptionST("ResetHiddenQuests", "Reset Hidden Quest List", "Reset")
 
@@ -157,9 +160,15 @@ Function DrawJournalPage()
 	AddSliderOptionST("fRightPageTextZOffset", "Right Page Text Z offset", _3DIRP_Settings.GetSetting("fRightPageTextZOffset"), "{3}")
 	AddSliderOptionST("fLeftPageTextZOffsetRight", "Left Page Text Z offset (Rhand)", _3DIRP_Settings.GetSetting("fLeftPageTextZOffsetRight"), "{3}")
 	AddSliderOptionST("fRightPageTextZOffsetRight", "Right Page Text Z offset (Rhand)", _3DIRP_Settings.GetSetting("fRightPageTextZOffsetRight"), "{3}")
+EndFunction
 
-
-
+Function DrawFloatingBookPage()
+	SetCursorFillMode(TOP_TO_BOTTOM)
+	AddSliderOptionST("fFloatingJournalScale", "Book Scale", _3DIRP_Settings.GetSetting("fFloatingJournalScale"), "{2}")
+	AddSliderOptionST("fFloatingFollowSpeed", "Follow Speed", _3DIRP_Settings.GetSetting("fFloatingFollowSpeed"), "{2}")
+	AddToggleOptionST("bFollowWhileHovered", "Follow While Hovered", GetToggleSetting("bFollowWhileHovered"))
+	AddSliderOptionST("fFloatingDespawnDistance", "Auto Close Distance", _3DIRP_Settings.GetSetting("fFloatingDespawnDistance"), "{0}")
+	
 
 EndFunction
 
@@ -444,7 +453,7 @@ EndState
 
 State fLightIntensity
 	Event OnSliderOpenST()
-		OpenSliderSetting("fLightIntensity", 0.0, 3.0, 0.1)
+		OpenSliderSetting("fLightIntensity", 0.0, 3.0, 0.05)
 	EndEvent
 	Event OnSliderAcceptST(Float a_value)
 		AcceptSliderSetting("fLightIntensity", a_value, "{1}")
@@ -453,7 +462,7 @@ EndState
 
 State fPageBrightness
 	Event OnSliderOpenST()
-		OpenSliderSetting("fPageBrightness", 0.3, 1.0, 0.1)
+		OpenSliderSetting("fPageBrightness", 0.3, 1.0, 0.05)
 	EndEvent
 	Event OnSliderAcceptST(Float a_value)
 		AcceptSliderSetting("fPageBrightness", a_value, "{1}")
@@ -466,6 +475,39 @@ State fJournalScale
 	EndEvent
 	Event OnSliderAcceptST(Float a_value)
 		AcceptSliderSetting("fJournalScale", a_value, "{2}")
+	EndEvent
+EndState
+
+State fFloatingJournalScale
+	Event OnSliderOpenST()
+		OpenSliderSetting("fFloatingJournalScale", 0.5, 2.0, 0.05)
+	EndEvent
+	Event OnSliderAcceptST(Float a_value)
+		AcceptSliderSetting("fFloatingJournalScale", a_value, "{2}")
+	EndEvent
+EndState
+
+State fFloatingDespawnDistance
+	Event OnSliderOpenST()
+		OpenSliderSetting("fFloatingDespawnDistance", 0.0, 300.0, 10.0)
+	EndEvent
+	Event OnSliderAcceptST(Float a_value)
+		AcceptSliderSetting("fFloatingDespawnDistance", a_value, "{0}")
+	EndEvent
+EndState
+
+State fFloatingFollowSpeed
+	Event OnSliderOpenST()
+		OpenSliderSetting("fFloatingFollowSpeed", 0.0, 20.0, 0.25)
+	EndEvent
+	Event OnSliderAcceptST(Float a_value)
+		AcceptSliderSetting("fFloatingFollowSpeed", a_value, "{2}")
+	EndEvent
+EndState
+
+State bFollowWhileHovered
+	Event OnSelectST()
+		ToggleSetting("bFollowWhileHovered")
 	EndEvent
 EndState
 

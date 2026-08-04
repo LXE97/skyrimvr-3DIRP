@@ -10,6 +10,7 @@
 namespace vr3dirp
 {
 	extern PapyrusVRAPI* g_papyrusvr;
+	extern bool          g_left_hand_mode;
 
 	void Init();
 	void InitSerialization();
