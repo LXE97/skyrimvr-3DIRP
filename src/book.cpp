@@ -13,6 +13,23 @@ namespace vr3dirp
 	{
 		bool UsesLeftLayout(vrinput::Hand a_hand) { return a_hand != vrinput::Hand::kRight; }
 
+		NiTransform LerpTransform(
+			const NiTransform& a_from, const NiTransform& a_to, float a_interpolation)
+		{
+			const float interpolation = std::clamp(a_interpolation, 0.0f, 1.0f);
+
+			NiTransform result{};
+			result.translate =
+				a_from.translate + (a_to.translate - a_from.translate) * interpolation;
+			result.scale = a_from.scale + (a_to.scale - a_from.scale) * interpolation;
+
+			const NiQuaternion from_rotation = helper::Mat2Quat(a_from.rotate);
+			const NiQuaternion to_rotation = helper::Mat2Quat(a_to.rotate);
+			result.rotate =
+				helper::nlerpQuat(interpolation, from_rotation, to_rotation).ToRotation();
+			return result;
+		}
+
 		std::optional<vr::EVRButtonId> GetBookButton(
 			const Controller::Settings& a_settings, int a_button)
 		{
@@ -157,7 +174,8 @@ namespace vr3dirp
 		TESObjectREFR* a_objectReference, NiAVObject* a_root, BookSettings a_settings,
 		BookCallbacks a_callbacks, std::optional<float> a_scale_override) :
 		BookSettingsOwner(std::move(a_settings), std::move(a_callbacks)),
-		Widget(kDefaultWindowRadius, a_objectReference, a_root,
+		Widget(kDefaultWindowRadius * a_scale_override.value_or(settings.book_scale),
+			a_objectReference, a_root,
 			MakeBookLocalTransform(
 				UsesLeftLayout(a_hand), settings, a_scale_override.value_or(settings.book_scale))),
 		hand(a_hand),
@@ -241,7 +259,9 @@ namespace vr3dirp
 			t.translate = { -8, -2, 4 };
 			auto interaction_volume = AddChild<BasicHitbox>(t, NiPoint3(19, 14, 5));
 			interaction_volume->AddBehavior<HandInteractionMode>();
-			interaction_volume->AddBehavior<BlockInputOnHover>(InputBlock::kAll);
+			interaction_volume->AddBehavior<BlockInputOnHover>(
+				static_cast<InputBlock>(std::to_underlying(InputBlock::kAll) &
+					~std::to_underlying(InputBlock::kVrikGestures)));
 			interaction_volume->AddBehavior<BookPageTurn>();
 			interaction_volume->SetPriority(90);
 
@@ -519,12 +539,18 @@ namespace vr3dirp
 				follow_node->world.translate.GetSquaredDistance(GetWorld().translate) >
 					despawn_distance * despawn_distance)
 			{
-				Close();
+				Controller::GetSingleton()->MarkForDelete(this);
 				return;
 			}
-			// TODO: desired_world = follow_node->world.Invert() * floating_target;
-			// auto lerp = LerpToTransform(local, desired_world, a_delta * follow_speed);
-			//SetTransform(lerp);
+			const float follow_speed = settings.floating_follow_speed;
+			const bool can_follow = settings.follow_while_hovered ||
+				hand == vrinput::Hand::kBoth;
+			if (can_follow && follow_node && has_floating_target && follow_speed > 0.0f)
+			{
+				const NiTransform desired_world = follow_node->world * floating_target;
+				const float       interpolation = 1.0f - std::exp(-follow_speed * a_delta);
+				SetTransform(LerpTransform(GetWorld(), desired_world, interpolation));
+			}
 
 			return;
 		}
@@ -603,6 +629,14 @@ namespace vr3dirp
 		{
 			SetTransform(desired_book_world);
 		}
+	}
+
+	void Book::SetFloatingTarget(const NiTransform& a_world_transform)
+	{
+		if (!isFloating || !follow_node) { return; }
+
+		floating_target = follow_node->world.Invert() * a_world_transform;
+		has_floating_target = true;
 	}
 
 	void GrabNode::OnClick(bool a_activate, Hand& a_hand, MenuAction a_action)
@@ -687,6 +721,10 @@ namespace vr3dirp
 				book->settings.right_rotate_z = quat.z;
 			}
 		}
+		else
+		{
+			book->SetFloatingTarget(transform);
+		}
 
 		if (book->callbacks.transform_changed)
 		{
@@ -734,5 +772,5 @@ namespace vr3dirp
 		return false;
 	}
 
-	void Book::DrawExtents(bool show) {}
+	void Book::DrawExtents(bool show) { Widget::DrawExtents(show); }
 }

@@ -36,6 +36,8 @@ namespace vr3dirp
 		int   close_action = 1;
 		float close_timing = 1.0f;
 		float floating_despawn_distance = 500.0f;
+		float floating_follow_speed = 5.0f;
+		bool  follow_while_hovered = false;
 
 		float right_offset_x = 8.862305f;
 		float right_offset_y = 4.031250f;
@@ -123,7 +125,7 @@ namespace vr3dirp
 		static constexpr const char* kChapterParent = "Book Pages Nub";
 		static constexpr const char* kRightParent = "Book Pages";
 		static constexpr const char* kLeftParent = "Book CoverPage Turn04";
-		static constexpr float       kDefaultWindowRadius = 40.f;
+		static constexpr float       kDefaultWindowRadius = 20.f;
 
 		static constexpr const char* kBookOpenSd = "ITMBookOpenSD";
 		static constexpr const char* kBookCloseSd = "ITMBookCloseSD";
@@ -148,8 +150,9 @@ namespace vr3dirp
 		void OnHover(bool a_activate, Hand& a_hand) override;
 
 		void VirtualParent(NiAVObject* a_new, NiTransform& a_offset);
+		void SetFloatingTarget(const NiTransform& a_world_transform);
 
-		void DrawExtents(bool show);
+		void DrawExtents(bool show) override;
 
 		bool HandStateFilter(Hand& a_hand) const override
 		{
@@ -214,6 +217,8 @@ namespace vr3dirp
 		RE::NiPointer<RE::NiPointLight> book_light;
 
 		NiAVObject* follow_node{};
+		NiTransform floating_target{};
+		bool        has_floating_target{};
 	};
 
 	class Page

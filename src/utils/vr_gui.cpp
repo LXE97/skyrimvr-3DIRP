@@ -768,6 +768,8 @@ namespace vr_gui
 
 	void Widget::UpdateImpl(float delta)
 	{
+		if (!IsEnabled()) { return; }
+
 		Update(delta);
 
 		for (auto& b : behaviors)

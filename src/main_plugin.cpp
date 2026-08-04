@@ -197,6 +197,8 @@ namespace vr3dirp
 			result.close_action = static_cast<int>(manager->Get("iCloseAction"));
 			result.close_timing = manager->Get("fCloseTiming");
 			result.floating_despawn_distance = manager->Get("fFloatingDespawnDistance");
+			result.floating_follow_speed = manager->Get("fFloatingFollowSpeed");
+			result.follow_while_hovered = manager->Get("bFollowWhileHovered") != 0.0f;
 
 			result.right_offset_x = manager->Get("fRightOffsetX");
 			result.right_offset_y = manager->Get("fRightOffsetY");
@@ -221,8 +223,8 @@ namespace vr3dirp
 		{
 			auto* manager = settings::Manager::GetSingleton();
 			return {
-				.journal_scale = manager->Get(
-					a_floating ? "fFloatingJournalScale" : "fJournalScale"),
+				.journal_scale =
+					manager->Get(a_floating ? "fFloatingJournalScale" : "fJournalScale"),
 				.quest_line_spacing = manager->Get("fQuestLineSpacing"),
 				.show_misc_all = static_cast<int>(manager->Get("iShowMiscInAll")),
 				.highlight_new_quests = manager->Get("bHighlightNewQuests") != 0.0f,
@@ -242,7 +244,7 @@ namespace vr3dirp
 			NiQuaternion rotation{ manager->Get("fFloatingBookRotateW"),
 				manager->Get("fFloatingBookRotateX"), manager->Get("fFloatingBookRotateY"),
 				manager->Get("fFloatingBookRotateZ") };
-			const float length_squared = rotation.Dot(rotation);
+			const float  length_squared = rotation.Dot(rotation);
 			if (length_squared > 0.0f)
 			{
 				const float inverse_length = 1.0f / std::sqrt(length_squared);
@@ -280,10 +282,11 @@ namespace vr3dirp
 			{
 				return { .transform_changed = [](bool, const NiTransform& a_world_transform) {
 					auto* player_root = RE::PlayerCharacter::GetSingleton()->Get3D();
-					if (!player_root) { return; }
+					auto* head_node =
+						player_root ? player_root->GetObjectByName("NPC Head [Head]") : nullptr;
+					if (!head_node) { return; }
 
-					SaveFloatingBookTransform(
-						player_root->world.Invert() * a_world_transform);
+					SaveFloatingBookTransform(head_node->world.Invert() * a_world_transform);
 				} };
 			}
 
@@ -516,9 +519,6 @@ namespace vr3dirp
 			.secondary = ReadControllerButton("iSecondaryButton"),
 		});
 
-		vr_gui::Controller::GetSingleton()->ShowHitboxes(
-			settings::Manager::GetSingleton()->Get("bShowDebugSpheres") != 0.0f);
-
 		auto* controller = vr_gui::Controller::GetSingleton();
 		for (auto* holster : g_holsters) { controller->MarkForDelete(holster); }
 		g_holsters.clear();
@@ -533,6 +533,9 @@ namespace vr3dirp
 		{
 			spdlog::set_level(spdlog::level::info);
 		}
+
+		vr_gui::Controller::GetSingleton()->ShowHitboxes(
+			settings::Manager::GetSingleton()->Get("bShowDebugSpheres") != 0.0f);
 	}
 
 	void SummonBook(bool isLeft, BookType a_type, bool a_floating)
@@ -551,8 +554,8 @@ namespace vr3dirp
 				temp = std::make_unique<Journal>(
 					a_floating ? vrinput::Hand::kBoth : vrinput::Hand(isLeft), pc->AsReference(),
 					a_floating ? nullptr : hand_node, ReadBookSettings(),
-					MakeBookCallbacks(a_floating), ReadJournalSettings(a_floating), GetJournalState(),
-					MakeJournalCallbacks());
+					MakeBookCallbacks(a_floating), ReadJournalSettings(a_floating),
+					GetJournalState(), MakeJournalCallbacks());
 
 				break;
 
@@ -570,12 +573,18 @@ namespace vr3dirp
 			{
 				if (a_floating)
 				{
-					NiTransform desiredWorld = pc->Get3D()->world * ReadFloatingBookTransform();
+					auto* player_root = pc->Get3D();
+					auto* head_node =
+						player_root ? player_root->GetObjectByName("NPC Head [Head]") : nullptr;
+					if (!head_node) { return; }
+
+					NiTransform desiredWorld = head_node->world * ReadFloatingBookTransform();
 
 					// Preserve the scale calculated by the Book constructor.
 					desiredWorld.scale = temp->GetTransform().scale;
 
 					temp->SetTransform(desiredWorld);
+					temp->SetFloatingTarget(desiredWorld);
 				}
 				vr_gui::Controller::GetSingleton()->AddRoot(std::move(temp));
 			}

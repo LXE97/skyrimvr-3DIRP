@@ -563,8 +563,6 @@ namespace vr3dirp
 		layout.tab_scale = 1.1f;
 		layout.tab_origin.y = 10.7f;
 
-		SKSE::log::trace("quest track {}", journal_settings.highlight_new_quests);
-
 		auto seen_types = GetPlayerQuestTypes();
 
 		std::ranges::sort(

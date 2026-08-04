@@ -2,6 +2,7 @@
   "Default": {
     "bAllowEmptyArrowHand": 0,
     "bDebugLog": 1,
+    "bFollowWhileHovered": 0,
     "bHighlightNewQuests": 1,
     "bShowDebugSpheres": 0,
     "fBellyRadius": 9.0,
@@ -19,6 +20,7 @@
     "fFloatingBookRotateY": 0.0,
     "fFloatingBookRotateZ": 0.0,
     "fFloatingDespawnDistance": 500.0,
+    "fFloatingFollowSpeed": 5.0,
     "fFloatingJournalScale": 0.9,
     "fHorizontalMargin": 0.9,
     "fJournalScale": 0.9,
