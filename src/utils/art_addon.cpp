@@ -15,7 +15,8 @@ namespace art_addon
 	static constexpr int kMaxPerFrame = 20;
 
 	std::shared_ptr<ArtAddon> ArtAddon::Make(std::string_view a_model_path, TESObjectREFR* a_target,
-		NiAVObject* a_attach_node, NiTransform& a_local, std::function<void(ArtAddon*)> a_callback)
+		NiAVObject* a_attach_node, const NiTransform& a_local, OnInitialized a_callback,
+		bool a_do_deep_clone)
 	{
 		auto manager = ArtAddonManager::GetSingleton();
 		auto art_object = manager->GetArtForm(a_model_path);
@@ -33,6 +34,7 @@ namespace art_addon
 			new_obj->local = a_local;
 			new_obj->attach_node = a_attach_node;
 			new_obj->target = a_target;
+			new_obj->deep_clone = a_do_deep_clone;
 			if (a_callback) { new_obj->callback = a_callback; }
 
 			manager->new_objects.emplace(id, new_obj);
@@ -45,15 +47,20 @@ namespace art_addon
 		}
 	}
 
+	void ArtAddon::SetWorldTransform(const NiTransform& a_world)
+	{
+		if (!root3D || !attach_node) { return; }
+
+		root3D->local = attach_node->world.Invert() * a_world;
+		NiUpdateData context{};
+		root3D->Update(context);
+	}
+
 	void RemoveCollisionNodes(NiAVObject* a_node)
 	{
 		if (a_node != nullptr)
 		{
-			if (a_node->collisionObject)
-			{
-				//SKSE::log::trace("Removing collision from {}", a_node->name.c_str());
-				a_node->collisionObject = nullptr;
-			}
+			if (a_node->collisionObject) { a_node->collisionObject = nullptr; }
 
 			if (auto ninode = a_node->AsNode())
 			{
@@ -71,57 +78,69 @@ namespace art_addon
 			std::scoped_lock lock(objects_lock);
 			if (const auto processLists = ProcessLists::GetSingleton())
 			{
-				processLists->ForEachModelEffect(
-					[count = 0, this](ModelReferenceEffect* a_modelEffect) mutable {
-						if (a_modelEffect->Get3D())
+				processLists->ForEachModelEffect([count = 0, this](
+													 ModelReferenceEffect* a_modelEffect) mutable {
+					if (a_modelEffect->Get3D())
+					{
+						float id = a_modelEffect->lifetime;
+						if (new_objects.contains(id))
 						{
-							float id = a_modelEffect->lifetime;
-							if (new_objects.contains(id))
+							if (auto addon = new_objects[id].lock())
 							{
-								if (auto addon = new_objects[id].lock())
+								// the id is not unique to this mod but the ArtObject is
+								if (addon->art_object == a_modelEffect->artObject)
 								{
-									// the id is not unique to this mod but the ArtObject is
-									if (addon->art_object == a_modelEffect->artObject)
+									RE::NiPointer<RE::NiObject> copied;
+
+									if (addon->deep_clone)
+									{
+										a_modelEffect->Get3D()->CreateDeepCopy(copied);
+										addon->root3D = static_cast<RE::NiAVObject*>(copied.get());
+									}
+									else
 									{
 										addon->root3D = static_cast<RE::NiAVObject*>(
 											a_modelEffect->Get3D()->Clone());
-										addon->attach_node->AsNode()->AttachChild(addon->root3D);
-										a_modelEffect->lifetime = 0;
-										addon->root3D->local = std::move(addon->local);
-
-										// .nifs with collision will not be drawn when they're attached to an actor
-										RemoveCollisionNodes(addon->root3D);
-										//helper::StopControllers(addon->root3D);
-										if (addon->callback) { addon->callback(addon.get()); }
-
-										//TODO: push targets to a vector, update each target once per update call
-										//NiUpdateData ctx;
-										//addon->target->Get3D()->Update(ctx);
 									}
-								}
-								else
-								{  // check if it's one of our ArtObjects
-									auto it = std::find_if(artobject_cache.begin(),
-										artobject_cache.end(), [&a_modelEffect](const auto& pair) {
-											return pair.second == a_modelEffect->artObject;
-										});
-									if (it != artobject_cache.end())
-									{  // the artAddon was deleted before initialization finished
-										a_modelEffect->lifetime = 0;
-										SKSE::log::trace("deleting MRE {} (orphaned)", id);
-									}
-								}
-								// finished with this ArtAddon, no longer need to track it
-								new_objects.erase(id);
 
-								if (count++ > kMaxPerFrame)
-								{
-									return BSContainer::ForEachResult::kStop;
+									addon->attach_node->AsNode()->AttachChild(addon->root3D);
+									a_modelEffect->lifetime = 0;
+									addon->root3D->local = std::move(addon->local);
+
+									// .nifs with collision will not be drawn when they're attached to an actor
+									RemoveCollisionNodes(addon->root3D);
+									//helper::StopControllers(addon->root3D);
+									if (addon->callback) { addon->callback(addon.get()); }
+
+									//TODO: push targets to a vector, update each target once per update call
+									//NiUpdateData ctx;
+									//addon->target->Get3D()->Update(ctx);
 								}
 							}
+							else
+							{  // check if it's one of our ArtObjects
+								auto it = std::find_if(artobject_cache.begin(),
+									artobject_cache.end(), [&a_modelEffect](const auto& pair) {
+										return pair.second == a_modelEffect->artObject;
+									});
+								if (it != artobject_cache.end())
+								{  // the artAddon was deleted before initialization finished
+									a_modelEffect->lifetime = 0;
+									SKSE::log::trace("deleting MRE {} for {} (orphaned)", id,
+										 a_modelEffect->artObject->GetModel());
+								}
+							}
+							// finished with this ArtAddon, no longer need to track it
+							new_objects.erase(id);
+
+							if (count++ > kMaxPerFrame)
+							{
+								return BSContainer::ForEachResult::kStop;
+							}
 						}
-						return BSContainer::ForEachResult::kContinue;
-					});
+					}
+					return BSContainer::ForEachResult::kContinue;
+				});
 			}
 			// TODO: temporary measure to update target only once per frame
 			NiUpdateData ctx;
@@ -133,6 +152,7 @@ namespace art_addon
 	{
 		// Clean up any dangling MREs that slipped through the cracks.
 		// They will be deleted next time the game is saved
+		// Note: this should no longer be necessary with the savegame hook
 		if (const auto processLists = RE::ProcessLists::GetSingleton())
 		{
 			int dangling = 0;
@@ -148,7 +168,7 @@ namespace art_addon
 				}
 				return RE::BSContainer::ForEachResult::kContinue;
 			});
-			if (dangling) { SKSE::log::trace("{} dang MREs deleted", dangling); }
+			if (dangling) { SKSE::log::info("{} dang MREs deleted", dangling); }
 		}
 	}
 
@@ -207,24 +227,29 @@ namespace art_addon
 		}
 	}
 
-	AddonTextBox::AddonTextBox(std::string_view a_string, const float a_spacing,
-		RE::NiAVObject* a_attach_to, RE::NiTransform& a_local, std::string font_path) :
+	AddonTextBox::AddonTextBox(std::string_view a_string, float a_spacing,
+		RE::TESObjectREFR* a_target, RE::NiAVObject* a_attach_to, const RE::NiTransform& a_local,
+		std::string font_path) :
+		target(a_target),
 		string(a_string),
 		spacing(a_spacing),
 		font(font_path)
 	{
 		std::weak_ptr<LifetimeToken> weak_token = token;
 
-		root = ArtAddon::Make(kEmptyNif, PlayerCharacter::GetSingleton(),
-			(a_attach_to ? a_attach_to : PlayerCharacter::GetSingleton()->Get3D()), a_local,
-			[weak_token, this](ArtAddon* a) {
+		root = ArtAddon::Make(
+			kEmptyNif, a_target, a_attach_to, a_local, [weak_token, this](ArtAddon* a) {
 				if (auto token = weak_token.lock(); token && token->alive) { MakeString(font); }
 			});
 	}
 
+	void AddonTextBox::SetWorldTransform(const NiTransform& a_world)
+	{
+		if (root) { root->SetWorldTransform(a_world); }
+	}
+
 	void AddonTextBox::MakeString(std::string font_path)
 	{
-		SKSE::log::trace("making string with font {}", font_path);
 		if (auto root_node = root ? root->Get3D() : nullptr)
 		{
 			NiTransform t;
@@ -232,13 +257,13 @@ namespace art_addon
 			{
 				if (string[i] == 0x0A)
 				{
-					t.translate.y += kLineSpacing;
+					t.translate.y -= kLineSpacing;
 					t.translate.x = 0.f;
 				}
 				else
 				{
-					characters.push_back(ArtAddon::Make(font_path, PlayerCharacter::GetSingleton(),
-						root_node, t, [c = string[i]](ArtAddon* m) {
+					characters.push_back(ArtAddon::Make(
+						font_path, target, root_node, t, [c = string[i]](ArtAddon* m) {
 							if (auto shader =
 									helper::GetShaderProperty(m->Get3D(), NifChar::kNodeName))
 							{
@@ -257,7 +282,7 @@ namespace art_addon
 								newmat->texCoordOffset[1].y = temp.y;
 							}
 						}));
-					t.translate.x -= NifChar::kCharacterWidth + spacing;
+					t.translate.x += NifChar::kCharacterWidth + spacing;
 				}
 			}
 		}

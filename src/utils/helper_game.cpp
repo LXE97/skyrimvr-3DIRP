@@ -1,6 +1,11 @@
 #include "helper_game.h"
 
+#include "art_addon.h"
 #include "helper_math.h"
+
+#include <iomanip>
+#include <limits>
+#include <sstream>
 
 namespace helper
 {
@@ -32,6 +37,71 @@ namespace helper
 		return nullptr;
 	}
 
+	RE::NiPointer<RE::NiPointLight> MakeLight(RE::TESObjectREFR* target, RE::NiNode* attach_node,
+		const RE::NiTransform& local, float radius, float fade)
+	{
+		RE::NiPointer<RE::NiPointLight> result;
+		if (!target || !attach_node)
+		{
+			SKSE::log::trace("cannot create light without a player and attach node");
+			return result;
+		}
+
+		if (auto* lightForm = TESForm::LookupByEditorID<TESObjectLIGH>("MagicLightLightSpell01"))
+		{
+			RE::NiPointer<RE::NiLight> generatedLight{ lightForm->GenDynamic(
+				target, attach_node, true, true, true) };
+
+			if (!generatedLight)
+			{
+				SKSE::log::trace("MagicLightLightSpell01 failed to generate a light");
+			}
+			else if (auto* pointLight = netimmerse_cast<RE::NiPointLight*>(generatedLight.get()))
+			{
+				pointLight->local = local;
+				pointLight->SetLightAttenuation(radius);
+				auto& data = pointLight->GetLightRuntimeData();
+				data.ambient = { 0.1f, 0.08f, 0.05f };
+				data.diffuse = { 1.0f, 0.8f, 0.5f };
+				data.fade = fade;
+				RE::NiUpdateData ctx{};
+				pointLight->Update(ctx);
+
+				result.reset(pointLight);
+			}
+			else
+			{
+				if (auto* shadowScene = RE::DrawWorld::GetSingleton().mainShadowSceneNode)
+				{
+					shadowScene->RemoveLight(generatedLight.get());
+				}
+				if (auto* parent = generatedLight->parent)
+				{
+					parent->DetachChild(generatedLight.get());
+				}
+				SKSE::log::trace("MagicLightLightSpell01 did not generate a point light");
+			}
+		}
+		else
+		{
+			SKSE::log::trace("light form not found");
+		}
+
+		return result;
+	}
+
+	void DestroyLight(RE::NiPointer<RE::NiPointLight>& runtimeLight)
+	{
+		if (auto* shadowScene = RE::DrawWorld::GetSingleton().mainShadowSceneNode)
+		{
+			shadowScene->RemoveLight(runtimeLight.get());
+		}
+
+		if (auto* parent = runtimeLight->parent) { parent->DetachChild(runtimeLight.get()); }
+
+		runtimeLight.reset();
+	}
+
 	RE::FormID GetFullFormID(uint8_t a_modindex, RE::FormID a_localID)
 	{ return (a_modindex << 24) | a_localID; }
 
@@ -41,6 +111,22 @@ namespace helper
 
 	void HideActivationText(TESObjectREFR* a_target, bool a_hidden)
 	{ a_target->extraList.SetExtraFlags(ExtraFlags::Flag::kBlockActivateText, a_hidden); }
+
+	bool SetQuestTracked(RE::TESQuest* a_quest, bool a_tracked)
+	{
+		if (!a_quest) { return false; }
+
+		auto* vm = RE::BSScript::Internal::VirtualMachine::GetSingleton();
+		auto* policy = vm ? vm->GetObjectHandlePolicy() : nullptr;
+		if (!policy) { return false; }
+
+		const auto handle = policy->GetHandleForObject(a_quest->GetFormType(), a_quest);
+		if (handle == policy->EmptyHandle()) { return false; }
+
+		RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> callback;
+		return vm->DispatchMethodCall(handle, "Quest", "SetActive",
+			RE::MakeFunctionArguments(static_cast<bool>(a_tracked)), callback);
+	}
 
 	float GetAVPercent(Actor* a_a, ActorValue a_v)
 	{
@@ -132,6 +218,109 @@ namespace helper
 					NiColor temp(a_color_hex);
 					*(shader->emissiveColor) = temp;
 				}
+			}
+		}
+	}
+
+	namespace
+	{
+		bool UploadVertexBuffer(
+			RE::BSGraphics::TriShape* a_data, std::uint32_t a_vertexCount)
+		{
+			auto* device = RE::BSGraphics::Renderer::GetDevice();
+			if (!a_data || !a_data->rawVertexData || !device || a_vertexCount == 0)
+			{
+				return false;
+			}
+
+			REX::W32::D3D11_BUFFER_DESC bufferDesc{};
+			bufferDesc.byteWidth = a_vertexCount * a_data->vertexDesc.GetSize();
+			bufferDesc.usage = REX::W32::D3D11_USAGE_DEFAULT;
+			bufferDesc.bindFlags = REX::W32::D3D11_BIND_VERTEX_BUFFER;
+
+			REX::W32::D3D11_SUBRESOURCE_DATA initialData{};
+			initialData.sysMem = a_data->rawVertexData;
+
+			REX::W32::ID3D11Buffer* vertexBuffer = nullptr;
+			const auto result = device->CreateBuffer(&bufferDesc, &initialData, &vertexBuffer);
+			if (result < 0 || !vertexBuffer)
+			{
+				SKSE::log::error("Failed to create vertex color buffer (HRESULT {:#x})",
+					static_cast<std::uint32_t>(result));
+				return false;
+			}
+
+			auto* oldVertexBuffer =
+				reinterpret_cast<REX::W32::ID3D11Buffer*>(a_data->vertexBuffer);
+			a_data->vertexBuffer = reinterpret_cast<RE::ID3D11Buffer*>(vertexBuffer);
+			if (oldVertexBuffer) { oldVertexBuffer->Release(); }
+			return true;
+		}
+
+		void SetVertexBufferColor(
+			RE::BSGraphics::TriShape* a_data, std::uint32_t a_vertexCount, const RE::Color& a_color)
+		{
+			if (!a_data || !a_data->rawVertexData || a_vertexCount == 0)
+			{
+				return;
+			}
+
+			auto vertexDesc = a_data->vertexDesc;
+			if (!vertexDesc.HasFlag(RE::BSGraphics::Vertex::Flags::VF_COLORS))
+			{
+				return;
+			}
+
+			const auto vertexSize = vertexDesc.GetSize();
+			const auto colorOffset =
+				vertexDesc.GetAttributeOffset(RE::BSGraphics::Vertex::Attribute::VA_COLOR);
+
+			for (std::uint32_t i = 0; i < a_vertexCount; ++i)
+			{
+				auto* vertexColor = reinterpret_cast<RE::Color*>(
+					a_data->rawVertexData + i * vertexSize + colorOffset);
+				*vertexColor = a_color;
+			}
+
+			UploadVertexBuffer(a_data, a_vertexCount);
+		}
+	}
+
+	void SetVertexColor(RE::BSTriShape* a_shape, const RE::Color& a_color)
+	{
+		if (!a_shape)
+		{
+			SKSE::log::trace("SetVertexColor: invalid bstrishape");
+			return;
+		}
+
+		auto& geometryData = a_shape->GetGeometryRuntimeData();
+		SetVertexBufferColor(
+			geometryData.rendererData, a_shape->GetTrishapeRuntimeData().vertexCount, a_color);
+
+		if (auto* shaderProperty = geometryData.shaderProperty.get())
+		{
+			using ShaderFlag = RE::BSShaderProperty::EShaderPropertyFlag8;
+			shaderProperty->SetFlags(ShaderFlag::kVertexColors, true);
+			shaderProperty->SetFlags(ShaderFlag::kSpecular, false);
+		}
+		else
+		{
+			SKSE::log::trace("SetVertexColor: couldn't set shader flags");
+		}
+
+		if (auto* skinInstance = geometryData.skinInstance.get())
+		{
+			if (auto* skinPartition = skinInstance->skinPartition.get())
+			{
+				for (auto& partition : skinPartition->partitions)
+				{
+					SetVertexBufferColor(partition.buffData, partition.vertices, a_color);
+				}
+			}
+			else
+			{
+				SKSE::log::trace("SetVertexColor: no skin partition in skin instance");
 			}
 		}
 	}
@@ -276,17 +465,20 @@ namespace helper
 					auto found = line.find('=');
 					if (found != std::string::npos)
 					{
-						a_file.clear();
-						a_file.seekg(0, a_file.beg);
 						try
 						{
 							auto val = std::stof(line.substr(found + 1));
+							a_file.clear();
+							a_file.seekg(0, std::ios::beg);
 							SKSE::log::trace("{} : {}", a_setting, val);
 							return val;
 						} catch (std::out_of_range)
 						{
 						} catch (std::invalid_argument) {}
 						SKSE::log::error("Bad mod ini, please reset it");
+						a_file.clear();
+						a_file.seekg(0, std::ios::beg);
+						return 0.f;
 					}
 				}
 			}
@@ -296,6 +488,104 @@ namespace helper
 		}
 
 		return 0.f;
+	}
+
+	bool WriteFloatToIni(
+		const std::filesystem::path& a_path, std::string_view a_setting, float a_value)
+	{
+		std::vector<std::string> lines;
+		std::ifstream            input(a_path);
+		std::string              line;
+		bool                     found = false;
+
+		while (std::getline(input, line))
+		{
+			const auto delimiter = line.find('=');
+			if (delimiter != std::string::npos)
+			{
+				auto       key = std::string_view(line).substr(0, delimiter);
+				const auto key_begin = key.find_first_not_of(" \t");
+				const auto key_end = key.find_last_not_of(" \t");
+
+				if (key_begin != std::string_view::npos)
+				{
+					key = key.substr(key_begin, key_end - key_begin + 1);
+					if (key == a_setting)
+					{
+						std::ostringstream value;
+						value << std::setprecision(std::numeric_limits<float>::max_digits10)
+							  << a_value;
+						line = std::string(a_setting) + '=' + value.str();
+						found = true;
+					}
+				}
+			}
+
+			lines.emplace_back(std::move(line));
+		}
+
+		if (!found)
+		{
+			std::ostringstream value;
+			value << std::setprecision(std::numeric_limits<float>::max_digits10) << a_value;
+			lines.emplace_back(std::string(a_setting) + '=' + value.str());
+		}
+
+		input.close();
+		std::ofstream output(a_path, std::ios::trunc);
+		if (!output.is_open())
+		{
+			SKSE::log::error("Unable to write INI setting {}", a_setting);
+			return false;
+		}
+
+		for (const auto& output_line : lines) { output << output_line << '\n'; }
+		return output.good();
+	}
+
+	bool WriteStringToIni(
+		const std::filesystem::path& a_path, std::string_view a_setting, std::string_view a_value)
+	{
+		std::vector<std::string> lines;
+		std::ifstream            input(a_path);
+		std::string              line;
+		bool                     found = false;
+
+		while (std::getline(input, line))
+		{
+			const auto delimiter = line.find('=');
+			if (delimiter != std::string::npos)
+			{
+				auto       key = std::string_view(line).substr(0, delimiter);
+				const auto key_begin = key.find_first_not_of(" \t");
+				const auto key_end = key.find_last_not_of(" \t");
+
+				if (key_begin != std::string_view::npos)
+				{
+					key = key.substr(key_begin, key_end - key_begin + 1);
+					if (key == a_setting)
+					{
+						line = std::string(a_setting) + '=' + std::string(a_value);
+						found = true;
+					}
+				}
+			}
+
+			lines.emplace_back(std::move(line));
+		}
+
+		if (!found) { lines.emplace_back(std::string(a_setting) + '=' + std::string(a_value)); }
+
+		input.close();
+		std::ofstream output(a_path, std::ios::trunc);
+		if (!output.is_open())
+		{
+			SKSE::log::error("Unable to write INI setting {}", a_setting);
+			return false;
+		}
+
+		for (const auto& output_line : lines) { output << output_line << '\n'; }
+		return output.good();
 	}
 
 	int ReadIntFromIni(std::ifstream& a_file, std::string a_setting)
@@ -310,17 +600,20 @@ namespace helper
 					auto found = line.find('=');
 					if (found != std::string::npos)
 					{
-						a_file.clear();
-						a_file.seekg(0, std::ios::beg);
 						try
 						{
 							auto val = std::stoi(line.substr(found + 1));
+							a_file.clear();
+							a_file.seekg(0, std::ios::beg);
 							SKSE::log::trace("{} : {}", a_setting, val);
 							return val;
 						} catch (std::out_of_range)
 						{
 						} catch (std::invalid_argument) {}
 						SKSE::log::error("Bad mod ini, please reset it");
+						a_file.clear();
+						a_file.seekg(0, std::ios::beg);
+						return 0;
 					}
 				}
 			}
@@ -367,14 +660,6 @@ namespace helper
 		return "";
 	}
 
-	// TODO: figure out new sound API
-	// bool InitializeSound(BSSoundHandle& a_handle, std::string a_editorID)
-	// {
-	// 	auto man = BSAudioManager::GetSingleton();
-	// 	man->BuildSoundDataFromEditorID(a_handle, a_editorID.c_str(), 0x10);
-	// 	return a_handle.IsValid();
-	// }
-
 	void StopControllers(RE::NiAVObject* a_obj)
 	{
 		if (!a_obj) { return; }
@@ -389,6 +674,15 @@ namespace helper
 		{
 			for (auto& child : node->children) { StopControllers(child.get()); }
 		}
+	}
+
+	bool InitializeSound(BSSoundHandle& a_handle, std::string a_editorID)
+	{
+		auto* manager = BSAudioManager::GetSingleton();
+		if (!manager) { return false; }
+
+		manager->GetSoundHandleByName(a_handle, a_editorID.c_str(), 0x10);
+		return a_handle.IsValid();
 	}
 
 	bool PlaySound(BSSoundHandle& a_handle, float a_volume, RE::NiPoint3& a_position,
@@ -452,6 +746,29 @@ namespace helper
 		SKSE::log::trace("No model found for formID {} with formtype {}", a_obj->GetFormID(),
 			RE::FormTypeToString(a_obj->GetFormType()));
 		return nullptr;
+	}
+
+	void DrawBox(art_addon::ArtAddon* box, const RE::NiPoint3& dimensions)
+	{
+		if (box)
+		{
+			RE::NiAVObject* geom = box->Get3D();
+			for (int i : { 0, 1 })
+				for (int j : { 0, 1 })
+					for (int k : { 0, 1 })
+					{
+						char name[4] = { char('0' + i), char('0' + j), char('0' + k), 0 };
+
+						if (auto node = geom->GetObjectByName(name))
+						{
+							float x = (i ? +dimensions.x : -dimensions.x);
+							float y = (j ? +dimensions.y : -dimensions.y);
+							float z = (k ? +dimensions.z : -dimensions.z);
+
+							node->local.translate = { x, y, z };
+						}
+					}
+		}
 	}
 
 	const char* GetObjectModelPath(RE::TESObjectREFR* a_obj)
@@ -801,4 +1118,279 @@ namespace helper
 		a_radiusOut = a_extentsOut.Length();
 	}
 
+#pragma push_macro("GetObject")
+#undef GetObject
+
+	RE::BGSEquipSlot* GetHandEquipSlot(bool a_isLeft)
+	{
+		auto* default_objects = RE::BGSDefaultObjectManager::GetSingleton();
+		return default_objects ? default_objects->GetObject<RE::BGSEquipSlot>(a_isLeft ?
+										 RE::DEFAULT_OBJECT::kLeftHandEquip :
+										 RE::DEFAULT_OBJECT::kRightHandEquip) :
+								 nullptr;
+	}
+
+#pragma pop_macro("GetObject")
+
+	/* adapted from Shizof's WeaponThrowVR and SpellWheelVR*/
+	void UnequipSpell(RE::Actor* a_actor, RE::SpellItem* a_spell, bool a_isLeft)
+	{
+		using func_t = void (*)(RE::BSScript::IVirtualMachine*, std::uint32_t, RE::Actor*,
+			RE::SpellItem*, std::int32_t);
+
+		static REL::Relocation<func_t> func{ REL::Offset(0x984D00) };
+
+		auto* skyrim_vm = RE::SkyrimVM::GetSingleton();
+		if (skyrim_vm && skyrim_vm->impl)
+		{
+			func(skyrim_vm->impl.get(), 0, a_actor, a_spell, a_isLeft ? 0 : 1);
+		}
+	}
+
+	// Writes information about a node to the log file
+	void logNode(int depth, NiAVObject* node)
+	{
+		if (!node) { return; }
+
+		const auto* rtti = node->GetRTTI();
+		const auto* type_name = rtti ? rtti->GetName() : nullptr;
+		const auto* node_name = node->name.c_str();
+		const auto  indentation = std::string(static_cast<std::size_t>(std::max(depth, 0)), '.');
+
+		SKSE::log::trace("{}: {}{} (RTTI: {})", depth, indentation,
+			node_name && node_name[0] ? node_name : "<unnamed>",
+			type_name ? type_name : "<unknown>");
+	}
+
+	// Lists all parents of a bone to the log file
+	void logParents(NiAVObject* bone)
+	{
+		NiNode* node = bone ? bone->AsNode() : nullptr;
+		int     depth = 1;
+		while (node)
+		{
+			logNode(depth, node);
+			node = node->parent;
+			++depth;
+		}
+	}
+
+	// Lists all children of a bone to the log file, filtering by RTTI type name
+	void logChildren(NiAVObject* bone, int depth, int maxDepth, const char* filter)
+	{
+		if (!bone) return;
+
+		if (filter && filter[0])
+		{
+			const auto* rtti = bone->GetRTTI();
+			const auto* type_name = rtti ? rtti->GetName() : nullptr;
+			if (!type_name || std::strcmp(type_name, filter) != 0) { return; }
+		}
+
+		logNode(depth, bone);
+		NiNode* node = bone->AsNode();
+		if (!node) return;
+
+		if (depth < maxDepth || maxDepth < 0)
+		{
+			for (const auto& child : node->GetChildren())
+			{
+				logChildren(child.get(), depth + 1, maxDepth, filter);
+			}
+		}
+	}
+
+	/* Quest related functions */
+	const RE::BGSQuestInstanceText* FindQuestInstanceText(
+		const RE::TESQuest* a_quest, std::uint32_t a_instanceID)
+	{
+		if (!a_quest) { return nullptr; }
+
+		for (const auto* instance : a_quest->instanceData)
+		{
+			if (instance && instance->id == a_instanceID) { return instance; }
+		}
+
+		return nullptr;
+	}
+
+	RE::BGSBaseAlias* FindQuestAlias(const RE::TESQuest* a_quest, std::string_view a_aliasName)
+	{
+		if (!a_quest) { return nullptr; }
+
+		for (auto* alias : a_quest->aliases)
+		{
+			if (alias && a_aliasName == alias->aliasName.c_str()) { return alias; }
+		}
+
+		return nullptr;
+	}
+
+	RE::TESForm* FindStoredAliasNameForm(
+		const RE::TESQuest* a_quest, std::uint32_t a_instanceID, const RE::BGSBaseAlias* a_alias)
+	{
+		const auto* instance = FindQuestInstanceText(a_quest, a_instanceID);
+		if (!instance || !a_alias) { return nullptr; }
+
+		for (const auto& entry : instance->stringData)
+		{
+			if (entry.aliasID == a_alias->aliasID)
+			{
+				return RE::TESForm::LookupByID(entry.fullNameFormID);
+			}
+		}
+
+		return nullptr;
+	}
+
+	std::string ResolveReferenceName(RE::TESObjectREFR* a_reference, bool a_shortName)
+	{
+		if (!a_reference) { return "[...]"; }
+
+		if (a_shortName)
+		{
+			if (auto* actor = a_reference->As<RE::Actor>())
+			{
+				if (auto* npc = actor->GetActorBase(); npc && !npc->shortName.empty())
+				{
+					return npc->shortName.c_str();
+				}
+			}
+		}
+
+		const auto* name = a_reference->GetDisplayFullName();
+		return name && *name ? name : "[...]";
+	}
+
+	std::string ResolveAliasName(const RE::TESQuest* a_quest, std::uint32_t a_instanceID,
+		std::string_view a_aliasName, bool a_shortName)
+	{
+		if (a_aliasName == "Player")
+		{
+			return ResolveReferenceName(RE::PlayerCharacter::GetSingleton(), a_shortName);
+		}
+
+		auto* alias = FindQuestAlias(a_quest, a_aliasName);
+		if (!alias) { return "[...]"; }
+
+		if (auto* nameForm = FindStoredAliasNameForm(a_quest, a_instanceID, alias))
+		{
+			if (a_shortName)
+			{
+				if (auto* npc = nameForm->As<RE::TESNPC>(); npc && !npc->shortName.empty())
+				{
+					return npc->shortName.c_str();
+				}
+			}
+
+			const auto* name = nameForm->GetName();
+			if (name && *name) { return name; }
+		}
+
+		if (auto* refAlias = skyrim_cast<RE::BGSRefAlias*>(alias))
+		{
+			return ResolveReferenceName(refAlias->GetReference(), a_shortName);
+		}
+
+		return "[...]";
+	}
+
+	const RE::TESGlobal* FindTextGlobal(const RE::TESQuest* a_quest, std::string_view a_editorID)
+	{
+		if (!a_quest || !a_quest->textGlobals) { return nullptr; }
+
+		for (const auto* global : *a_quest->textGlobals)
+		{
+			if (global && a_editorID == global->GetFormEditorID()) { return global; }
+		}
+
+		return nullptr;
+	}
+
+	std::optional<float> GetStoredGlobalValue(
+		const RE::TESQuest* a_quest, std::uint32_t a_instanceID, const RE::TESGlobal* a_global)
+	{
+		const auto* instance = FindQuestInstanceText(a_quest, a_instanceID);
+		if (!instance || !a_global) { return std::nullopt; }
+
+		for (const auto& entry : instance->valueData)
+		{
+			if (entry.global == a_global) { return entry.value; }
+		}
+
+		return std::nullopt;
+	}
+
+	std::string ResolveGlobalValue(
+		const RE::TESQuest* a_quest, std::uint32_t a_instanceID, std::string_view a_editorID)
+	{
+		const auto* global = FindTextGlobal(a_quest, a_editorID);
+		if (!global) { return "[...]"; }
+
+		const float value =
+			GetStoredGlobalValue(a_quest, a_instanceID, global).value_or(global->value);
+
+		std::ostringstream result;
+		if (global->type == RE::TESGlobal::Type::kFloat)
+		{
+			result << std::fixed << std::setprecision(2) << value;
+		}
+		else
+		{
+			result << std::fixed << std::setprecision(0) << value;
+		}
+
+		return result.str();
+	}
+
+	std::unordered_set<RE::FormID> ParseFormIDList(
+		std::string_view a_list, std::string_view a_setting_name)
+	{
+		std::unordered_set<RE::FormID> result;
+
+		while (!a_list.empty())
+		{
+			const auto delimiter = a_list.find(',');
+			auto       token = a_list.substr(0, delimiter);
+
+			const auto token_begin = token.find_first_not_of(" \t\r\n");
+			if (token_begin != std::string_view::npos)
+			{
+				const auto token_end = token.find_last_not_of(" \t\r\n");
+				token = token.substr(token_begin, token_end - token_begin + 1);
+				if (token.starts_with("0x") || token.starts_with("0X")) { token.remove_prefix(2); }
+
+				RE::FormID form_id{};
+				const auto [end, error] =
+					std::from_chars(token.data(), token.data() + token.size(), form_id, 16);
+				if (error == std::errc{} && end == token.data() + token.size())
+				{
+					result.insert(form_id);
+				}
+				else
+				{
+					SKSE::log::warn("Invalid form ID in {}: {}", a_setting_name, token);
+				}
+			}
+
+			if (delimiter == std::string_view::npos) { break; }
+			a_list.remove_prefix(delimiter + 1);
+		}
+
+		return result;
+	}
+
+	std::string SerializeFormIDList(const std::unordered_set<RE::FormID>& a_form_ids)
+	{
+		std::vector<RE::FormID> sorted_ids(a_form_ids.begin(), a_form_ids.end());
+		std::ranges::sort(sorted_ids);
+
+		std::string result;
+		for (const auto form_id : sorted_ids)
+		{
+			if (!result.empty()) { result.push_back(','); }
+			result.append(std::format("{:x}", form_id));
+		}
+		return result;
+	}
 }

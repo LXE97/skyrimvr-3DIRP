@@ -11,14 +11,13 @@
 
 namespace vr_gui
 {
-	const std::string kPluginName = "VRGUItest.esp";
+	const std::string kPluginName = "";
 	const RE::FormID  kActivatorID = 0xD98;
 	const RE::FormID  kMarkerModspaceID = 0xD99;
 
 	using namespace RE;
 	class Widget;
 	class Hand;
-	class Window;
 	class Controller;
 
 	enum class MenuAction
@@ -28,13 +27,14 @@ namespace vr_gui
 		kScrollUp,
 		kScrollDown,
 		kScrollLeft,
-		kScrollRight
+		kScrollRight,
+		kNone
 	};
 
 	struct ActivatorOverride
 	{
 		Widget*             owner;
-		const Window*       parent;
+		const Widget*       root;
 		bool                isLeft;
 		RE::TESBoundObject* base;
 		RE::ExtraDataList*  extradata;
@@ -51,6 +51,8 @@ namespace vr_gui
 		virtual void Update(float delta) {};
 
 		virtual void OnHover(bool activate, Hand& hand) {};
+
+		virtual void OnClick(bool activate, Hand& hand, MenuAction action) {};
 
 		virtual void OnDetach() {};
 
@@ -73,85 +75,43 @@ namespace vr_gui
 	class Widget
 	{
 	public:
-		Widget(Widget* a_parent, NiTransform a_local, NiPoint3 a_halfextents, float a_radius);
+		static constexpr int MAX_DEPTH = 20;
 
-		Widget(Widget* a_parent, NiTransform a_local, NiPoint3 a_halfextents) :
-			Widget(
-				a_parent, std::move(a_local), a_halfextents, helper::ComputeRadius(a_halfextents))
+		Widget(Widget* a_parent, NiTransform a_local, NiPoint3 a_halfextents, float a_radius,
+			NiAVObject* a_transformParentNode = nullptr);
+
+		Widget(Widget* a_parent, NiTransform a_local, NiPoint3 a_halfextents,
+			NiAVObject* a_transformParentNode = nullptr) :
+			Widget(a_parent, std::move(a_local), a_halfextents,
+				helper::ComputeRadius(a_halfextents), a_transformParentNode)
 		{
+			hit_test_enabled = a_halfextents != NiPoint3{};
 			base_radius = radius;
 			base_extents = extents;
 		}
-		virtual ~Widget() = default;
 
-		void SetEnabled(bool a_enabled) { enabled = a_enabled; };
-		bool IsEnabled() const { return enabled; };
+		Widget(float a_radius, TESObjectREFR* a_objectReference,
+			NiAVObject*                a_transformParentNode = nullptr,
+			std::optional<NiTransform> a_local = std::nullopt);
 
-		virtual bool TestOverlap(Hand& a_hand) const;
+		virtual ~Widget();
 
-		virtual bool HandStateFilter(Hand& a_hand) const { return true; }
-
+		// Events
 		virtual void OnClick(bool a_activate, Hand& a_hand, MenuAction a_action);
 		virtual void OnHover(bool a_activate, Hand& a_hand);
-		void         OnHoverImpl(bool a_activate, Hand& a_hand);
+		virtual void Update(float a_delta);
 
-		virtual void Hide();
-		virtual void Show();
-		bool         IsHidden() const { return hide; }
-
-		void         MoveTo(NiPoint3 a_translate_local);
-		virtual void Resize(float a_scale);
-
-		bool IsHovered(bool a_isLeft) const { return hover_state[a_isLeft]; };
-
-		virtual void Update(float delta);
-
+		// Tree construction and lookup
 		template <typename T, typename... Args>
 		T* AddChild(Args&&... args)
 		{
 			static_assert(std::is_base_of_v<Widget, T>, "T must inherit from Widget");
 
 			children.emplace_back(std::make_unique<T>(this, std::forward<Args>(args)...));
-			return static_cast<T*>(children.back().get());
+			auto* child = static_cast<T*>(children.back().get());
+			OnChildAdded(*child);
+			return child;
 		}
-
-		virtual void DrawExtents(bool show);
-		void         ShowHitboxes(bool show);
-
-		Widget*                                     GetParent() const { return parent; }
-		const std::vector<std::unique_ptr<Widget>>& GetChildren() const { return children; }
-
-		// finds the base of the hierarchy tree
-		const Window* GetWindow() const;
-		Window*       GetWindow();
-
-		NiTransform& GetTransform() { return local; }
-		void         SetTransform(NiTransform a_t)
-		{
-			NiUpdateData ctx;
-			local = a_t;
-			if (auto node = Get3D())
-			{
-				node->local.rotate = a_t.rotate;
-				node->local.scale = a_t.scale;
-				node->Update(ctx);
-			}
-		}
-
-		virtual NiTransform GetWorld(int depth = 0) const;
-		inline NiTransform  GetLocal() const { return local; }
-
-		int GetPriority() const { return priority; };
-		void SetPriority(int a_prio) { priority = a_prio; };
-
-		virtual void AddModel(const std::string& a_path, bool a_tempeffect = false,
-			std::function<void(art_addon::ArtAddon*)> a_3DInitializedCallback = nullptr);
-
-		NiAVObject* Get3D() { return model ? model->Get3D() : nullptr; }
-
-		void UpdateImpl(float delta);
-
-		void UpdateModelTransform();
 
 		template <typename T, typename... Args>
 		T* AddBehavior(Args&&... args)
@@ -203,7 +163,63 @@ namespace vr_gui
 			return nullptr;
 		}
 
+		// State and hierarchy accessors
+		void SetEnabled(bool a_enabled) { enabled = a_enabled; }
+		bool IsEnabled() const { return enabled; }
+
+		void SetHitTestEnabled(bool a_enabled) { hit_test_enabled = a_enabled; }
+		bool IsHitTestEnabled() const { return hit_test_enabled; }
+
+		bool IsHidden() const { return hide; }
+		bool IsHovered(bool a_isLeft) const { return hover_state[a_isLeft]; }
+
+		int  GetPriority() const { return priority; }
+		void SetPriority(int a_priority) { priority = a_priority; }
+
+		Widget*                                     GetParent() const { return parent; }
+		const std::vector<std::unique_ptr<Widget>>& GetChildren() const { return children; }
+		Widget*                                     GetRoot();
+		const Widget*                               GetRoot() const;
+
+		TESObjectREFR* GetObjectReference() const;
+		NiAVObject*    GetTransformParentNode() const { return transform_parent_node; }
+		void           SetTransformParentNode(NiAVObject* a_node);
+
+		NiTransform&       GetTransform() { return local; }
+		const NiTransform& GetTransform() const { return local; }
+		NiTransform        GetWorld(int a_depth = 0) const;
+
+		NiAVObject* Get3D() { return model ? model->Get3D() : nullptr; }
+
+		// Widget  operations
+		void         SetTransform(NiTransform a_transform);
+		void         MoveTo(NiPoint3 a_translateLocal);
+		virtual void Resize(float a_scale);
+		void         ClearChildren();
+		void         ClearText() { text_boxes.clear(); };
+		void         ClearEffects() { visual_effects.clear(); };
+		void         AddModel(const std::string_view a_path, bool a_temporaryEffect = false,
+			art_addon::ArtAddon::OnInitialized a_callback = nullptr);
+		art_addon::AddonTextBox* AddText(
+			std::string_view a_text, float a_spacing, std::string_view a_fontPath);
+
+		virtual void Hide();
+		virtual void Show();
+
+		// Collision checking
+		virtual bool TestOverlap(Hand& a_hand) const;
+		virtual bool HandStateFilter(Hand& a_hand) const
+		{
+			if (parent) return parent->HandStateFilter(a_hand);
+			return true;
+		}
+
+		virtual void DrawExtents(bool a_show);
+		void         ShowHitboxes(bool a_show);
+
 	protected:
+		virtual void OnChildAdded(Widget&) {}
+
 		NiTransform local;
 		NiPoint3    extents;
 		float       radius = 1.f;
@@ -212,136 +228,34 @@ namespace vr_gui
 		NiPoint3 base_extents;
 		float    base_radius;
 
-		Widget*                                parent{};
-		std::vector<std::unique_ptr<Widget>>   children;
-		std::vector<std::unique_ptr<Behavior>> behaviors;
-		art_addon::ArtAddonPtr                 model;
+		Widget*                                               parent{};
+		NiAVObject*                                           transform_parent_node{};
+		TESObjectREFR*                                        object_reference{};
+		std::vector<std::unique_ptr<Widget>>                  children;
+		std::vector<std::unique_ptr<Behavior>>                behaviors;
+		art_addon::ArtAddonPtr                                model;
+		std::vector<std::unique_ptr<art_addon::AddonTextBox>> text_boxes;
 
 		std::vector<art_addon::ArtAddonPtr> visual_effects;
 		bool                                enabled = true;
+		bool                                hit_test_enabled = true;
 		bool                                hover_state[2] = { false, false };
 		int                                 priority = 50;
 
+		// Internal implementation helpers
+		void OnHoverImpl(bool a_activate, Hand& a_hand);
+		void UpdateImpl(float a_delta);
+		void UpdateModelTransform();
+		void UpdateOwnModelTransform();
+
 		void RemoveChild(Widget* a_child);
 
-		NiTransform GetLocalToRoot() const;
-
-		static constexpr int MAX_DEPTH = 20;
+		bool        IsWorldAnchored() const;
+		bool        IsTreeWorldAnchored() const;
+		bool        TestRootOverlap(Hand& a_hand) const;
+		NiAVObject* GetModelAttachmentNode() const;
 
 		friend class Controller;
-	};
-
-	/* Widget whose model is attached to a specific scene node and provides the authoritative
-	 * world transform. The Widget's local transform is the model's offset from that node. */
-	class ModelDrivenWidget : public Widget
-	{
-	public:
-		ModelDrivenWidget(Widget* a_parent, NiAVObject* a_modelParent, NiTransform a_local,
-			NiPoint3 a_halfExtents, float a_radius) :
-			Widget(a_parent, std::move(a_local), a_halfExtents, a_radius),
-			model_parent(a_modelParent)
-		{
-			base_extents = extents;
-			base_radius = radius;
-		}
-
-		ModelDrivenWidget(Widget* a_parent, NiAVObject* a_modelParent, NiTransform a_local,
-			NiPoint3 a_halfExtents) :
-			ModelDrivenWidget(a_parent, a_modelParent, std::move(a_local), a_halfExtents,
-				helper::ComputeRadius(a_halfExtents))
-		{}
-
-		NiTransform GetWorld(int depth = 0) const override;
-
-		void AddModel(const std::string& a_path, bool a_tempeffect = false,
-			std::function<void(art_addon::ArtAddon*)> a_3DInitializedCallback = nullptr) override;
-
-	private:
-		NiAVObject* model_parent{};
-	};
-
-	/* Root of all Widget trees, has an ObjectReference for attaching models.
-    The radius represents the range at which UI collision detection will be activated.
-    */
-	class Window : public Widget
-	{
-	public:
-		Window(float a_radius, RE::TESObjectREFR* a_rootobj, RE::NiNode* a_parent_node,
-			std::optional<RE::NiTransform> a_local = std::nullopt) :
-			Widget(nullptr, a_local.value_or(RE::NiTransform{}), RE::NiPoint3{}, a_radius),
-			rootobj(a_rootobj),
-			parent_node(a_parent_node)
-		{}
-		virtual ~Window() = default;
-
-		TESObjectREFR* GetObjRef() const { return rootobj; }
-
-		virtual NiNode* GetRootNode() const
-		{ return parent_node ? parent_node : rootobj->Get3D()->AsNode(); }
-
-		bool TestOverlap(Hand& a_Hand) const override;
-
-		void DrawExtents(bool show) override;
-
-		void OnHover(bool a_activate, Hand& a_hand) override;
-
-		virtual NiTransform GetWorld(int depth = 0) const;
-
-		void AddModel(const std::string& a_path, bool a_tempeffect = false,
-			std::function<void(art_addon::ArtAddon*)> a_3DInitializedCallback = nullptr);
-
-	protected:
-		TESObjectREFR* rootobj{};
-		NiNode*        parent_node{};
-	};
-
-	/* Window which stays attached to a node on the target ObjectReference. If no node is specified,
-	defaults to the root of the ObjectReference skeleton */
-	class AttachedWindow : public Window
-	{
-	public:
-		AttachedWindow(float a_radius, RE::TESObjectREFR* a_rootobj, RE::NiNode* a_parent_node,
-			std::optional<RE::NiTransform> a_local = std::nullopt);
-		virtual ~AttachedWindow() = default;
-	};
-
-	/* Window that floats in a desired world position. It is actually attached to the ObjectReference,
-	but uses an empty .nif as the parent of all child Widgets, which is updated every frame to remain in place
-	Because this .nif takes 1 frame to create, an optional initialization callback is provided*/
-	class FloatingWindow : public Window
-	{
-	public:
-		FloatingWindow(float a_radius, RE::TESObjectREFR* a_rootobj, RE::NiTransform a_world,
-			std::function<void(FloatingWindow*)> a_3DInitializedCallback = nullptr);
-		virtual ~FloatingWindow() = default;
-
-		NiTransform GetWorld(int depth = 0) const;
-
-		NiNode* GetRootNode() const;
-
-	protected:
-		void                                 Update(float delta);
-		std::function<void(FloatingWindow*)> InitializedCallback;
-	};
-
-	/* Interacts via button presses */
-	class SimpleButton : public Widget
-	{
-		using Callback = std::function<void(SimpleButton*, bool activate, Hand&, MenuAction)>;
-
-	public:
-		SimpleButton(Widget* a_parent, NiTransform a_local, NiPoint3 a_halfextents, Callback cb) :
-			Widget(a_parent, std::move(a_local), a_halfextents),
-			callback_(std::move(cb))
-		{}
-
-		void OnClick(bool a_activate, Hand& a_hand, MenuAction a_action) override
-		{
-			if (callback_) callback_(this, a_activate, a_hand, a_action);
-		}
-
-	private:
-		Callback callback_;
 	};
 
 	class Container : public Widget
@@ -411,6 +325,8 @@ namespace vr_gui
 	class Controller
 	{
 	public:
+		const std::string kRolloverNodeName = "WSActivateRollover";
+
 		struct ButtonEvent
 		{
 			bool       isLeft;
@@ -424,16 +340,25 @@ namespace vr_gui
 			vr::EVRButtonId secondary = vr::EVRButtonId::k_EButton_Grip;
 		};
 
-		const std::string kRolloverNodeName = "WSActivateRollover";
-
-		void Update();
-		void Init();
-		void Cleanup();
-		void HandleHUDOverrides();
-
-		Window* AddWindow(std::unique_ptr<Window> a_new)
+		static Controller* GetSingleton()
 		{
-			windows.emplace_back(std::move(a_new));
+			static Controller singleton;
+			return &singleton;
+		}
+
+		RE::TESObjectREFR* GetActivator() { return activator_obj; }
+		Hand*              GetHand(bool a_isLeft) { return &hands[a_isLeft]; }
+		const Settings&    GetSettings() const { return settings; }
+		void               SetSettings(Settings a_settings);
+
+		Widget* AddRoot(std::unique_ptr<Widget> a_root)
+		{
+			auto* created = a_root.get();
+			if (update_in_progress) { pending_roots.emplace_back(std::move(a_root)); }
+			else
+			{
+				roots.emplace_back(std::move(a_root));
+			}
 #ifdef HUD_OVERRIDES
 			SKSE::GetTaskInterface()->AddTask([this]() {
 				if (activator_obj)
@@ -442,30 +367,42 @@ namespace vr_gui
 				}
 			});
 #endif
-			return windows.back().get();
+			return created;
 		}
 
-		void ShowHitboxes(bool show);
+		template <typename T>
+		T* FindRoot()
+		{
+			static_assert(std::is_base_of_v<Widget, T>, "T must inherit from Widget");
 
-		void MarkForDelete(Widget* w);
+			for (const auto& root : roots)
+			{
+				if (auto* result = dynamic_cast<T*>(root.get())) { return result; }
+			}
+
+			for (const auto& root : pending_roots)
+			{
+				if (auto* result = dynamic_cast<T*>(root.get())) { return result; }
+			}
+
+			return nullptr;
+		}
+
+		void Update();
+		void Init();
+		void Cleanup();
+		void HandleHUDOverrides();
+
+		void ShowHitboxes(bool a_show);
+
+		void MarkForDelete(Widget* a_widget);
+		void QueuePostUpdate(std::function<void()> a_action);
 
 		void PushActivatorOverride(ActivatorOverride&& a_data);
 		void RemoveActivatorOverride(Widget* a_owner);
 		void RemoveActivatorOverride(Widget* a_owner, bool a_isLeft);
-		void RemoveActivatorOverride(Window* a_parent);
 
-		void AcquireInputBlock();
-		void ReleaseInputBlock(bool a_force = false);
-
-		RE::TESObjectREFR* GetActivator() { return activator_obj; }
-
-		static Controller* GetSingleton()
-		{
-			static Controller singleton;
-			return &singleton;
-		}
-
-		Hand* GetHand(bool isLeft) { return &hands[isLeft]; }
+		bool IsMenuActionPressed(Hand& a_hand, MenuAction a_action);
 
 	private:
 		Controller() = default;
@@ -476,8 +413,9 @@ namespace vr_gui
 		Controller& operator=(Controller&&) = delete;
 
 		void HandleInput();
-		void HandleEvents();
+		void HandleEvents(const std::vector<ButtonEvent>& a_events);
 		void HandleDeletionQueue();
+		void HandlePostUpdateQueue();
 
 		bool        InputEventHandler(const vrinput::ModInputEvent& e);
 		static bool InputEventHandlerStatic(const vrinput::ModInputEvent& e);
@@ -489,17 +427,20 @@ namespace vr_gui
 		void SetHUDOverride(ActivatorOverride& a_data);
 		void ClearExtraData(RE::TESObjectREFR* a_obj);
 		void ToggleActivator(bool a_enabled);
-		void RemoveWindow(Window* a_del);
+		void RemoveActivatorOverridesForRoot(Widget* a_root);
+		void RemoveRoot(Widget* a_root);
 
 		bool IsValid(Widget* a_target) const;
 		bool IsValid(Widget* a_root, Widget* a_target) const;
 
-		std::vector<std::unique_ptr<Window>> windows;
+		std::vector<std::unique_ptr<Widget>> roots;
+		std::vector<std::unique_ptr<Widget>> pending_roots;
 		std::vector<Widget*>                 widgets_to_delete;
+		std::vector<std::function<void()>>   post_update_queue;
 		std::vector<ButtonEvent>             button_queue;
 		std::vector<ActivatorOverride>       activator_overrides;
 
-		std::unordered_map<Hand*, std::unordered_map<Window*, std::vector<Widget*>>> hovered_map;
+		std::unordered_map<Hand*, std::unordered_map<Widget*, std::vector<Widget*>>> hovered_map;
 
 		RE::TESObjectREFR*  activator_obj = nullptr;
 		RE::TESObjectREFR*  modspacemarker_obj = nullptr;
@@ -508,32 +449,23 @@ namespace vr_gui
 
 		int input_block_counter = 0;
 
+		std::mutex button_queue_mutex;
+
 		std::chrono::steady_clock::time_point last_update_time{ std::chrono::steady_clock::now() };
+		bool                                  update_in_progress = false;
 
 		// element 0 = right hand, 1 = left hand
 		std::vector<Hand> hands;
-
-		// higgs save
-		double FarCastDistance;
-		double NearCastDistance;
 
 		Settings settings;
 
 		RE::NiTransform rollover_default_hand;
 		RE::NiPoint3    rollover_default_hand_pos;
 		RE::NiMatrix3   rollover_default_hand_rot;
-		float           factivatepicklength_default;
 
 		bool initialized = false;
 	};
 
 	inline void PostWandUpdate() { Controller::GetSingleton()->HandleHUDOverrides(); }
-
-	inline RE::NiNode* GetControllerNode(bool isLeft)
-	{
-		return isLeft ?
-			RE::PlayerCharacter::GetSingleton()->GetVRNodeData()->LeftWandNode->AsNode() :
-			RE::PlayerCharacter::GetSingleton()->GetVRNodeData()->RightWandNode->AsNode();
-	}
 
 }

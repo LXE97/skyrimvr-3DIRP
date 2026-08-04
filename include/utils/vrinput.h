@@ -31,6 +31,7 @@ namespace vrinput
 		kLeft,
 		kBoth
 	};
+
 	enum class ActionType
 	{
 		kPress = 0,  // dpad(joystick) events are always kPress
@@ -63,15 +64,8 @@ namespace vrinput
 	*/
 	typedef bool (*InputCallbackFunc)(const ModInputEvent& e);
 
-	void StartBlockingAll();
-	void StopBlockingAll();
-	bool isBlockingAll();
-
-	void StartSmoothing();
-	void StopSmoothing();
-
-	void BlockAxis(bool isLeft);
-	void UnBlockAxis(bool isLeft);
+	void StartSmoothing(bool a_isLeft);
+	void StopSmoothing(bool a_isLeft);
 
 	/* returns the state of the specified button's action type */
 	ButtonState GetButtonState(
@@ -89,6 +83,16 @@ namespace vrinput
 		{
 			return pc3d->GetObjectByName(
 				a_hand == Hand::kRight ? kRightHandNodeName : kLeftHandNodeName);
+		}
+		return nullptr;
+	}
+
+		inline RE::NiAVObject* GetHandNode(bool a_isLeft, bool a_first_person)
+	{
+		if (auto pc3d = RE::PlayerCharacter::GetSingleton()->Get3D(a_first_person))
+		{
+			return pc3d->GetObjectByName(
+				a_isLeft ?  kLeftHandNodeName : kRightHandNodeName);
 		}
 		return nullptr;
 	}

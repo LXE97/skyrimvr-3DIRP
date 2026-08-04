@@ -26,10 +26,20 @@ namespace ni_animator
 	class NiAnimator
 	{
 	public:
-		using OnFinish = std::function<void()>;
+		using Callback = std::function<void()>;
 
-		void PlayImmediately(const AnimationRange& a_anim, float a_speed = 1.f, OnFinish a_on_finish = {});
-		void Queue(const AnimationRange& a_anim, float a_speed = 1.f, OnFinish a_on_finish = {});
+		struct TimedCallback
+		{
+			float    time{};
+			Callback callback{};
+		};
+
+		using CallbackQueue = std::deque<TimedCallback>;
+
+		void PlayImmediately(const AnimationRange& a_anim, float a_speed = 1.f,
+			CallbackQueue a_callbacks = {});
+		void Queue(const AnimationRange& a_anim, float a_speed = 1.f,
+			CallbackQueue a_callbacks = {});
 
 		void Update(RE::NiAVObject* a_target, float a_delta);
 
@@ -37,10 +47,17 @@ namespace ni_animator
 		void ClearQueue();
 		void Clear();
 
-		[[nodiscard]] bool IsPlaying() const;
-		[[nodiscard]] bool HasQueued() const;
+		void SetSpeed(float a_new_speed)
+		{
+			if (current) { current->speed = a_new_speed; }
+		}
+
+		float GetSpeed() const { return current ? current->speed : 1.0f; }
+
+		[[nodiscard]] bool        IsPlaying() const;
+		[[nodiscard]] bool        HasQueued() const;
 		[[nodiscard]] std::size_t QueuedCount() const;
-		[[nodiscard]] bool IsBusy() const;
+		[[nodiscard]] bool        IsBusy() const;
 
 	private:
 		struct Entry
@@ -48,7 +65,7 @@ namespace ni_animator
 			const AnimationRange* anim{};
 			float                 time{};
 			float                 speed{ 1.f };
-			OnFinish              on_finish{};
+			CallbackQueue         callbacks;
 		};
 
 		std::optional<Entry> current;

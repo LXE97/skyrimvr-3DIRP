@@ -1,21 +1,16 @@
-#include "ni_animator.h"
-#include "vr_gui.h"
 #include "book.h"
 
 namespace spellbook
 {
 	using namespace RE;
 	using namespace vr_gui;
-	using namespace vr3dui;
-
+	using namespace vr3dirp;
+	
 	class Spellbook;
 
 	class Spellbook : public Book
 	{
 	public:
-
-		void DisplaySpellInfo(std::string font, float z_offset = -0.03f);
-
 
 	private:
 		struct Layout

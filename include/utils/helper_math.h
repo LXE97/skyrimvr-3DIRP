@@ -47,9 +47,14 @@ namespace helper
 
 	NiMatrix3 slerpMatrixAdaptive(NiMatrix3 mat1, NiMatrix3 mat2);
 
+	NiQuaternion Mat2Quat(const NiMatrix3& a_matrix);
+
 	void Quat2Mat(NiMatrix3& matrix, NiQuaternion& quaternion);
 
 	void slerpQuat(float interp, NiQuaternion& q1, NiQuaternion& q2, NiMatrix3& out);
+
+	NiQuaternion nlerpQuat(
+		float interp, const NiQuaternion& from, const NiQuaternion& to);
 
 	RE::NiPoint2 Rotate2D(RE::NiPoint2 v, float angle);
 

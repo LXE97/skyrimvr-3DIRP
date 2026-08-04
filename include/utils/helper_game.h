@@ -1,10 +1,16 @@
 #pragma once
+#include "equipment_checker.h"
 #include "Windows.h"
 
 #include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <string>
+
+namespace art_addon
+{
+	class ArtAddon;
+}
 
 namespace helper
 {
@@ -25,6 +31,7 @@ namespace helper
 	uint32_t     GetLocalID(RE::FormID a_formid);
 
 	void HideActivationText(RE::TESObjectREFR* a_target, bool a_hidden);
+	bool SetQuestTracked(RE::TESQuest* a_quest, bool a_tracked);
 
 	void CastSpellInstant(RE::Actor* a_src, RE::Actor* a_target, RE::SpellItem* sa_pell);
 	void Dispel(RE::Actor* a_src, RE::Actor* a_target, RE::SpellItem* a_spell);
@@ -35,8 +42,11 @@ namespace helper
 	float GetAmmoPercent(RE::Actor* a_a, float a_ammoCountMult);
 	float GetShoutCooldownPercent(RE::Actor* a_a, float a_MaxCDTime);
 
+	void DrawBox(art_addon::ArtAddon* box, const RE::NiPoint3& dimensions);
+
 	void SetGlowMult(RE::NiAVObject* a_target, float a_glow_mult);
 	void SetGlowColor(RE::NiAVObject* a_target, int a_color_hex);
+	void SetVertexColor(RE::BSTriShape* a_shape, const RE::Color& a_color);
 	void SetSpecularMult();
 	void SetSpecularColor();
 	void SetTintColor();
@@ -112,9 +122,13 @@ namespace helper
 
 	std::filesystem::path GetGamePath();
 	float                 ReadFloatFromIni(std::ifstream& a_file, std::string a_setting);
-	int                   ReadIntFromIni(std::ifstream& a_file, std::string a_setting);
-	std::string           ReadStringFromIni(std::ifstream& a_file, std::string a_setting);
-	bool                  ReadConfig(const char* a_ini_path);
+	bool                  WriteFloatToIni(
+		const std::filesystem::path& a_path, std::string_view a_setting, float a_value);
+	bool WriteStringToIni(
+		const std::filesystem::path& a_path, std::string_view a_setting, std::string_view a_value);
+	int         ReadIntFromIni(std::ifstream& a_file, std::string a_setting);
+	std::string ReadStringFromIni(std::ifstream& a_file, std::string a_setting);
+	bool        ReadConfig(const char* a_ini_path);
 
 	template <typename T>
 	T* GetForm(const RE::FormID a_lower_id, std::string a_mod_name)
@@ -126,6 +140,9 @@ namespace helper
 		}
 		return nullptr;
 	}
+
+	void              UnequipSpell(RE::Actor* a_actor, RE::SpellItem* a_spell, bool a_isLeft);
+	RE::BGSEquipSlot* GetHandEquipSlot(bool a_isLeft);
 
 	RE::TESForm* GetForm(const RE::FormID a_lower_id, std::string a_mod_name);
 
@@ -178,4 +195,42 @@ namespace helper
 
 	void CalculateBoundsDirect(RE::NiAVObject* a_root, float& a_radiusOut,
 		RE::NiPoint3& a_centerOut, RE::NiPoint3& a_extentsOut);
+
+	void logNode(int a_depth, RE::NiAVObject* a_node);
+	void logParents(RE::NiAVObject* a_node);
+	void logChildren(
+		RE::NiAVObject* a_node, int a_depth, int a_maxDepth, const char* a_filter = nullptr);
+
+	/* Quest related functions */
+	const RE::BGSQuestInstanceText* FindQuestInstanceText(
+		const RE::TESQuest* a_quest, std::uint32_t a_instanceID);
+
+	RE::BGSBaseAlias* FindQuestAlias(const RE::TESQuest* a_quest, std::string_view a_aliasName);
+
+	RE::TESForm* FindStoredAliasNameForm(
+		const RE::TESQuest* a_quest, std::uint32_t a_instanceID, const RE::BGSBaseAlias* a_alias);
+
+	std::string ResolveReferenceName(RE::TESObjectREFR* a_reference, bool a_shortName);
+
+	std::string ResolveAliasName(const RE::TESQuest* a_quest, std::uint32_t a_instanceID,
+		std::string_view a_aliasName, bool a_shortName);
+
+	const RE::TESGlobal* FindTextGlobal(const RE::TESQuest* a_quest, std::string_view a_editorID);
+
+	std::optional<float> GetStoredGlobalValue(
+		const RE::TESQuest* a_quest, std::uint32_t a_instanceID, const RE::TESGlobal* a_global);
+
+	std::string ResolveGlobalValue(
+		const RE::TESQuest* a_quest, std::uint32_t a_instanceID, std::string_view a_editorID);
+
+	RE::NiPointer<RE::NiPointLight> MakeLight(RE::TESObjectREFR* target, RE::NiNode* attach_node,
+		const RE::NiTransform& local, float radius, float fade);
+
+	void DestroyLight(RE::NiPointer<RE::NiPointLight>& runtimeLight);
+
+	std::unordered_set<RE::FormID> ParseFormIDList(
+		std::string_view a_list, std::string_view a_setting_name);
+
+	std::string SerializeFormIDList(const std::unordered_set<RE::FormID>& a_form_ids);
+
 }

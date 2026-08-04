@@ -2,59 +2,60 @@
 
 #include "helper_game.h"
 #include "helper_math.h"
+#include "text_manager.h"
+#include "vr_gui_input_block.h"
 
 namespace vr_gui
 {
-	namespace
-	{
-		bool BlockKeypress(const vrinput::ModInputEvent& e) { return false; }
-
-		void DrawBox(art_addon::ArtAddon* box, const RE::NiPoint3& dimensions)
-		{
-			if (box)
-			{
-				RE::NiAVObject* geom = box->Get3D();
-				for (int i : { 0, 1 })
-					for (int j : { 0, 1 })
-						for (int k : { 0, 1 })
-						{
-							char name[4] = { char('0' + i), char('0' + j), char('0' + k), 0 };
-
-							if (auto node = geom->GetObjectByName(name))
-							{
-								float x = (i ? +dimensions.x : -dimensions.x);
-								float y = (j ? +dimensions.y : -dimensions.y);
-								float z = (k ? +dimensions.z : -dimensions.z);
-
-								node->local.translate = { x, y, z };
-							}
-						}
-			}
-		}
-
-	}
-
-	static const char* kHelperModelPath = "HelperSphere.nif";
-	static const char* kDebugModelPath = "DebugSphere.nif";
+	static const char* kHelperModelPath = "3DIRP/vr_gui/HelperSphere.nif";
+	static const char* kDebugModelPath = "3DIRP/vr_gui/DebugSphere.nif";
+	static const char* kDebugBoxModelPath = "3DIRP/vr_gui/DrawExtents.nif";
 
 	void Controller::Cleanup()
 	{
-		windows.clear();
+		SKSE::log::trace("vr gui controller cleanup");
+		roots.clear();
+		pending_roots.clear();
 		activator_overrides.clear();
 		widgets_to_delete.clear();
+		post_update_queue.clear();
 		hovered_map.clear();
+		update_in_progress = false;
+	}
+
+	void Controller::SetSettings(Settings a_settings)
+	{
+		if (initialized)
+		{
+			for (auto hand : { vrinput::Hand::kRight, vrinput::Hand::kLeft })
+			{
+				vrinput::RemoveCallback(
+					InputEventHandlerStatic, settings.primary, hand, vrinput::ActionType::kPress);
+				vrinput::RemoveCallback(
+					InputEventHandlerStatic, settings.secondary, hand, vrinput::ActionType::kPress);
+			}
+		}
+
+		settings = std::move(a_settings);
+
+		if (initialized)
+		{
+			for (auto hand : { vrinput::Hand::kRight, vrinput::Hand::kLeft })
+			{
+				vrinput::AddCallback(
+					InputEventHandlerStatic, settings.primary, hand, vrinput::ActionType::kPress);
+				vrinput::AddCallback(
+					InputEventHandlerStatic, settings.secondary, hand, vrinput::ActionType::kPress);
+			}
+		}
 	}
 
 	void Controller::Init()
 	{
 		SKSE::log::trace("Controller init");
 
-		windows.clear();
-		activator_overrides.clear();
-		widgets_to_delete.clear();
-		hovered_map.clear();
+		Cleanup();
 
-		ReleaseInputBlock(true);
 		// create right (0) and left hands
 		hands = { Hand(false), Hand(true) };
 
@@ -89,14 +90,9 @@ namespace vr_gui
 
 		if (!initialized)
 		{
-			auto* setting = RE::GetINISetting("fActivatePickLength:Interface");
-			if (setting) factivatepicklength_default = setting->data.f;
-
-			g_higgsInterface->GetSettingDouble("FarCastDistance", FarCastDistance);
-			g_higgsInterface->GetSettingDouble("NearCastDistance", NearCastDistance);
+			InputBlockManager::GetSingleton()->Init();
 
 			// register for input events
-
 			vrinput::AddCallback(InputEventHandlerStatic, settings.primary, vrinput::Hand::kRight,
 				vrinput::ActionType::kPress);
 			vrinput::AddCallback(InputEventHandlerStatic, settings.secondary, vrinput::Hand::kRight,
@@ -128,7 +124,9 @@ namespace vr_gui
 
 	void Controller::Update()
 	{
-		// only run updates if there's at least one enabled window
+		update_in_progress = true;
+
+		// Only process input if there is at least one enabled widget tree.
 		bool do_update = false;
 
 		const auto                         now = std::chrono::steady_clock::now();
@@ -136,18 +134,28 @@ namespace vr_gui
 		const float                        delta = elapsed.count();
 		last_update_time = now;
 
-		for (const auto& w : windows)
+		for (const auto& root : roots)
 		{
-			if (w->IsEnabled())
+			if (root->IsEnabled())
 			{
-				w->UpdateImpl(delta);
+				root->UpdateImpl(delta);
 				do_update = true;
 			}
 		}
+
+		HandlePostUpdateQueue();
+
+		std::vector<ButtonEvent> pending;
+		{
+			std::scoped_lock lock(button_queue_mutex);
+			pending.swap(button_queue);
+		}
+
 		if (do_update)
 		{
 			HandleInput();
-			HandleEvents();
+			HandleEvents(pending);
+			HandlePostUpdateQueue();
 		}
 		else
 		{
@@ -156,6 +164,10 @@ namespace vr_gui
 
 		//HandleHUDOverrides happens in the PostWandUpdate
 		HandleDeletionQueue();
+
+		update_in_progress = false;
+		for (auto& root : pending_roots) { roots.emplace_back(std::move(root)); }
+		pending_roots.clear();
 	}
 
 	bool Controller::InputEventHandlerStatic(const vrinput::ModInputEvent& e)
@@ -166,22 +178,49 @@ namespace vr_gui
 		ButtonEvent temp;
 		temp.down = (bool)e.button_state;
 		temp.isLeft = (bool)e.device;
-		if (e.button_ID == settings.primary)
-			temp.button = MenuAction::kPrimary;
-		else if (e.button_ID == settings.secondary)
-			temp.button = MenuAction::kSecondary;
-		else if (e.button_ID == vr::EVRButtonId::k_EButton_DPad_Up)
-			temp.button = MenuAction::kScrollUp;
-		else if (e.button_ID == vr::EVRButtonId::k_EButton_DPad_Down)
-			temp.button = MenuAction::kScrollDown;
-		else if (e.button_ID == vr::EVRButtonId::k_EButton_DPad_Left)
-			temp.button = MenuAction::kScrollLeft;
-		else
-			temp.button = MenuAction::kScrollRight;
+		bool block_input = false;
 
+		if (e.button_ID == settings.primary)
+		{
+			temp.button = MenuAction::kPrimary;
+			block_input =
+				InputBlockManager::GetSingleton()->IsBlocked(temp.isLeft, InputBlock::kPrimary);
+		}
+		else if (e.button_ID == settings.secondary)
+		{
+			temp.button = MenuAction::kSecondary;
+			block_input =
+				InputBlockManager::GetSingleton()->IsBlocked(temp.isLeft, InputBlock::kSecondary);
+		}
+		else if (e.button_ID == vr::EVRButtonId::k_EButton_DPad_Up)
+		{
+			temp.button = MenuAction::kScrollUp;
+			block_input =
+				InputBlockManager::GetSingleton()->IsBlocked(temp.isLeft, InputBlock::kJoystick);
+		}
+		else if (e.button_ID == vr::EVRButtonId::k_EButton_DPad_Down)
+		{
+			temp.button = MenuAction::kScrollDown;
+			block_input =
+				InputBlockManager::GetSingleton()->IsBlocked(temp.isLeft, InputBlock::kJoystick);
+		}
+		else if (e.button_ID == vr::EVRButtonId::k_EButton_DPad_Left)
+		{
+			temp.button = MenuAction::kScrollLeft;
+			block_input =
+				InputBlockManager::GetSingleton()->IsBlocked(temp.isLeft, InputBlock::kJoystick);
+		}
+		else if (e.button_ID == vr::EVRButtonId::k_EButton_DPad_Right)
+		{
+			temp.button = MenuAction::kScrollRight;
+			block_input =
+				InputBlockManager::GetSingleton()->IsBlocked(temp.isLeft, InputBlock::kJoystick);
+		}
+
+		std::scoped_lock lock(button_queue_mutex);
 		button_queue.push_back(temp);
 
-		return false;
+		return temp.down && block_input;
 	}
 
 	void Controller::MarkForDelete(Widget* w)
@@ -193,6 +232,19 @@ namespace vr_gui
 		}
 	}
 
+	void Controller::QueuePostUpdate(std::function<void()> a_action)
+	{
+		if (a_action) { post_update_queue.emplace_back(std::move(a_action)); }
+	}
+
+	void Controller::HandlePostUpdateQueue()
+	{
+		auto pending = std::move(post_update_queue);
+		post_update_queue.clear();
+
+		for (auto& action : pending) { action(); }
+	}
+
 	void Controller::HandleDeletionQueue()
 	{
 		for (auto* widget : widgets_to_delete)
@@ -201,17 +253,27 @@ namespace vr_gui
 			{
 				if (widget->GetParent())
 				{
-					widget->GetParent()->RemoveChild(widget);
-					//remove dangling reference from hover map
+					// Remove references to the widget and all of its descendants before
+					// destroying the subtree.
 					for (auto& [hand, windowMap] : hovered_map)
 					{
-						for (auto& [window, widgets] : windowMap) { std::erase(widgets, widget); }
+						for (auto& [window, widgets] : windowMap)
+						{
+							std::erase_if(widgets, [this, widget](Widget* hovered) {
+								return IsValid(widget, hovered);
+							});
+						}
 					}
+					widget->GetParent()->RemoveChild(widget);
 				}
 				else
 				{
-					RemoveWindow(static_cast<Window*>(widget));
+					RemoveRoot(widget);
 				}
+			}
+			else
+			{
+				SKSE::log::trace("Invalid widget in deletion queue");
 			}
 		}
 		widgets_to_delete.clear();
@@ -219,7 +281,7 @@ namespace vr_gui
 
 	bool Controller::IsValid(Widget* a_target) const
 	{
-		for (auto& root : windows)
+		for (auto& root : roots)
 		{
 			if (IsValid(root.get(), a_target)) { return true; }
 		}
@@ -246,23 +308,19 @@ namespace vr_gui
 		if (it != children.end()) { children.erase(it); }
 	}
 
-	void Controller::RemoveWindow(Window* a_del)
+	void Controller::RemoveRoot(Widget* a_root)
 	{
-		auto it = std::find_if(windows.begin(), windows.end(),
-			[a_del](const std::unique_ptr<Window>& ptr) { return ptr.get() == a_del; });
+		auto it = std::find_if(roots.begin(), roots.end(),
+			[a_root](const std::unique_ptr<Widget>& ptr) { return ptr.get() == a_root; });
 
-		if (it != windows.end())
+		if (it != roots.end())
 		{
-			for (auto& hand : hands)
-			{
-				if (it->get()->IsHovered(hand.IsLeft())) { ReleaseInputBlock(); }
-			}
-			RemoveActivatorOverride(a_del);
-			windows.erase(it);
-			for (auto& hand : hands) { hovered_map[&hand].erase(a_del); }
+			RemoveActivatorOverridesForRoot(a_root);
+			roots.erase(it);
+			for (auto& hand : hands) { hovered_map[&hand].erase(a_root); }
 		}
 #ifdef HUD_OVERRIDES
-		if (windows.empty())
+		if (roots.empty())
 		{
 			SKSE::GetTaskInterface()->AddTask([this]() {
 				if (activator_obj) { activator_obj->MoveTo(modspacemarker_obj); }
@@ -328,17 +386,17 @@ namespace vr_gui
 			// Get updated device state, skip if failed
 			if (!hand.Update()) { continue; }
 
-			for (auto& root : windows)
+			for (auto& root : roots)
 			{
-				if (root->IsEnabled())
+				if (root->IsEnabled() && root->HandStateFilter(hand))
 				{
-					// Copy currently hovered children for this hand and Window
+					// Copy currently hovered children for this hand and widget tree.
 					auto&                cur_list = hovered_map[&hand][root.get()];
 					std::vector<Widget*> prev_list = cur_list;
 
 					// Rebuild list of currently hovered widgets, and dispatch any newly hovered events
 					cur_list.clear();
-					if (root->TestOverlap(hand))
+					if (root->TestRootOverlap(hand))
 					{
 						if (!root->IsHovered(hand.IsLeft())) root->OnHoverImpl(true, hand);
 						TraverseCollision(*root, hand, cur_list);
@@ -355,16 +413,16 @@ namespace vr_gui
 						if (it == cur_list.end()) { w->OnHoverImpl(false, hand); }
 					}
 
-					// cleanup inactive windows from the global hover map
+					// Clean inactive widget trees out of the global hover map.
 					if (cur_list.empty()) { hovered_map[&hand].erase(root.get()); }
 				}
 			}
 		}
 	}
 
-	void Controller::HandleEvents()
+	void Controller::HandleEvents(const std::vector<ButtonEvent>& a_events)
 	{
-		for (auto& event : button_queue)
+		for (auto& event : a_events)
 		{
 			// Dispatch the button to the highest priority widget that is hovered
 			// only look in the first window with hovered widgets for this hand- unlikely to have overlapping Windows
@@ -382,7 +440,6 @@ namespace vr_gui
 				}
 			}
 		}
-		button_queue.clear();
 	}
 
 	void Controller::TraverseCollision(
@@ -390,14 +447,16 @@ namespace vr_gui
 	{
 		for (auto& child : a_parent.GetChildren())
 		{
-			// All conditions for determining whether a widget is active are here
-			if (child->IsEnabled() && child->HandStateFilter(a_hand) && child->TestOverlap(a_hand))
+			if (!child->IsEnabled()) { continue; }
+
+			if (child->IsHitTestEnabled() && child->HandStateFilter(a_hand) &&
+				child->TestOverlap(a_hand))
 			{
 				if (!child->IsHovered(a_hand.IsLeft())) { child->OnHoverImpl(true, a_hand); }
+
 				a_hover_list.push_back(child.get());
 			}
-			// always visit the whole tree even if parent is disabled
-			// TODO: why?
+
 			TraverseCollision(*child, a_hand, a_hover_list);
 		}
 	}
@@ -419,46 +478,28 @@ namespace vr_gui
 		if (it != activator_overrides.end()) { activator_overrides.erase(it); }
 	}
 
-	void Controller::RemoveActivatorOverride(Window* a_parent)
+	bool Controller::IsMenuActionPressed(Hand& a_hand, MenuAction a_action)
+	{
+		if (a_action == MenuAction::kPrimary)
+		{
+			return vrinput::GetButtonState(settings.primary, vrinput::Hand(a_hand.IsLeft()),
+					   vrinput::ActionType::kPress) == vrinput::ButtonState::kButtonDown;
+		}
+		else if (a_action == MenuAction::kSecondary)
+		{
+			return vrinput::GetButtonState(settings.secondary, vrinput::Hand(a_hand.IsLeft()),
+					   vrinput::ActionType::kPress) == vrinput::ButtonState::kButtonDown;
+		}
+		return false;
+	}
+
+	void Controller::RemoveActivatorOverridesForRoot(Widget* a_root)
 	{
 		auto it = std::remove_if(activator_overrides.begin(), activator_overrides.end(),
-			[&](const ActivatorOverride& a) { return a.parent == a_parent; });
+			[&](const ActivatorOverride& a) { return a.root == a_root; });
 		if (it != activator_overrides.end())
 		{
 			activator_overrides.erase(it, activator_overrides.end());
-		}
-	}
-
-	void Controller::AcquireInputBlock()
-	{
-		if (++input_block_counter == 1)
-		{
-			SKSE::log::trace("---------------------------------------------------- BLOCKING");
-			// disable HIGGS, Spellwheel, etc
-			for (bool isLeft : { true, false }) { vrinput::BlockAxis(isLeft); }
-			g_higgsInterface->GetSettingDouble("FarCastDistance", FarCastDistance);
-			g_higgsInterface->GetSettingDouble("NearCastDistance", NearCastDistance);
-			g_higgsInterface->SetSettingDouble("FarCastDistance", 0.0000001);
-			g_higgsInterface->SetSettingDouble("NearCastDistance", 0.0000001);
-			g_vrikInterface->beginGestureProfile();
-			auto* setting = RE::GetINISetting("fActivatePickLength:Interface");
-			if (setting) setting->data.f = 10.f;
-		}
-	}
-
-	void Controller::ReleaseInputBlock(bool a_force)
-	{
-		if (a_force || --input_block_counter == 0)
-		{
-			input_block_counter = 0;
-			SKSE::log::trace("---------------------------------------------------- RELEASING");
-			// re enable everything
-			for (bool isLeft : { true, false }) { vrinput::UnBlockAxis(isLeft); }
-			g_higgsInterface->SetSettingDouble("FarCastDistance", FarCastDistance);
-			g_higgsInterface->SetSettingDouble("NearCastDistance", NearCastDistance);
-			g_vrikInterface->beginGestureProfile();
-			auto* setting = RE::GetINISetting("fActivatePickLength:Interface");
-			if (setting) setting->data.f = Controller::GetSingleton()->factivatepicklength_default;
 		}
 	}
 
@@ -576,15 +617,27 @@ namespace vr_gui
 
 	void Controller::ShowHitboxes(bool show)
 	{
-		for (auto& win : windows) win->ShowHitboxes(show);
+		for (auto& root : roots) { root->ShowHitboxes(show); }
 	}
 
-	Widget::Widget(Widget* a_parent, NiTransform a_local, NiPoint3 a_halfextents, float a_radius) :
-		parent(a_parent),
+	Widget::Widget(Widget* a_parent, NiTransform a_local, NiPoint3 a_halfextents, float a_radius,
+		NiAVObject* a_transformParentNode) :
 		local(std::move(a_local)),
 		extents(a_halfextents),
-		radius(a_radius)
+		radius(a_radius),
+		base_extents(a_halfextents),
+		base_radius(a_radius),
+		parent(a_parent),
+		transform_parent_node(a_transformParentNode)
 	{}
+
+	Widget::Widget(float a_radius, TESObjectREFR* a_objectReference,
+		NiAVObject* a_transformParentNode, std::optional<NiTransform> a_local) :
+		Widget(
+			nullptr, a_local.value_or(NiTransform{}), NiPoint3{}, a_radius, a_transformParentNode)
+	{ object_reference = a_objectReference; }
+
+	Widget::~Widget() { children.clear(); }
 
 	void Widget::ShowHitboxes(bool show)
 	{
@@ -598,30 +651,17 @@ namespace vr_gui
 		using namespace art_addon;
 		if (show)
 		{
-			AddModel("DrawExtents.nif", true, [extents = this->extents](ArtAddon* box) {
-				DrawBox(box, extents);
-				SKSE::log::trace(
-					"showing extents on widget: {} {} {}", extents.x, extents.y, extents.z);
-			});
-			// AddModel("DebugSphere.nif", true, [radius = this->radius](ArtAddon* sphere) {
-			// 	if (sphere && sphere->Get3D()) sphere->Get3D()->local.scale = radius;
-			// });
-		}
-		else
-		{
-			visual_effects.clear();
-		}
-	}
-
-	void Window::DrawExtents(bool show)
-	{
-		SKSE::log::trace("{}ing hitboxes on window ", show ? "show" : "hid");
-		using namespace art_addon;
-		if (show)
-		{
-			AddModel("DebugSphere.nif", true, [radius = this->radius](ArtAddon* sphere) {
-				if (sphere && sphere->Get3D()) { sphere->Get3D()->local.scale = radius; }
-			});
+			if (!parent)
+			{
+				AddModel(kDebugModelPath, true, [radius = this->radius](ArtAddon* sphere) {
+					if (sphere && sphere->Get3D()) { sphere->Get3D()->local.scale = radius; }
+				});
+			}
+			else
+			{
+				AddModel(kDebugBoxModelPath, true,
+					[extents = this->extents](ArtAddon* box) { helper::DrawBox(box, extents); });
+			}
 		}
 		else
 		{
@@ -639,7 +679,8 @@ namespace vr_gui
 				t.translate, a_hand.GetRadius() * t.scale, w.translate, w.scale * radius))
 		{  // narrow phase
 			auto tbox = a_hand.GetBoxTransform();
-			return helper::IntersectOBBOBB(tbox, *a_hand.GetExtents() * t.scale, w, extents * w.scale);
+			return helper::IntersectOBBOBB(
+				tbox, *a_hand.GetExtents() * t.scale, w, extents * w.scale);
 		}
 
 		return false;
@@ -647,8 +688,13 @@ namespace vr_gui
 
 	void Widget::OnClick(bool a_activate, Hand& a_hand, MenuAction a_action)
 	{
-		SKSE::log::debug("click event received on widget: {} {}",
-			a_hand.IsLeft() ? "left" : "right", a_activate ? "down" : "up");
+		for (auto& behavior : behaviors)
+		{
+			if (!behavior->IsMarkedForRemoval())
+			{
+				behavior->OnClick(a_activate, a_hand, a_action);
+			}
+		}
 	}
 
 	void Widget::OnHoverImpl(bool activate, Hand& hand)
@@ -665,6 +711,10 @@ namespace vr_gui
 	void Widget::Hide()
 	{
 		if (auto* node = Get3D()) { node->SetAppCulled(true); }
+		for (auto& text : text_boxes)
+		{
+			if (auto* node = text->Get3D()) { node->SetAppCulled(true); }
+		}
 		hide = true;
 		for (auto& w : children) { w->Hide(); }
 	}
@@ -672,6 +722,10 @@ namespace vr_gui
 	void Widget::Show()
 	{
 		if (auto* node = Get3D()) { node->SetAppCulled(false); }
+		for (auto& text : text_boxes)
+		{
+			if (auto* node = text->Get3D()) { node->SetAppCulled(false); }
+		}
 		hide = false;
 		for (auto& w : children) { w->Show(); }
 	}
@@ -679,33 +733,33 @@ namespace vr_gui
 	void Widget::Resize(float a_scale)
 	{
 		local.scale = a_scale;
+		UpdateModelTransform();
+	}
 
-		// Apply the new scale to the model. Since it has a different parent tree than the Widget, we need
-		// to accumulate the Widget scale up the tree
-		if (auto* node = Get3D())
-		{
-			RE::NiUpdateData ctx;
-			node->local.scale = GetLocalToRoot().scale;
-			node->Update(ctx);
-		}
+	void Widget::ClearChildren()
+	{
+		auto* controller = Controller::GetSingleton();
 
-		for (auto& w : children) { w->UpdateModelTransform(); }
+		for (const auto& child : children) { controller->MarkForDelete(child.get()); }
+	}
+
+	void Widget::SetTransform(NiTransform a_transform)
+	{
+		local = std::move(a_transform);
+		UpdateModelTransform();
+	}
+
+	void Widget::SetTransformParentNode(NiAVObject* a_node)
+	{
+		transform_parent_node = a_node;
+		UpdateModelTransform();
 	}
 
 	/* Set new local translation */
 	void Widget::MoveTo(NiPoint3 a_translate_local)
 	{
 		local.translate = a_translate_local;
-		if (auto* node = Get3D())
-		{
-			RE::NiUpdateData ctx;
-			auto             model_local = node->parent->world.Invert() * GetWorld();
-
-			node->local.translate = model_local.translate;
-			node->Update(ctx);
-		}
-
-		for (auto& w : children) { w->UpdateModelTransform(); }
+		UpdateModelTransform();
 	}
 
 	void Widget::OnHover(bool a_activate, Hand& a_hand) {}
@@ -714,6 +768,8 @@ namespace vr_gui
 
 	void Widget::UpdateImpl(float delta)
 	{
+		if (!IsEnabled()) { return; }
+
 		Update(delta);
 
 		for (auto& b : behaviors)
@@ -721,216 +777,108 @@ namespace vr_gui
 			if (!b->IsMarkedForRemoval()) { b->Update(delta); }
 		}
 
+		if (IsTreeWorldAnchored()) { UpdateOwnModelTransform(); }
+
 		for (auto& child : children) { child->UpdateImpl(delta); }
 
 		std::erase_if(behaviors, [](const auto& b) { return b->IsMarkedForRemoval(); });
 	}
 
-	const Window* Widget::GetWindow() const
+	const Widget* Widget::GetRoot() const { return parent ? parent->GetRoot() : this; }
+
+	Widget* Widget::GetRoot() { return parent ? parent->GetRoot() : this; }
+
+	TESObjectREFR* Widget::GetObjectReference() const
 	{
-		if (parent == nullptr) { return static_cast<const Window*>(this); }
-		else
-		{
-			return parent->GetWindow();
-		}
+		return object_reference ? object_reference :
+			parent              ? parent->GetObjectReference() :
+								  nullptr;
 	}
 
-	Window* Widget::GetWindow()
-	{
-		if (parent == nullptr) { return static_cast<Window*>(this); }
-		else
-		{
-			return parent->GetWindow();
-		}
-	}
+	bool Widget::IsWorldAnchored() const { return !parent && !transform_parent_node; }
+
+	bool Widget::IsTreeWorldAnchored() const { return GetRoot()->IsWorldAnchored(); }
 
 	NiTransform Widget::GetWorld(int depth) const
 	{
-		if (depth > MAX_DEPTH || !parent)
-		{
-			// Return identity transform when maximum recursion depth exceeded
-			SKSE::log::error("Widget tree recursion exceeded");
-			return NiTransform();
-		}
-
-		// call GetWorld on the parent widget until the root (Window) is reached
-		return parent->GetWorld(depth + 1) * local;
-	}
-
-	NiTransform Window::GetWorld(int depth) const
-	{
 		if (depth > MAX_DEPTH)
 		{
-			// Return identity transform when maximum recursion depth exceeded
 			SKSE::log::error("Widget tree recursion exceeded");
 			return NiTransform();
 		}
 
-		if (auto* root = GetRootNode()) { return root->world * local; }
+		if (transform_parent_node) { return transform_parent_node->world * local; }
+		if (parent) { return parent->GetWorld(depth + 1) * local; }
 
 		return local;
 	}
 
-	NiTransform Widget::GetLocalToRoot() const
-	{ return GetWindow()->GetRootNode()->world.Invert() * GetWorld(); }
+	NiAVObject* Widget::GetModelAttachmentNode() const
+	{
+		if (transform_parent_node) { return transform_parent_node; }
+		if (parent) { return parent->GetModelAttachmentNode(); }
+
+		return object_reference ? object_reference->Get3D(false) : nullptr;
+	}
+
+	void Widget::UpdateOwnModelTransform()
+	{
+		const auto world = GetWorld();
+		if (model) { model->SetWorldTransform(world); }
+		for (auto& effect : visual_effects) { effect->SetWorldTransform(world); }
+		for (auto& text : text_boxes) { text->SetWorldTransform(world); }
+	}
 
 	void Widget::UpdateModelTransform()
 	{
-		if (auto node = Get3D())
-		{
-			RE::NiUpdateData ctx;
-			node->local = GetLocalToRoot();
-			node->Update(ctx);
-		}
+		UpdateOwnModelTransform();
+		for (auto& child : children) { child->UpdateModelTransform(); }
 	}
 
-	void Widget::AddModel(const std::string& a_path, bool a_tempeffect,
-		std::function<void(art_addon::ArtAddon*)> a_3DInitializedCallback)
+	void Widget::AddModel(const std::string_view a_path, bool a_temporaryEffect,
+		art_addon::ArtAddon::OnInitialized a_callback)
 	{
-		// get object reference first
-		if (auto root = GetWindow())
-		{
-			if (auto rv = dynamic_cast<const Window*>(root))
-			{
-				if (auto obj = rv->GetObjRef())
+		auto* object = GetObjectReference();
+		auto* target = GetModelAttachmentNode();
+		if (!object || !target) { return; }
+
+		const auto transform = target->world.Invert() * GetWorld();
+		auto       addon = art_addon::ArtAddon::Make(a_path, object, target, transform,
+			[this, callback = std::move(a_callback)](art_addon::ArtAddon* a_addon) {
+				if (IsHidden() && a_addon && a_addon->Get3D())
 				{
-					NiAVObject* target = rv->GetRootNode();
-					NiTransform t = GetLocalToRoot();
-
-					// Add the model
-					if (a_tempeffect)
-					{
-						visual_effects.emplace_back(art_addon::ArtAddon::Make(
-							a_path.c_str(), obj, target, t, a_3DInitializedCallback));
-					}
-					else
-					{
-						model = art_addon::ArtAddon::Make(
-							a_path.c_str(), obj, target, t, a_3DInitializedCallback);
-					}
+					a_addon->Get3D()->SetAppCulled(true);
 				}
-			}
-		}
-	}
 
-	NiTransform ModelDrivenWidget::GetWorld(int) const
-	{
-		if (model)
-		{
-			if (auto* node = model->Get3D()) { return node->world; }
-		}
+				if (callback) { callback(a_addon); }
+			});
 
-		return model_parent ? model_parent->world * local : local;
-	}
-
-	void ModelDrivenWidget::AddModel(const std::string& a_path, bool a_tempeffect,
-		std::function<void(art_addon::ArtAddon*)> a_3DInitializedCallback)
-	{
-		auto* window = GetWindow();
-		if (!window || !model_parent) { return; }
-
-		if (a_tempeffect)
-		{
-			visual_effects.emplace_back(art_addon::ArtAddon::Make(a_path, window->GetObjRef(),
-				model_parent, local, std::move(a_3DInitializedCallback)));
-		}
+		if (a_temporaryEffect) { visual_effects.emplace_back(std::move(addon)); }
 		else
 		{
-			model = art_addon::ArtAddon::Make(a_path, window->GetObjRef(), model_parent, local,
-				std::move(a_3DInitializedCallback));
+			model = std::move(addon);
 		}
 	}
 
-	void Window::AddModel(const std::string& a_path, bool a_tempeffect,
-		std::function<void(art_addon::ArtAddon*)> a_3DInitializedCallback)
+	bool Widget::TestRootOverlap(Hand& a_hand) const
 	{
-		RE::NiTransform t = local;
-
-		if (a_tempeffect)
-		{
-			visual_effects.emplace_back(art_addon::ArtAddon::Make(
-				a_path.c_str(), rootobj, GetRootNode(), t, a_3DInitializedCallback));
-		}
-		else
-		{
-			model = art_addon::ArtAddon::Make(
-				a_path.c_str(), rootobj, GetRootNode(), t, a_3DInitializedCallback);
-		}
-	}
-
-	AttachedWindow::AttachedWindow(float a_radius, RE::TESObjectREFR* a_rootobj,
-		RE::NiNode* a_parent_node, std::optional<RE::NiTransform> a_local) :
-		Window(a_radius, a_rootobj, a_parent_node, a_local)
-	{
-		if (!parent_node)
-		{
-			if (auto node = rootobj->Get3D(false); node) { parent_node = node->AsNode(); }
-		}
-	}
-
-	FloatingWindow::FloatingWindow(float a_radius, TESObjectREFR* a_rootobj,
-		RE::NiTransform a_world, std::function<void(FloatingWindow*)> a_3DInitializedCallback) :
-		Window(a_radius, a_rootobj, nullptr, a_world),
-		InitializedCallback(a_3DInitializedCallback)
-	{
-		if (auto node = a_rootobj ? rootobj->Get3D(false) : nullptr; node)
-		{
-			auto initial = node->world.Invert() * a_world;
-			auto callback = InitializedCallback;
-			model = art_addon::ArtAddon::Make(art_addon::kEmptyNif, rootobj, node, initial,
-				[this, callback](art_addon::ArtAddon* a) {
-					if (callback) { callback(this); }
-				});
-		}
-	}
-
-	void FloatingWindow::Update(float delta)
-	{
-		// Update absolute world position for windows that are not attached to an object
-		// For FloatingWindow,  local  actually stores the desired world transform
-		if (auto* node = Get3D())
-		{
-			auto ctx = RE::NiUpdateData();
-			node->local = model->GetParent()->world.Invert() * local;
-			node->Update(ctx);
-		}
-	}
-
-	NiTransform FloatingWindow::GetWorld(int depth) const
-	{
-		if (depth > MAX_DEPTH)
-		{
-			// Return identity transform when maximum recursion depth exceeded
-			SKSE::log::error("Widget tree recursion exceeded");
-			return NiTransform();
-		}
-
-		return local;
-	}
-
-	NiNode* FloatingWindow::GetRootNode() const
-	{
-		auto* node = model ? model->Get3D() : rootobj->Get3D();
-		return node->AsNode();
-	}
-
-	// Broad phase only
-	bool Window::TestOverlap(Hand& a_Hand) const
-	{
-		auto t = a_Hand.GetTransform();
-
-		auto world = GetWorld();
+		const auto hand = a_hand.GetTransform();
+		const auto world = GetWorld();
 		return helper::IntersectSphereSphere(
-			t.translate, a_Hand.GetRadius(), world.translate, world.scale * radius);
+			hand.translate, a_hand.GetRadius(), world.translate, world.scale * radius);
 	}
 
-	void Window::OnHover(bool a_activate, Hand& a_hand)
+	art_addon::AddonTextBox* Widget::AddText(
+		std::string_view a_text, float a_spacing, std::string_view a_fontPath)
 	{
-		if (a_activate) { Controller::GetSingleton()->AcquireInputBlock(); }
-		else
-		{
-			Controller::GetSingleton()->ReleaseInputBlock();
-		}
+		auto* object = GetObjectReference();
+		auto* target = GetModelAttachmentNode();
+		if (!object || !target) { return nullptr; }
+
+		const auto transform = target->world.Invert() * GetWorld();
+		text_boxes.emplace_back(std::make_unique<art_addon::AddonTextBox>(
+			a_text, a_spacing, object, target, transform, std::string{ a_fontPath }));
+		return text_boxes.back().get();
 	}
 
 	void Container::Filter(FilterFunc f)

@@ -337,6 +337,11 @@ namespace helper
 		return result;
 	}
 
+	NiQuaternion Mat2Quat(const NiMatrix3& a_matrix)
+	{
+		return NiQuaternion(a_matrix);
+	}
+
 	void Quat2Mat(NiMatrix3& matrix, NiQuaternion& quaternion)
 	{
 		float xx = quaternion.x * quaternion.x;
@@ -362,6 +367,28 @@ namespace helper
 		matrix.entry[2][0] = 2 * (xz - yw);
 		matrix.entry[2][1] = 2 * (yz + xw);
 		matrix.entry[2][2] = 1 - 2 * (xx + yy);
+	}
+
+	NiQuaternion nlerpQuat(
+		float interp, const NiQuaternion& from, const NiQuaternion& to)
+	{
+		NiQuaternion corrected_to = to;
+		if (from.Dot(corrected_to) < 0.0f) { corrected_to.Neg(); }
+
+		NiQuaternion result{
+			from.w + interp * (corrected_to.w - from.w),
+			from.x + interp * (corrected_to.x - from.x),
+			from.y + interp * (corrected_to.y - from.y),
+			from.z + interp * (corrected_to.z - from.z)
+		};
+		const float inverse_length = 1.0f /
+			std::sqrt(result.w * result.w + result.x * result.x + result.y * result.y +
+				result.z * result.z);
+		result.w *= inverse_length;
+		result.x *= inverse_length;
+		result.y *= inverse_length;
+		result.z *= inverse_length;
+		return result;
 	}
 
 	void slerpQuat(float interp, NiQuaternion& q1, NiQuaternion& q2, NiMatrix3& out)

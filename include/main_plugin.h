@@ -7,17 +7,20 @@
 #include "higgsinterface001.h"
 #include "vrikinterface001.h"
 
-namespace vr3dui
+namespace vr3dirp
 {
-	constexpr const char* kPluginName = "Real_Spellbook_VR";
-
-	extern uint32_t g_esp_index;
-
 	extern PapyrusVRAPI* g_papyrusvr;
+	extern bool          g_left_hand_mode;
 
 	void Init();
+	void InitSerialization();
 
 	void OnGameLoad();
 
 	void PreLoadGame();
+
+	void OnSaveGame();
+
+	void ApplySettings();
+	void ResetHiddenQuests();
 }

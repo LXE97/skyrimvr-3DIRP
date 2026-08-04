@@ -1,5 +1,7 @@
 #include "vr_gui_hand.h"
 
+#include "equipment_checker.h"
+#include "main_plugin.h"
 #include "vr_gui.h"
 
 namespace vr_gui
@@ -15,7 +17,7 @@ namespace vr_gui
 		}
 	}
 
-		const NiTransform Hand::GetBoxTransform() const
+	const NiTransform Hand::GetBoxTransform() const
 	{
 		if (transform) { return *transform * offset_box; }
 		else
@@ -30,18 +32,10 @@ namespace vr_gui
 		// check player 3d loaded
 		if (auto pc = RE::PlayerCharacter::GetSingleton()->Get3D(false); pc)
 		{
-			// link transforms
-			if (auto hand_node = pc->GetObjectByName(vrinput::kControllerNodeName[isLeft]);
-				hand_node)
-			{
-				node = hand_node;
-				transform = &node->world;
-				initialized = true;
-				ApplyMode(Mode::kNormal);
-				return true;
-			}
+			ApplyMode(Mode::kNormal);
+			initialized = true;
+			return true;
 		}
-		node = nullptr;
 		transform = nullptr;
 		initialized = false;
 		return false;
@@ -51,12 +45,15 @@ namespace vr_gui
 	{
 		if (Init())
 		{
-			//query HIGGS state
-			if (g_higgsInterface->IsHandInGrabbableState(isLeft)) { state = State::kReady; }
-			else if (g_higgsInterface->GetGrabbedObject(isLeft)) { state = State::kGrabbing; }
-			else
+			if (!g_higgsInterface->IsHandInGrabbableState(isLeft)) { state = State::kGrabbing; }
+			else if (!equipment_checker::IsHandEmpty(
+					 isLeft, true, vr3dirp::g_left_hand_mode))
 			{
 				state = State::kWeapon;
+			}
+			else
+			{
+				state = State::kReady;
 			}
 			return true;
 		}
@@ -65,13 +62,27 @@ namespace vr_gui
 
 	ModeHandle Hand::RequestMode(Mode a_mode, ModePriority a_priority)
 	{
+		//SKSE::log::trace("requesting mode on hand {}", this->IsLeft() ? "left" : "right");
 		const auto id = next_mode_request_id++;
 
-		mode_requests.push_back(ModeRequest{ .id = id, .mode = a_mode, .priority = static_cast<int>(a_priority) });
+		mode_requests.push_back(
+			ModeRequest{ .id = id, .mode = a_mode, .priority = static_cast<int>(a_priority) });
 
 		RefreshMode();
 
 		return ModeHandle{ this, id };
+	}
+
+	SmoothingHandle Hand::RequestSmoothing()
+	{
+		if (smoothing_requests++ == 0) { vrinput::StartSmoothing(isLeft); }
+		return SmoothingHandle{ this };
+	}
+
+	void Hand::ReleaseSmoothing()
+	{
+		if (smoothing_requests == 0) { return; }
+		if (--smoothing_requests == 0) { vrinput::StopSmoothing(isLeft); }
 	}
 
 	void Hand::ReleaseMode(std::uint64_t a_id)
@@ -107,39 +118,59 @@ namespace vr_gui
 		switch (a_mode)
 		{
 		case Mode::kNormal:
-			radius = 6.f;
-			extents = { 3, 1, 5 };
+			if (auto node = RE::PlayerCharacter::GetSingleton()->Get3D()->GetObjectByName(
+					isLeft ? "NPC L Hand [LHnd]" : "NPC R Hand [RHnd]"))
+			{
+				transform = &(node->world);
+			}
+			radius = 7.f;
+			extents = { 4, 1.5, 6 };
 			offset.rotate = NiMatrix3();
-			offset.translate = isLeft ? NiPoint3{ 0, 0.5, 5 } : NiPoint3{ 0, -0.5, 5 };
+			offset.translate = isLeft ? NiPoint3{ 0, 0.5, 5.5 } : NiPoint3{ 0, -0.5, 5.5 };
 			offset_box = offset;
 			g_vrikInterface->restoreFingers(isLeft);
 			break;
 
 		case Mode::kOpen:
-			radius = 6.f;
-			extents = { 3, 1, 5 };
-			offset.translate = isLeft ? NiPoint3{ 0, 0.5, 5 } : NiPoint3{ 0, -0.5, 5 };
+			if (auto node = RE::PlayerCharacter::GetSingleton()->Get3D()->GetObjectByName(
+					isLeft ? "NPC L Hand [LHnd]" : "NPC R Hand [RHnd]"))
+			{
+				transform = &(node->world);
+			}
+			radius = 7.f;
+			extents = { 4, 1.5, 6 };
+			offset.translate = isLeft ? NiPoint3{ 0, 0.5, 5.5 } : NiPoint3{ 0, -0.5, 5.5 };
 			offset.rotate = NiMatrix3();
 			offset_box = offset;
 			g_vrikInterface->setFingerRange(isLeft, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1);
 			break;
 
 		case Mode::kFist:
-			radius = 6.f;
-			extents = { 3, 1, 5 };
-			offset.translate = isLeft ? NiPoint3{ 0, 0.5, 5 } : NiPoint3{ 0, -0.5, 5 };
+			if (auto node = RE::PlayerCharacter::GetSingleton()->Get3D()->GetObjectByName(
+					isLeft ? "NPC L Hand [LHnd]" : "NPC R Hand [RHnd]"))
+			{
+				transform = &(node->world);
+			}
+			radius = 7.f;
+			extents = { 4, 1.5, 6 };
+			offset.translate = isLeft ? NiPoint3{ 0, 0.5, 5.5 } : NiPoint3{ 0, -0.5, 5.5 };
 			offset.rotate = NiMatrix3();
 			offset_box = offset;
 			g_vrikInterface->setFingerRange(isLeft, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
 			break;
 
 		case Mode::kPointing:
-			radius = 7.f;
-			extents = { 0.7, 0.7, 3.5 };
-			offset.translate = isLeft ? NiPoint3{ 0, 0.5, 7.5 } : NiPoint3{ 0, -0.5, 7.5 };
+			if (auto node = RE::PlayerCharacter::GetSingleton()->Get3D()->GetObjectByName(
+					isLeft ? "NPC L Finger12 [LF12]" : "NPC R Finger12 [RF12]"))
+			{
+				transform = &(node->world);
+			}
+			radius = 10.5f;
+			extents = { 0.7, 0.7, 1 };
+			
+			offset.translate = { -2.5, 1, -7.8 };
 			offset.rotate = NiMatrix3();
-			offset_box.translate = isLeft ? NiPoint3{ -2.5, -1.6, 12 } : NiPoint3{ 2.5, -1.6, 12 };
-			offset_box.rotate.SetEulerAnglesXYZ(-0.3141593, isLeft ? 0.1396263 : -0.1396263, 0);
+			offset_box.translate = NiPoint3{ 0, 0, 1 };
 			g_vrikInterface->setFingerRange(isLeft, 0.1, 0.1, 1, 1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1);
 			break;
 		}
@@ -152,6 +183,15 @@ namespace vr_gui
 			hand->ReleaseMode(id);
 			hand = nullptr;
 			id = 0;
+		}
+	}
+
+	void SmoothingHandle::Release()
+	{
+		if (hand)
+		{
+			hand->ReleaseSmoothing();
+			hand = nullptr;
 		}
 	}
 }
