@@ -90,8 +90,7 @@ namespace vr3dirp
 	{
 		if (auto* actor = GetObjectReference()->As<RE::Actor>())
 		{
-			if (stored_spell &&
-				equipment_checker::IsHandEmpty(isLeft, true, g_left_hand_mode))
+			if (stored_spell && equipment_checker::IsHandEmpty(isLeft, true, g_left_hand_mode))
 			{
 				if (auto* equip_manager = RE::ActorEquipManager::GetSingleton())
 				{
@@ -547,8 +546,7 @@ namespace vr3dirp
 				return;
 			}
 			const float follow_speed = settings.floating_follow_speed;
-			const bool can_follow = settings.follow_while_hovered ||
-				hand == vrinput::Hand::kBoth;
+			const bool  can_follow = settings.follow_while_hovered || hand == vrinput::Hand::kBoth;
 			if (can_follow && follow_node && has_floating_target && follow_speed > 0.0f)
 			{
 				const NiTransform desired_world = follow_node->world * floating_target;
@@ -673,6 +671,7 @@ namespace vr3dirp
 				{
 					isGrabbed = true;
 					hand_mode = grabHand->RequestMode(Hand::Mode::kFist, Hand::ModePriority::kGrab);
+					transform_store = parent->GetTransform();
 					parent_store = follow_target->world.Invert() * parent->GetWorld();
 				}
 			}
@@ -690,6 +689,19 @@ namespace vr3dirp
 			if (auto* book = dynamic_cast<Book*>(parent))
 			{
 				book->VirtualParent(follow_target, parent_store);
+
+				if (!(book->IsWorldAnchored()))
+				{
+					if (auto* true_parent = book->GetTransformParentNode(); true_parent &&
+						book->GetWorld().translate.GetSquaredDistance(
+							true_parent->world.translate) > kResetDistance * kResetDistance)
+					{
+						book->SetTransform(transform_store);
+						Release();
+						hand_mode.Release();
+						return;
+					}
+				}
 			}
 		}
 	}
@@ -776,5 +788,5 @@ namespace vr3dirp
 		return false;
 	}
 
-	void Book::DrawExtents(bool show) { }
+	void Book::DrawExtents(bool show) {}
 }

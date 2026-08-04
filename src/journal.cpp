@@ -308,7 +308,7 @@ namespace vr3dirp
 			if (selected_quest_index < quests.size() && !IsHidden(quests[selected_quest_index]))
 			{
 				// Get selected quest from hover group
-				const auto& quest = quests[selected_quest_index];
+				auto& quest = quests[selected_quest_index];
 
 				NiTransform zero{};
 				auto        textmanager =
@@ -379,6 +379,12 @@ namespace vr3dirp
 					if (!instance.Objective) { continue; }
 					drawObjective(instance, 0x82U);
 				}
+
+				if (quest.unseen)
+				{
+					journal.MarkQuestSeen(quest.owner);
+					quest.unseen = false;
+				}
 			}
 		}
 		else if (!a_left_page)
@@ -420,12 +426,6 @@ namespace vr3dirp
 				auto* line_text = line->AddChild<Widget>(line_cursor, NiPoint3());
 
 				textmanager->AddText(line_text, quest_name, L.body_character_spacing);
-				if (quest.unseen)
-				{
-					journal.MarkQuestSeen(quest.owner);
-					quest.unseen = false;
-				}
-
 				line->AddBehavior<SelectionHighlight>(
 					page_anchor.GetBehavior<ExclusiveHoverGroup>(),
 					// on hovered/highlighted: show visual and set selected quest index

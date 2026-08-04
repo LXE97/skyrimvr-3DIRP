@@ -276,8 +276,8 @@ namespace vr3dirp
 		void Update(float delta) override;
 
 	private:
-		// TODO: make setting
 		static constexpr float kGrabHoldTime = 0.5f;
+		static constexpr float kResetDistance = 40.0f;
 
 		void Release();
 
@@ -287,6 +287,7 @@ namespace vr3dirp
 		Hand*       grabHand{};
 		NiAVObject* follow_target{};
 		NiTransform parent_store{};
+		NiTransform transform_store{};
 
 		ModeHandle hand_mode;
 	};

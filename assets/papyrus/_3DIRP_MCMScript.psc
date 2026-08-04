@@ -312,6 +312,9 @@ State iBellyBoth
 EndState
 
 State bAllowEmptyArrowHand
+	event OnHighlightST()
+		SetInfoText("Enable the holster when you have a bow in the other hand")
+	endevent
 	Event OnSelectST()
 		ToggleSetting("bAllowEmptyArrowHand")
 	EndEvent
@@ -402,12 +405,18 @@ State iShowMiscInAll
 EndState
 
 State bHighlightNewQuests
+	event OnHighlightST()
+		SetInfoText("Sort newly-started quests to the top of their page until you view them")
+	endevent
 	Event OnSelectST()
 		ToggleSetting("bHighlightNewQuests")
 	EndEvent
 EndState
 
 State iHideButton
+	event OnHighlightST()
+		SetInfoText("Hold this button on the quest description page to hide that quest")
+	endevent
 	Event OnMenuOpenST()
 		OpenMenuSetting("iHideButton", BookButtons)
 	EndEvent
@@ -488,6 +497,9 @@ State fFloatingJournalScale
 EndState
 
 State fFloatingDespawnDistance
+	event OnHighlightST()
+		SetInfoText("Floating book will be dismissed when you move this far away")
+	endevent
 	Event OnSliderOpenST()
 		OpenSliderSetting("fFloatingDespawnDistance", 0.0, 300.0, 10.0)
 	EndEvent
@@ -506,6 +518,9 @@ State fFloatingFollowSpeed
 EndState
 
 State bFollowWhileHovered
+	event OnHighlightST()
+		SetInfoText("Freezes the book in place when your hand is interacting with it")
+	endevent
 	Event OnSelectST()
 		ToggleSetting("bFollowWhileHovered")
 	EndEvent
