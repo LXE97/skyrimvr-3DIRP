@@ -177,7 +177,6 @@ namespace vr3dirp
 			ResetHiddenQuestsLocked();
 		}
 
-
 		/* Settings management */
 		BookSettings ReadBookSettings()
 		{
@@ -322,7 +321,7 @@ namespace vr3dirp
 	static bool OnSecondaryDebugButton(const vrinput::ModInputEvent& e);
 
 	static void OnEquipped(const RE::TESEquipEvent* event);
-	static void OnQuestStartStop(const RE::TESQuestStartStopEvent* a_event);
+	static void OnObjectiveStateChanged(const RE::ObjectiveState::Event* a_event);
 
 	void        SummonBook(bool isLeft, BookType a_type);
 	static void CreateHolsters();
@@ -363,9 +362,16 @@ namespace vr3dirp
 		equip_sink->AddCallback(OnEquipped);
 		RE::ScriptEventSourceHolder::GetSingleton()->AddEventSink(equip_sink);
 
-		auto* quest_sink = EventSink<RE::TESQuestStartStopEvent>::GetSingleton();
-		quest_sink->AddCallback(OnQuestStartStop);
-		RE::ScriptEventSourceHolder::GetSingleton()->AddEventSink(quest_sink);
+		auto* objective_sink = EventSink<RE::ObjectiveState::Event>::GetSingleton();
+		objective_sink->AddCallback(OnObjectiveStateChanged);
+		if (auto* objective_source = RE::ObjectiveState::GetEventSource())
+		{
+			objective_source->AddEventSink(objective_sink);
+		}
+		else
+		{
+			SKSE::log::error("Unable to register objective-state event sink");
+		}
 	}
 
 	void InitSerialization()
@@ -377,16 +383,40 @@ namespace vr3dirp
 		serialization->SetRevertCallback(RevertQuestForms);
 	}
 
-	void OnQuestStartStop(const RE::TESQuestStartStopEvent* a_event)
+	void OnObjectiveStateChanged(const RE::ObjectiveState::Event* a_event)
 	{
-		if (!a_event || !a_event->started) { return; }
-		SKSE::log::trace("quest started {}", a_event->formID);
+		if (!a_event || a_event->newState != RE::QUEST_OBJECTIVE_STATE::kDisplayed ||
+			settings::Manager::GetSingleton()->Get("bHighlightNewQuests") <= 0.0f)
+		{
+			return;
+		}
 
-		auto* quest = RE::TESForm::LookupByID<RE::TESQuest>(a_event->formID);
-		if (!quest) { return; }
+		auto* objective = a_event->objective;
+		auto* quest = objective ? objective->ownerQuest : nullptr;
+		auto* player = RE::PlayerCharacter::GetSingleton();
+		if (!quest || !player) { return; }
+
+		auto isDisplayedState = [](RE::QUEST_OBJECTIVE_STATE a_state) {
+			return a_state == RE::QUEST_OBJECTIVE_STATE::kDisplayed ||
+				a_state == RE::QUEST_OBJECTIVE_STATE::kCompletedDisplayed ||
+				a_state == RE::QUEST_OBJECTIVE_STATE::kFailedDisplayed;
+		};
+
+		for (const auto& instance : player->objectives)
+		{
+			auto* previousObjective = instance.Objective;
+			if (!previousObjective || previousObjective->ownerQuest != quest) { continue; }
+
+			const auto previousState =
+				previousObjective == objective ? a_event->oldState : instance.InstanceState;
+			if (isDisplayedState(previousState)) { return; }
+		}
 
 		std::unique_lock lock(g_quest_state_mutex);
-		g_new_quests.insert(quest->GetFormID());
+		if (g_new_quests.insert(quest->GetFormID()).second)
+		{
+			SKSE::log::trace("quest first displayed {:x}", quest->GetFormID());
+		}
 	}
 
 	void OnEquipped(const RE::TESEquipEvent* event) { equipment_checker::OnEquipEvent(event); }

@@ -199,6 +199,8 @@ namespace vr3dirp
 						it->tracked = quest->IsActive();
 						it->completed = quest->IsCompleted();
 						it->unseen = a_journal.IsQuestUnseen(quest);
+						if (it->unseen) SKSE::log::trace("unseen quest added");
+						
 					}
 
 					if (state == QUEST_OBJECTIVE_STATE::kDisplayed)
@@ -560,6 +562,8 @@ namespace vr3dirp
 		layout.tab_spacing = 1.8f;
 		layout.tab_scale = 1.1f;
 		layout.tab_origin.y = 10.7f;
+
+		SKSE::log::trace("quest track {}", journal_settings.highlight_new_quests);
 
 		auto seen_types = GetPlayerQuestTypes();
 

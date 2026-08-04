@@ -171,19 +171,15 @@ namespace vr3dirp
 				"Base Page4",
 				"Base Page5",
 			};
-			const auto brightness = std::clamp(settings.page_brightness, 0.3f, 1.0f);
+			const auto        brightness = std::clamp(settings.page_brightness, 0.3f, 1.0f);
 			const RE::NiColor pageColor{ brightness, brightness, brightness };
-			const RE::Color vertexColor{ pageColor.ToInt() };
+			const RE::Color   vertexColor{ pageColor.ToInt() };
 
 			for (auto& nodename : kNodesToDarken)
 			{
 				if (auto node = a->Get3D()->GetObjectByName(nodename))
 				{
 					helper::SetVertexColor(node->AsTriShape(), vertexColor);
-				}
-				else
-				{
-					SKSE::log::trace("dark set node not found");
 				}
 			}
 

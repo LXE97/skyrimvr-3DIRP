@@ -262,14 +262,12 @@ namespace helper
 		{
 			if (!a_data || !a_data->rawVertexData || a_vertexCount == 0)
 			{
-				SKSE::log::trace("SetVertexColor: no vertex data");
 				return;
 			}
 
 			auto vertexDesc = a_data->vertexDesc;
 			if (!vertexDesc.HasFlag(RE::BSGraphics::Vertex::Flags::VF_COLORS))
 			{
-				SKSE::log::trace("SetVertexColor: no vertex color property");
 				return;
 			}
 
