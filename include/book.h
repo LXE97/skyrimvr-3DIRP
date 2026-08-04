@@ -35,6 +35,7 @@ namespace vr3dirp
 		int   close_button = 1;
 		int   close_action = 1;
 		float close_timing = 1.0f;
+		float floating_despawn_distance = 500.0f;
 
 		float right_offset_x = 8.862305f;
 		float right_offset_y = 4.031250f;
@@ -72,7 +73,7 @@ namespace vr3dirp
 		friend class GrabNode;
 
 	public:
-		Book(std::string_view a_model_path, bool a_isLeft, TESObjectREFR* a_objectReference,
+		Book(std::string_view a_model_path, vrinput::Hand a_hand, TESObjectREFR* a_objectReference,
 			NiAVObject* a_root, BookSettings a_settings, BookCallbacks a_callbacks = {},
 			std::optional<float> a_scale_override = std::nullopt);
 		~Book() override;
@@ -144,12 +145,16 @@ namespace vr3dirp
 		void Close();
 
 		void Update(float a_delta) override;
+		void OnHover(bool a_activate, Hand& a_hand) override;
 
 		void VirtualParent(NiAVObject* a_new, NiTransform& a_offset);
 
 		void DrawExtents(bool show);
 
-		bool HandStateFilter(Hand& a_hand) const override { return a_hand.IsLeft() != isLeft; }
+		bool HandStateFilter(Hand& a_hand) const override
+		{
+			return hand == vrinput::Hand::kBoth || a_hand.IsLeft() != isLeft;
+		}
 
 		bool IsAnimating() const { return animator.IsBusy(); }
 
@@ -179,11 +184,16 @@ namespace vr3dirp
 
 		void ClearPageView(bool a_left);
 		void RestoreSpellVisual();
+		void InitializeHandState();
 
 		GrabNode* grab_node;
 
 		ni_animator::NiAnimator animator{};
 
+		vrinput::Hand hand;
+		bool          isFloating;
+		bool          isClosing{};
+		bool          usesLeftLayout;
 		bool          isLeft;
 		Layout        layout;
 
@@ -202,6 +212,8 @@ namespace vr3dirp
 		ModeHandle hand_mode;
 
 		RE::NiPointer<RE::NiPointLight> book_light;
+
+		NiAVObject* follow_node{};
 	};
 
 	class Page

@@ -155,7 +155,7 @@ namespace vr3dirp
 	public:
 		static constexpr std::string_view kModelPath = "3DIRP/Journal/journal.nif";
 
-		Journal(bool a_isLeft, TESObjectREFR* a_objectReference, NiAVObject* a_root,
+		Journal(vrinput::Hand a_hand, TESObjectREFR* a_objectReference, NiAVObject* a_root,
 			BookSettings a_book_settings, BookCallbacks a_book_callbacks,
 			JournalSettings a_journal_settings, JournalState a_state,
 			JournalCallbacks a_journal_callbacks);

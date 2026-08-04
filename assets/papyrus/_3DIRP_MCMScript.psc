@@ -157,7 +157,11 @@ Function DrawJournalPage()
 	AddSliderOptionST("fRightPageTextZOffset", "Right Page Text Z offset", _3DIRP_Settings.GetSetting("fRightPageTextZOffset"), "{3}")
 	AddSliderOptionST("fLeftPageTextZOffsetRight", "Left Page Text Z offset (Rhand)", _3DIRP_Settings.GetSetting("fLeftPageTextZOffsetRight"), "{3}")
 	AddSliderOptionST("fRightPageTextZOffsetRight", "Right Page Text Z offset (Rhand)", _3DIRP_Settings.GetSetting("fRightPageTextZOffsetRight"), "{3}")
-
+	AddHeaderOption("Floating Journal")
+	AddSliderOptionST("fFloatingJournalScale", "Book Scale", _3DIRP_Settings.GetSetting("fFloatingJournalScale"), "{2}")
+	AddSliderOptionST("fFloatingFollowSpeed", "Follow Speed", _3DIRP_Settings.GetSetting("fFloatingFollowSpeed"), "{2}")
+	AddSliderOptionST("fFloatingDespawnDistance", "Auto Close Distance", _3DIRP_Settings.GetSetting("fFloatingDespawnDistance"), "{0}")
+	
 
 
 
@@ -466,6 +470,24 @@ State fJournalScale
 	EndEvent
 	Event OnSliderAcceptST(Float a_value)
 		AcceptSliderSetting("fJournalScale", a_value, "{2}")
+	EndEvent
+EndState
+
+State fFloatingJournalScale
+	Event OnSliderOpenST()
+		OpenSliderSetting("fFloatingJournalScale", 0.5, 2.0, 0.05)
+	EndEvent
+	Event OnSliderAcceptST(Float a_value)
+		AcceptSliderSetting("fFloatingJournalScale", a_value, "{2}")
+	EndEvent
+EndState
+
+State fFloatingDespawnDistance
+	Event OnSliderOpenST()
+		OpenSliderSetting("fFloatingDespawnDistance", 0.0, 2000.0, 50.0)
+	EndEvent
+	Event OnSliderAcceptST(Float a_value)
+		AcceptSliderSetting("fFloatingDespawnDistance", a_value, "{0}")
 	EndEvent
 EndState
 
