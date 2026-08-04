@@ -80,11 +80,11 @@ namespace vr3dirp
 		struct Layout
 		{
 			NiPoint3 left_page_origin = { -3.8, 0.0, 0 };
-			NiPoint3 right_page_origin = { 9.05, -0.2, 0 };
+			NiPoint3 right_page_origin = { 8.6, -0.2, 0 };
 			NiPoint3 tab_origin = { 0.0f, 9.5f, 1.1f };
 			float tab_scale = 1.f;
 
-			static constexpr float kRightPageWidth = 16;
+			static constexpr float kRightPageWidth = 16.3;
 			static constexpr float kLeftPageWidth = 6.94 * 2;
 			static constexpr float kRightPageHeight = 11.9 * 2;
 			static constexpr float kLeftPageHeight = 11.69 * 2;

@@ -146,7 +146,7 @@ namespace vr3dirp
 		{
 			std::vector<JournalQuestData> result;
 			const auto&                   settings = a_journal.GetJournalSettings();
-			NewQuestSet                    quests_with_displayed_objectives;
+			NewQuestSet                   quests_with_displayed_objectives;
 
 			auto* player = PlayerCharacter::GetSingleton();
 			if (!player) { return result; }
@@ -216,10 +216,7 @@ namespace vr3dirp
 				}
 			}
 
-			if (!a_type)
-			{
-				a_journal.PruneNewQuests(quests_with_displayed_objectives);
-			}
+			if (!a_type) { a_journal.PruneNewQuests(quests_with_displayed_objectives); }
 
 			return result;
 		}
@@ -325,13 +322,6 @@ namespace vr3dirp
 						[this, quest, a_context] { HideQuest(quest, a_context); }, hide_action);
 				}
 
-				RE::BSString log_text{};
-				quest.owner->GetJournalTextForInstance(log_text, quest.owner->currentInstanceID);
-				std::string formatted_str = log_text.c_str();
-
-				int log_lines = FormatParagraph(
-					formatted_str, L.body_text_scale, L.body_character_spacing, L.kLeftPageWidth);
-
 				NiTransform page_cursor{};
 				page_cursor.translate.y = L.kLeftPageHeight * 0.5f - L.top_margin;
 				const float page_half_width = L.kLeftPageWidth * 0.5f;
@@ -339,11 +329,21 @@ namespace vr3dirp
 				page_cursor.translate.x = -page_half_width + L.horizontal_margin;
 				page_cursor.scale = L.body_text_scale;
 
-				auto* log = page_anchor.AddChild<Widget>(page_cursor, NiPoint3{});
-				textmanager->AddText(log, formatted_str, L.body_character_spacing);
+				RE::BSString log_text{};
+				quest.owner->GetJournalTextForInstance(log_text, quest.owner->currentInstanceID);
+				std::string formatted_str = log_text.c_str();
 
-				page_cursor.translate.y -=
-					log_lines * art_addon::AddonTextBox::kLineSpacing * L.body_text_scale + 1;
+				if (formatted_str.size() > 1)
+				{
+					int log_lines = FormatParagraph(formatted_str, L.body_text_scale,
+						L.body_character_spacing, L.kLeftPageWidth);
+
+					auto* log = page_anchor.AddChild<Widget>(page_cursor, NiPoint3{});
+					textmanager->AddText(log, formatted_str, L.body_character_spacing);
+
+					page_cursor.translate.y -=
+						log_lines * art_addon::AddonTextBox::kLineSpacing * L.body_text_scale + 1;
+				}
 
 				auto drawObjective = [L, &page_cursor, &page_anchor, &textmanager](
 										 const RE::BGSInstancedQuestObjective obj,
@@ -403,10 +403,7 @@ namespace vr3dirp
 			for (std::size_t i = 0; i < quests.size(); ++i)
 			{
 				auto& quest = quests[i];
-				if (IsHidden(quest))
-				{
-					continue;
-				}
+				if (IsHidden(quest)) { continue; }
 
 				std::string quest_name =
 					std::string(1, ToGlyphCharacter(GetStatusSymbol(quest))) + ' ';
@@ -455,8 +452,7 @@ namespace vr3dirp
 								line_text, 0, ToGlyphCharacter(quest.tracked ? 0x80U : 0x7FU));
 						}
 					},
-					[](){return false;},
-					[book = &journal] { return !book->IsAnimating(); });
+					[]() { return false; }, [book = &journal] { return !book->IsAnimating(); });
 
 				page_cursor.translate.y -=
 					line_height * static_cast<float>(quest_lines) + L.quest_line_spacing;
@@ -553,9 +549,8 @@ namespace vr3dirp
 		BookSettings a_book_settings, BookCallbacks a_book_callbacks,
 		JournalSettings a_journal_settings, JournalState a_state,
 		JournalCallbacks a_journal_callbacks) :
-		Book(Journal::kModelPath, a_isLeft, a_objectReference, a_root,
-			std::move(a_book_settings), std::move(a_book_callbacks),
-			a_journal_settings.journal_scale),
+		Book(Journal::kModelPath, a_isLeft, a_objectReference, a_root, std::move(a_book_settings),
+			std::move(a_book_callbacks), a_journal_settings.journal_scale),
 		journal_settings(std::move(a_journal_settings)),
 		journal_callbacks(std::move(a_journal_callbacks)),
 		hidden_quests(std::move(a_state.hidden_quests)),
@@ -615,12 +610,11 @@ namespace vr3dirp
 	void Journal::PruneNewQuests(const NewQuestSet& a_visible_quests)
 	{
 		NewQuestSet removed_quests;
-		std::erase_if(new_quests,
-			[&a_visible_quests, &removed_quests](const FormID a_form_id) {
-				if (a_visible_quests.contains(a_form_id)) { return false; }
-				removed_quests.insert(a_form_id);
-				return true;
-			});
+		std::erase_if(new_quests, [&a_visible_quests, &removed_quests](const FormID a_form_id) {
+			if (a_visible_quests.contains(a_form_id)) { return false; }
+			removed_quests.insert(a_form_id);
+			return true;
+		});
 
 		if (!removed_quests.empty() && journal_callbacks.new_quests_removed)
 		{

@@ -85,9 +85,6 @@ EndEvent
 ; -------------------------------------------------------------------------------------------------
 Event OnPageReset(String a_page)
 	If !SettingsLoaded
-		SetCursorFillMode(TOP_TO_BOTTOM)
-		AddTextOption("Settings file could not be loaded", "")
-		AddTextOption("Data/SKSE/Plugins/3DIRP_VR_UI.json", "")
 		Return
 	EndIf
 
