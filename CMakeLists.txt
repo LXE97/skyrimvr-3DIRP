@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.21)
 
-project(3DIRP VERSION 1.0.0 LANGUAGES CXX)
+project(3DIRP VERSION 1.0.1 LANGUAGES CXX)
 
 # Destination to copy .dll
 if(DEFINED ENV{SKYRIM_FOLDER} AND IS_DIRECTORY "$ENV{SKYRIM_FOLDER}")
