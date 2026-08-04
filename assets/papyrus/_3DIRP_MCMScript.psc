@@ -144,8 +144,8 @@ Function DrawJournalPage()
 	AddMenuOptionST("iCloseAction", "Close Action", CloseActions[GetMenuIndex("iCloseAction", CloseActions)])
 	AddSliderOptionST("fCloseTiming", "Close Timing", _3DIRP_Settings.GetSetting("fCloseTiming"), "{1}")
 	AddEmptyOption()
-	AddSliderOptionST("fLightIntensity", "Light Intensity", _3DIRP_Settings.GetSetting("fLightIntensity"), "{1}")
-	AddSliderOptionST("fPageBrightness", "Page Brightness", _3DIRP_Settings.GetSetting("fPageBrightness"), "{1}")
+	AddSliderOptionST("fLightIntensity", "Light Intensity", _3DIRP_Settings.GetSetting("fLightIntensity"), "{2}")
+	AddSliderOptionST("fPageBrightness", "Page Brightness", _3DIRP_Settings.GetSetting("fPageBrightness"), "{2}")
 	AddEmptyOption()
 	AddTextOptionST("ResetHiddenQuests", "Reset Hidden Quest List", "Reset")
 
@@ -453,7 +453,7 @@ EndState
 
 State fLightIntensity
 	Event OnSliderOpenST()
-		OpenSliderSetting("fLightIntensity", 0.0, 3.0, 0.1)
+		OpenSliderSetting("fLightIntensity", 0.0, 3.0, 0.05)
 	EndEvent
 	Event OnSliderAcceptST(Float a_value)
 		AcceptSliderSetting("fLightIntensity", a_value, "{1}")
@@ -462,7 +462,7 @@ EndState
 
 State fPageBrightness
 	Event OnSliderOpenST()
-		OpenSliderSetting("fPageBrightness", 0.3, 1.0, 0.1)
+		OpenSliderSetting("fPageBrightness", 0.3, 1.0, 0.05)
 	EndEvent
 	Event OnSliderAcceptST(Float a_value)
 		AcceptSliderSetting("fPageBrightness", a_value, "{1}")
@@ -489,7 +489,7 @@ EndState
 
 State fFloatingDespawnDistance
 	Event OnSliderOpenST()
-		OpenSliderSetting("fFloatingDespawnDistance", 0.0, 2000.0, 50.0)
+		OpenSliderSetting("fFloatingDespawnDistance", 0.0, 300.0, 10.0)
 	EndEvent
 	Event OnSliderAcceptST(Float a_value)
 		AcceptSliderSetting("fFloatingDespawnDistance", a_value, "{0}")

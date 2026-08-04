@@ -18,6 +18,7 @@ namespace vr3dirp
 	class Chapter;
 	class GrabNode;
 	class BasicHitbox;
+	class FloatingBookHandClaim;
 	class SelectionHighlight;
 
 	struct BookSettings
@@ -73,6 +74,7 @@ namespace vr3dirp
 	class Book : private BookSettingsOwner, public Widget
 	{
 		friend class GrabNode;
+		friend class FloatingBookHandClaim;
 
 	public:
 		Book(std::string_view a_model_path, vrinput::Hand a_hand, TESObjectREFR* a_objectReference,
@@ -125,7 +127,7 @@ namespace vr3dirp
 		static constexpr const char* kChapterParent = "Book Pages Nub";
 		static constexpr const char* kRightParent = "Book Pages";
 		static constexpr const char* kLeftParent = "Book CoverPage Turn04";
-		static constexpr float       kDefaultWindowRadius = 20.f;
+		static constexpr float       kDefaultWindowRadius = 35.f;
 
 		static constexpr const char* kBookOpenSd = "ITMBookOpenSD";
 		static constexpr const char* kBookCloseSd = "ITMBookCloseSD";
@@ -147,7 +149,6 @@ namespace vr3dirp
 		void Close();
 
 		void Update(float a_delta) override;
-		void OnHover(bool a_activate, Hand& a_hand) override;
 
 		void VirtualParent(NiAVObject* a_new, NiTransform& a_offset);
 		void SetFloatingTarget(const NiTransform& a_world_transform);
@@ -188,6 +189,7 @@ namespace vr3dirp
 		void ClearPageView(bool a_left);
 		void RestoreSpellVisual();
 		void InitializeHandState();
+		void HandleInteractionHover(bool a_activate, Hand& a_hand);
 
 		GrabNode* grab_node;
 
@@ -275,7 +277,7 @@ namespace vr3dirp
 
 	private:
 		// TODO: make setting
-		static constexpr float kGrabHoldTime = 1.0f;
+		static constexpr float kGrabHoldTime = 0.5f;
 
 		void Release();
 
@@ -332,6 +334,11 @@ namespace vr3dirp
 
 		void OnHover(bool a_activate, Hand& a_hand) override
 		{
+			if (a_activate && hover_hand && hover_hand != std::addressof(a_hand) && pointing_active)
+			{
+				Deactivate();
+			}
+
 			hover_hand = std::addressof(a_hand);
 			pending_active = a_activate;
 			transition_elapsed = 0.0f;
@@ -362,16 +369,7 @@ namespace vr3dirp
 			}
 			else
 			{
-				hand_mode.Release();
-				if (auto* equipped = pc->GetEquippedObject(hover_hand->IsLeft());
-					equipped && equipped->As<RE::SpellItem>() && force_sheathed)
-				{
-					pc->DrawWeaponMagicHands(true);
-					force_sheathed = false;
-				}
-
-				smoothing_handle_l.Release();
-				smoothing_handle_r.Release();
+				Deactivate();
 			}
 
 			pointing_active = pending_active;
@@ -380,6 +378,26 @@ namespace vr3dirp
 
 	private:
 		static constexpr float kTransitionDelay = 0.2f;
+
+		void Deactivate()
+		{
+			hand_mode.Release();
+
+			auto* pc = RE::PlayerCharacter::GetSingleton();
+			if (hover_hand)
+			{
+				if (auto* equipped = pc->GetEquippedObject(hover_hand->IsLeft());
+					equipped && equipped->As<RE::SpellItem>() && force_sheathed)
+				{
+					pc->DrawWeaponMagicHands(true);
+				}
+			}
+			force_sheathed = false;
+
+			smoothing_handle_l.Release();
+			smoothing_handle_r.Release();
+			pointing_active = false;
+		}
 
 		ModeHandle      hand_mode;
 		SmoothingHandle smoothing_handle_l;
@@ -391,12 +409,28 @@ namespace vr3dirp
 		float           transition_elapsed{};
 	};
 
+	class FloatingBookHandClaim : public Behavior
+	{
+	public:
+		using Behavior::Behavior;
+
+		void OnHover(bool a_activate, Hand& a_hand) override
+		{
+			if (auto* book = dynamic_cast<Book*>(parent->GetRoot()))
+			{
+				book->HandleInteractionHover(a_activate, a_hand);
+			}
+		}
+	};
+
 	class BlockInputOnHover : public Behavior
 	{
 	public:
-		BlockInputOnHover(Widget* a_parent, InputBlock a_blocks) :
+		BlockInputOnHover(
+			Widget* a_parent, InputBlock a_blocks, const bool* a_left_hand_mode) :
 			Behavior(a_parent),
-			blocks(a_blocks)
+			blocks(a_blocks),
+			left_hand_mode(a_left_hand_mode)
 		{}
 
 		void OnHover(bool a_activate, Hand& a_hand) override
@@ -405,7 +439,16 @@ namespace vr3dirp
 
 			if (a_activate)
 			{
-				handle = InputBlockManager::GetSingleton()->Acquire(a_hand.IsLeft(), blocks);
+				auto hand_blocks = blocks;
+				const bool is_main_hand = a_hand.IsLeft() == *left_hand_mode;
+				if (!is_main_hand)
+				{
+					hand_blocks = static_cast<InputBlock>(std::to_underlying(hand_blocks) &
+						~std::to_underlying(InputBlock::kActivatePickLength));
+				}
+
+				handle =
+					InputBlockManager::GetSingleton()->Acquire(a_hand.IsLeft(), hand_blocks);
 			}
 			else
 			{
@@ -415,6 +458,7 @@ namespace vr3dirp
 
 	private:
 		InputBlock                      blocks;
+		const bool*                     left_hand_mode;
 		std::array<InputBlockHandle, 2> handles;
 	};
 

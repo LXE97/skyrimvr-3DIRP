@@ -274,6 +274,8 @@ namespace vr3dirp
 			manager->Set("fFloatingBookRotateX", rotation.x);
 			manager->Set("fFloatingBookRotateY", rotation.y);
 			manager->Set("fFloatingBookRotateZ", rotation.z);
+
+			manager->Save();
 		}
 
 		BookCallbacks MakeBookCallbacks(bool a_floating = false)
@@ -481,10 +483,26 @@ namespace vr3dirp
 		}
 	}
 
+	void OnMenuOpenClose(RE::MenuOpenCloseEvent const* evn)
+	{
+		if (!evn->opening && std::strcmp(evn->menuName.data(), "Journal Menu") == 0)
+		{
+			if (auto setting = RE::GetINISetting("bLeftHandedMode:VRInput"))
+			{
+				g_left_hand_mode = setting->GetBool();
+			}
+		}
+	}
+
 	void OnEquipped(const RE::TESEquipEvent* event) { equipment_checker::OnEquipEvent(event); }
 
 	static void PlayerUpdate()
 	{
+		if (auto* setting = RE::GetINISetting("bLeftHandedMode:VRInput"))
+		{
+			g_left_hand_mode = setting->GetBool();
+		}
+
 		art_addon::ArtAddonManager::GetSingleton()->Update();
 		vr_gui::Controller::GetSingleton()->Update();
 
@@ -593,13 +611,15 @@ namespace vr3dirp
 
 	static void CreateHolsters()
 	{
+		bool       created = false;
 		const auto holster_settings = ReadHolsterSettings();
 		auto*      controller = vr_gui::Controller::GetSingleton();
 
-		auto add_holster = [controller](std::unique_ptr<vr_gui::Holster> a_holster) {
+		auto add_holster = [controller, &created](std::unique_ptr<vr_gui::Holster> a_holster) {
 			auto* holster =
 				static_cast<vr_gui::Holster*>(controller->AddRoot(std::move(a_holster)));
 			g_holsters.push_back(holster);
+			created = true;
 		};
 
 		auto has_action = [](BookType a_primary, BookType a_secondary, BookType a_both) {
@@ -673,6 +693,12 @@ namespace vr3dirp
 					holster_settings.allow_empty_arrow_hand);
 				add_holster(std::move(temp));
 			}
+		}
+
+		if (created)
+		{
+			vr_gui::Controller::GetSingleton()->ShowHitboxes(
+				settings::Manager::GetSingleton()->Get("bShowDebugSpheres") != 0.0f);
 		}
 	}
 

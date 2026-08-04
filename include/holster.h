@@ -1,5 +1,6 @@
 #pragma once
 #include "equipment_checker.h"
+#include "main_plugin.h"
 #include "vr_gui.h"
 
 namespace vr_gui
@@ -66,7 +67,8 @@ namespace vr_gui
 		{
 			if (a_hand.GetState() == Hand::State::kReady &&
 				(allow_empty_arrow_hand ||
-					equipment_checker::IsHandEmpty(a_hand.IsLeft(), false)))
+					equipment_checker::IsHandEmpty(
+						a_hand.IsLeft(), false, vr3dirp::g_left_hand_mode)))
 			{
 				if (hand_filter == vrinput::Hand::kLeft && a_hand.IsLeft() ||
 					hand_filter == vrinput::Hand::kRight && !a_hand.IsLeft() ||

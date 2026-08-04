@@ -2,6 +2,7 @@
 
 #include "equipment_checker.h"
 #include "helper_game.h"
+#include "main_plugin.h"
 
 namespace vr3dirp
 {
@@ -89,7 +90,8 @@ namespace vr3dirp
 	{
 		if (auto* actor = GetObjectReference()->As<RE::Actor>())
 		{
-			if (stored_spell && equipment_checker::IsHandEmpty(isLeft))
+			if (stored_spell &&
+				equipment_checker::IsHandEmpty(isLeft, true, g_left_hand_mode))
 			{
 				if (auto* equip_manager = RE::ActorEquipManager::GetSingleton())
 				{
@@ -146,12 +148,13 @@ namespace vr3dirp
 			Hand::Mode::kFist, Hand::ModePriority::kPassive);
 
 		// Block inputs on the book hand for as long as it exists.
+		const bool is_main_hand = isLeft == g_left_hand_mode;
 		block_handle = InputBlockManager::GetSingleton()->Acquire(isLeft,
 			InputBlock::kPrimary | InputBlock::kSecondary | InputBlock::kHiggs |
-				(!isLeft ? InputBlock::kActivatePickLength : InputBlock::kNone));
+				(is_main_hand ? InputBlock::kActivatePickLength : InputBlock::kNone));
 	}
 
-	void Book::OnHover(bool a_activate, Hand& a_hand)
+	void Book::HandleInteractionHover(bool a_activate, Hand& a_hand)
 	{
 		if (isFloating)
 		{
@@ -167,7 +170,6 @@ namespace vr3dirp
 				isLeft = usesLeftLayout;
 			}
 		}
-		Widget::OnHover(a_activate, a_hand);
 	}
 
 	Book::Book(std::string_view a_model_path, vrinput::Hand a_hand,
@@ -258,10 +260,12 @@ namespace vr3dirp
 			// Interaction Volume
 			t.translate = { -8, -2, 4 };
 			auto interaction_volume = AddChild<BasicHitbox>(t, NiPoint3(19, 14, 5));
+			if (isFloating) { interaction_volume->AddBehavior<FloatingBookHandClaim>(); }
 			interaction_volume->AddBehavior<HandInteractionMode>();
 			interaction_volume->AddBehavior<BlockInputOnHover>(
 				static_cast<InputBlock>(std::to_underlying(InputBlock::kAll) &
-					~std::to_underlying(InputBlock::kVrikGestures)));
+					~std::to_underlying(InputBlock::kVrikGestures)),
+				&g_left_hand_mode);
 			interaction_volume->AddBehavior<BookPageTurn>();
 			interaction_volume->SetPriority(90);
 
@@ -772,5 +776,5 @@ namespace vr3dirp
 		return false;
 	}
 
-	void Book::DrawExtents(bool show) { Widget::DrawExtents(show); }
+	void Book::DrawExtents(bool show) { }
 }

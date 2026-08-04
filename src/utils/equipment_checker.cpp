@@ -35,14 +35,14 @@ namespace equipment_checker
 		g_equipment_dirty = true;
 	}
 
-	bool IsHandEmpty(bool a_isLeft, bool a_allow_empty_arrow_hand)
+	bool IsHandEmpty(bool a_isLeft, bool a_allow_empty_arrow_hand, bool a_left_hand_mode)
 	{
 		auto* player = RE::PlayerCharacter::GetSingleton();
 		if (!player) { return true; }
 
 		if (!player->IsWeaponDrawn()) { return true; }
 
-		const bool equipment_left = a_isLeft;
+		const bool equipment_left = a_isLeft != a_left_hand_mode;
 		auto*      equipped = player->GetEquippedObject(equipment_left);
 		if (equipped && equipped->As<RE::SpellItem>()) { return true; }
 
