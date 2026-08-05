@@ -384,8 +384,8 @@ namespace vr3dirp
 	static void OnEquipped(const RE::TESEquipEvent* event);
 	static void OnObjectiveStateChanged(const RE::ObjectiveState::Event* a_event);
 
-	void        SummonBook(bool isLeft, BookType a_type, bool a_floating = false);
-	static void CreateHolsters();
+	void SummonBook(bool isLeft, BookType a_type, bool a_floating = false);
+	static void CreateHolsters(PlayerCharacter* a_player, NiAVObject* a_player_root);
 
 	PapyrusVRAPI* g_papyrusvr{};
 
@@ -394,8 +394,6 @@ namespace vr3dirp
 	bool                          g_show_debug_spheres = false;
 	bool                          g_createHolstersPending = false;
 	std::vector<vr_gui::Holster*> g_holsters;
-
-	PlayerCharacter* pc{};
 
 	void VrikActionSummonJournalLeft(int) { SummonBook(true, BookType::kJournal); }
 
@@ -506,10 +504,17 @@ namespace vr3dirp
 		art_addon::ArtAddonManager::GetSingleton()->Update();
 		vr_gui::Controller::GetSingleton()->Update();
 
-		if (g_createHolstersPending && pc->Get3D())
+		if (g_createHolstersPending)
 		{
-			CreateHolsters();
-			g_createHolstersPending = false;
+			if (auto* player = PlayerCharacter::GetSingleton())
+			{
+				if (auto* player_root = player->Get3D())
+				{
+					
+					CreateHolsters(player, player_root);
+					g_createHolstersPending = false;
+				}
+			}
 		}
 	}
 
@@ -527,7 +532,6 @@ namespace vr3dirp
 		settings::Manager::GetSingleton()->Reload();
 		ApplySettings();
 		vr_gui::Controller::GetSingleton()->Init();
-		pc = PlayerCharacter::GetSingleton();
 	}
 
 	void ApplySettings()
@@ -563,6 +567,9 @@ namespace vr3dirp
 		if (auto book = vr_gui::Controller::GetSingleton()->FindRoot<Book>()) { book->Close(); }
 		else
 		{
+			auto* player = PlayerCharacter::GetSingleton();
+			if (!player) { return; }
+
 			auto                  hand_node = vrinput::GetHandNode(vrinput::Hand(isLeft), false);
 			std::unique_ptr<Book> temp;
 
@@ -570,7 +577,8 @@ namespace vr3dirp
 			{
 			case BookType::kJournal:
 				temp = std::make_unique<Journal>(
-					a_floating ? vrinput::Hand::kBoth : vrinput::Hand(isLeft), pc->AsReference(),
+					a_floating ? vrinput::Hand::kBoth : vrinput::Hand(isLeft),
+					player->AsReference(),
 					a_floating ? nullptr : hand_node, ReadBookSettings(),
 					MakeBookCallbacks(a_floating), ReadJournalSettings(a_floating),
 					GetJournalState(), MakeJournalCallbacks());
@@ -582,7 +590,8 @@ namespace vr3dirp
 
 			default:
 				temp = std::make_unique<Book>(Book::kModelPath,
-					a_floating ? vrinput::Hand::kBoth : vrinput::Hand(isLeft), pc->AsReference(),
+					a_floating ? vrinput::Hand::kBoth : vrinput::Hand(isLeft),
+					player->AsReference(),
 					a_floating ? nullptr : hand_node, ReadBookSettings(),
 					MakeBookCallbacks(a_floating));
 			}
@@ -591,7 +600,7 @@ namespace vr3dirp
 			{
 				if (a_floating)
 				{
-					auto* player_root = pc->Get3D();
+					auto* player_root = player->Get3D();
 					auto* head_node =
 						player_root ? player_root->GetObjectByName("NPC Head [Head]") : nullptr;
 					if (!head_node) { return; }
@@ -609,7 +618,7 @@ namespace vr3dirp
 		}
 	}
 
-	static void CreateHolsters()
+	static void CreateHolsters(PlayerCharacter* a_player, NiAVObject* a_player_root)
 	{
 		bool       created = false;
 		const auto holster_settings = ReadHolsterSettings();
@@ -641,14 +650,14 @@ namespace vr3dirp
 		if (has_action(holster_settings.belly_primary, holster_settings.belly_secondary,
 				holster_settings.belly_both))
 		{
-			auto belly_node = pc->Get3D()->GetObjectByName("NPC Spine1 [Spn1]");
+			auto belly_node = a_player_root->GetObjectByName("NPC Spine1 [Spn1]");
 			if (belly_node)
 			{
 				NiTransform t{};
 				t.translate = holster_settings.belly_offset;
 
-				auto temp = std::make_unique<vr_gui::Holster>(holster_settings.belly_radius, pc,
-					belly_node, t, vrinput::Hand::kBoth,
+				auto temp = std::make_unique<vr_gui::Holster>(holster_settings.belly_radius,
+					a_player, belly_node, t, vrinput::Hand::kBoth,
 					make_callbacks(holster_settings.belly_primary, holster_settings.belly_secondary,
 						holster_settings.belly_both));
 				add_holster(std::move(temp));
@@ -665,15 +674,15 @@ namespace vr3dirp
 			holster_settings.right_shoulder_secondary, holster_settings.right_shoulder_both);
 		if (!create_left && !create_right) { return; }
 
-		auto head_node = pc->Get3D()->GetObjectByName("NPC Head [Head]");
+		auto head_node = a_player_root->GetObjectByName("NPC Head [Head]");
 		if (head_node)
 		{
 			NiTransform t{};
 			if (create_left)
 			{
 				t.translate = holster_settings.shoulder_offset;
-				auto temp = std::make_unique<vr_gui::Holster>(holster_settings.shoulder_radius, pc,
-					head_node, t, vrinput::Hand::kLeft,
+				auto temp = std::make_unique<vr_gui::Holster>(holster_settings.shoulder_radius,
+					a_player, head_node, t, vrinput::Hand::kLeft,
 					make_callbacks(holster_settings.left_shoulder_primary,
 						holster_settings.left_shoulder_secondary,
 						holster_settings.left_shoulder_both),
@@ -685,8 +694,8 @@ namespace vr3dirp
 			{
 				t.translate = holster_settings.shoulder_offset;
 				t.translate.x = -t.translate.x;
-				auto temp = std::make_unique<vr_gui::Holster>(holster_settings.shoulder_radius, pc,
-					head_node, t, vrinput::Hand::kRight,
+				auto temp = std::make_unique<vr_gui::Holster>(holster_settings.shoulder_radius,
+					a_player, head_node, t, vrinput::Hand::kRight,
 					make_callbacks(holster_settings.right_shoulder_primary,
 						holster_settings.right_shoulder_secondary,
 						holster_settings.right_shoulder_both),
