@@ -1,6 +1,7 @@
 #include "main_plugin.h"
 
 #include "art_addon.h"
+#include "backpack.h"
 #include "book.h"
 #include "equipment_checker.h"
 #include "helper_game.h"
@@ -19,26 +20,29 @@ namespace vr3dirp
 {
 	using namespace RE;
 
-	enum class BookType
+	enum class UIType
 	{
 		kDisabled = 0,
 		kJournal,
 		kSpellbook,
+		kBackpack,
 		kNone
 	};
 
-	BookType ParseBookType(float a_value)
+	UIType ParseUIType(float a_value)
 	{
 		switch (static_cast<int>(a_value))
 		{
-		case static_cast<int>(BookType::kJournal):
-			return BookType::kJournal;
-		case static_cast<int>(BookType::kSpellbook):
-			return BookType::kSpellbook;
-		case static_cast<int>(BookType::kNone):
-			return BookType::kNone;
+		case static_cast<int>(UIType::kJournal):
+			return UIType::kJournal;
+		case static_cast<int>(UIType::kSpellbook):
+			return UIType::kSpellbook;
+		case static_cast<int>(UIType::kBackpack):
+			return UIType::kBackpack;
+		case static_cast<int>(UIType::kNone):
+			return UIType::kNone;
 		default:
-			return BookType::kDisabled;
+			return UIType::kDisabled;
 		}
 	}
 
@@ -49,15 +53,15 @@ namespace vr3dirp
 		NiPoint3 shoulder_offset;
 		float    belly_radius;
 		NiPoint3 belly_offset;
-		BookType left_shoulder_primary;
-		BookType left_shoulder_secondary;
-		BookType left_shoulder_both;
-		BookType right_shoulder_primary;
-		BookType right_shoulder_secondary;
-		BookType right_shoulder_both;
-		BookType belly_primary;
-		BookType belly_secondary;
-		BookType belly_both;
+		UIType   left_shoulder_primary;
+		UIType   left_shoulder_secondary;
+		UIType   left_shoulder_both;
+		UIType   right_shoulder_primary;
+		UIType   right_shoulder_secondary;
+		UIType   right_shoulder_both;
+		UIType   belly_primary;
+		UIType   belly_secondary;
+		UIType   belly_both;
 	};
 
 	namespace
@@ -341,15 +345,15 @@ namespace vr3dirp
 				.belly_radius = manager->Get("fBellyRadius"),
 				.belly_offset = { manager->Get("fBellyX"), manager->Get("fBellyY"),
 					manager->Get("fBellyZ") },
-				.left_shoulder_primary = ParseBookType(manager->Get("iLeftShoulderPrimary")),
-				.left_shoulder_secondary = ParseBookType(manager->Get("iLeftShoulderSecondary")),
-				.left_shoulder_both = ParseBookType(manager->Get("iLeftShoulderBoth")),
-				.right_shoulder_primary = ParseBookType(manager->Get("iRightShoulderPrimary")),
-				.right_shoulder_secondary = ParseBookType(manager->Get("iRightShoulderSecondary")),
-				.right_shoulder_both = ParseBookType(manager->Get("iRightShoulderBoth")),
-				.belly_primary = ParseBookType(manager->Get("iBellyPrimary")),
-				.belly_secondary = ParseBookType(manager->Get("iBellySecondary")),
-				.belly_both = ParseBookType(manager->Get("iBellyBoth")),
+				.left_shoulder_primary = ParseUIType(manager->Get("iLeftShoulderPrimary")),
+				.left_shoulder_secondary = ParseUIType(manager->Get("iLeftShoulderSecondary")),
+				.left_shoulder_both = ParseUIType(manager->Get("iLeftShoulderBoth")),
+				.right_shoulder_primary = ParseUIType(manager->Get("iRightShoulderPrimary")),
+				.right_shoulder_secondary = ParseUIType(manager->Get("iRightShoulderSecondary")),
+				.right_shoulder_both = ParseUIType(manager->Get("iRightShoulderBoth")),
+				.belly_primary = ParseUIType(manager->Get("iBellyPrimary")),
+				.belly_secondary = ParseUIType(manager->Get("iBellySecondary")),
+				.belly_both = ParseUIType(manager->Get("iBellyBoth")),
 			};
 		}
 
@@ -384,7 +388,8 @@ namespace vr3dirp
 	static void OnEquipped(const RE::TESEquipEvent* event);
 	static void OnObjectiveStateChanged(const RE::ObjectiveState::Event* a_event);
 
-	void SummonBook(bool isLeft, BookType a_type, bool a_floating = false);
+	void SummonUI(bool isLeft, UIType a_type, bool a_floating = false);
+
 	static void CreateHolsters(PlayerCharacter* a_player, NiAVObject* a_player_root);
 
 	PapyrusVRAPI* g_papyrusvr{};
@@ -395,11 +400,11 @@ namespace vr3dirp
 	bool                          g_createHolstersPending = false;
 	std::vector<vr_gui::Holster*> g_holsters;
 
-	void VrikActionSummonJournalLeft(int) { SummonBook(true, BookType::kJournal); }
+	void VrikActionSummonJournalLeft(int) { SummonUI(true, UIType::kJournal); }
 
-	void VrikActionSummonJournalRight(int) { SummonBook(false, BookType::kJournal); }
+	void VrikActionSummonJournalRight(int) { SummonUI(false, UIType::kJournal); }
 
-	void VrikActionSummonFloatingJournal(int) { SummonBook(true, BookType::kJournal, true); }
+	void VrikActionSummonFloatingJournal(int) { SummonUI(true, UIType::kJournal, true); }
 
 	void Init()
 	{
@@ -496,11 +501,6 @@ namespace vr3dirp
 
 	static void PlayerUpdate()
 	{
-		if (auto* setting = RE::GetINISetting("bLeftHandedMode:VRInput"))
-		{
-			g_left_hand_mode = setting->GetBool();
-		}
-
 		art_addon::ArtAddonManager::GetSingleton()->Update();
 		vr_gui::Controller::GetSingleton()->Update();
 
@@ -510,7 +510,6 @@ namespace vr3dirp
 			{
 				if (auto* player_root = player->Get3D())
 				{
-					
 					CreateHolsters(player, player_root);
 					g_createHolstersPending = false;
 				}
@@ -560,39 +559,51 @@ namespace vr3dirp
 			settings::Manager::GetSingleton()->Get("bShowDebugSpheres") != 0.0f);
 	}
 
-	void SummonBook(bool isLeft, BookType a_type, bool a_floating)
+	void SummonUI(bool isLeft, UIType a_type, bool a_floating)
 	{
-		if (a_type == BookType::kDisabled) { return; }
+		if (a_type == UIType::kDisabled) { return; }
 
-		if (auto book = vr_gui::Controller::GetSingleton()->FindRoot<Book>()) { book->Close(); }
+		auto* controller = vr_gui::Controller::GetSingleton();
+		if (auto* book = controller->FindRoot<Book>()) { book->Close(); }
+		else if (auto* backpack = controller->FindRoot<Backpack>())
+		{
+			controller->MarkForDelete(backpack);
+		}
 		else
 		{
 			auto* player = PlayerCharacter::GetSingleton();
 			if (!player) { return; }
 
 			auto                  hand_node = vrinput::GetHandNode(vrinput::Hand(isLeft), false);
-			std::unique_ptr<Book> temp;
+			std::unique_ptr<Widget> temp;
 
 			switch (a_type)
 			{
-			case BookType::kJournal:
+			case UIType::kJournal:
 				temp = std::make_unique<Journal>(
 					a_floating ? vrinput::Hand::kBoth : vrinput::Hand(isLeft),
-					player->AsReference(),
-					a_floating ? nullptr : hand_node, ReadBookSettings(),
+					player->AsReference(), a_floating ? nullptr : hand_node, ReadBookSettings(),
 					MakeBookCallbacks(a_floating), ReadJournalSettings(a_floating),
 					GetJournalState(), MakeJournalCallbacks());
 
 				break;
 
-			case BookType::kSpellbook:
+			case UIType::kSpellbook:
 				break;
+
+			case UIType::kBackpack:
+			{
+				if (a_floating) { return; }
+				BackpackSettings backpack_settings{};
+				temp = std::make_unique<Backpack>(backpack_settings.model_path, isLeft,
+					player->AsReference(), backpack_settings);
+				break;
+			}
 
 			default:
 				temp = std::make_unique<Book>(Book::kModelPath,
 					a_floating ? vrinput::Hand::kBoth : vrinput::Hand(isLeft),
-					player->AsReference(),
-					a_floating ? nullptr : hand_node, ReadBookSettings(),
+					player->AsReference(), a_floating ? nullptr : hand_node, ReadBookSettings(),
 					MakeBookCallbacks(a_floating));
 			}
 
@@ -600,6 +611,8 @@ namespace vr3dirp
 			{
 				if (a_floating)
 				{
+					auto* new_book = dynamic_cast<Book*>(temp.get());
+					if (!new_book) { return; }
 					auto* player_root = player->Get3D();
 					auto* head_node =
 						player_root ? player_root->GetObjectByName("NPC Head [Head]") : nullptr;
@@ -610,10 +623,10 @@ namespace vr3dirp
 					// Preserve the scale calculated by the Book constructor.
 					desiredWorld.scale = temp->GetTransform().scale;
 
-					temp->SetTransform(desiredWorld);
-					temp->SetFloatingTarget(desiredWorld);
+					new_book->SetTransform(desiredWorld);
+					new_book->SetFloatingTarget(desiredWorld);
 				}
-				vr_gui::Controller::GetSingleton()->AddRoot(std::move(temp));
+				controller->AddRoot(std::move(temp));
 			}
 		}
 	}
@@ -631,17 +644,17 @@ namespace vr3dirp
 			created = true;
 		};
 
-		auto has_action = [](BookType a_primary, BookType a_secondary, BookType a_both) {
-			return a_primary != BookType::kDisabled || a_secondary != BookType::kDisabled ||
-				a_both != BookType::kDisabled;
+		auto has_action = [](UIType a_primary, UIType a_secondary, UIType a_both) {
+			return a_primary != UIType::kDisabled || a_secondary != UIType::kDisabled ||
+				a_both != UIType::kDisabled;
 		};
-		auto make_callback = [](BookType a_type) -> HolsterCallback {
-			if (a_type == BookType::kDisabled) { return {}; }
+		auto make_callback = [](UIType a_type) -> HolsterCallback {
+			if (a_type == UIType::kDisabled) { return {}; }
 
-			return [a_type](Hand& a_hand) { SummonBook(a_hand.IsLeft(), a_type); };
+			return [a_type](Hand& a_hand) { SummonUI(a_hand.IsLeft(), a_type); };
 		};
 		auto make_callbacks = [&make_callback](
-								  BookType a_primary, BookType a_secondary, BookType a_both) {
+								  UIType a_primary, UIType a_secondary, UIType a_both) {
 			return HolsterCallbacks{ .primary = make_callback(a_primary),
 				.secondary = make_callback(a_secondary),
 				.both = make_callback(a_both) };

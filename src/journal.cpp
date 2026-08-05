@@ -1,6 +1,7 @@
 #include "journal.h"
 
 #include "text_manager.h"
+#include "vr_gui_utils.h"
 
 namespace vr3dirp
 {

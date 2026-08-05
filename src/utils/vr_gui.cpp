@@ -654,7 +654,16 @@ namespace vr_gui
 			if (!parent)
 			{
 				AddModel(kDebugModelPath, true, [radius = this->radius](ArtAddon* sphere) {
-					if (sphere && sphere->Get3D()) { sphere->Get3D()->local.scale = radius; }
+					if (sphere && sphere->Get3D())
+					{
+						// The addon's root transform is overwritten whenever the widget moves.
+						// Scale the model's internal sphere node so the radius persists.
+						if (auto* geometry =
+								sphere->Get3D()->GetObjectByName("Z4K_OVERLAPSPHERE"))
+						{
+							geometry->local.scale *= radius;
+						}
+					}
 				});
 			}
 			else
