@@ -265,7 +265,7 @@ namespace vr3dirp
 			interaction_volume->AddBehavior<BlockInputOnHover>(
 				static_cast<InputBlock>(std::to_underlying(InputBlock::kAll) &
 					~std::to_underlying(InputBlock::kVrikGestures)),
-				&g_left_hand_mode);
+				g_left_hand_mode);
 			interaction_volume->AddBehavior<BookPageTurn>();
 			interaction_volume->SetPriority(90);
 

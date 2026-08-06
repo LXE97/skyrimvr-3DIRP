@@ -8,6 +8,7 @@
 #include "helper_math.h"
 #include "holster.h"
 #include "hooks.h"
+#include "inventory_manager.h"
 #include "journal.h"
 #include "menu_checker.h"
 #include "mod_event_sink.hpp"
@@ -124,7 +125,7 @@ namespace vr3dirp
 			return true;
 		}
 
-		void SaveQuestForms(SKSE::SerializationInterface* a_intfc)
+		void SaveCosave(SKSE::SerializationInterface* a_intfc)
 		{
 			JournalState state;
 			{
@@ -141,10 +142,13 @@ namespace vr3dirp
 			{
 				SKSE::log::error("Unable to serialize hidden quests");
 			}
+
+			InventoryManager::GetSingleton()->OnSaveGame(a_intfc);
 		}
 
-		void LoadQuestForms(SKSE::SerializationInterface* a_intfc)
+		void LoadCosave(SKSE::SerializationInterface* a_intfc)
 		{
+			InventoryManager::GetSingleton()->Revert();
 			NewQuestSet    new_quests;
 			HiddenQuestSet hidden_quests{ kDefaultHiddenQuest };
 			std::uint32_t  type{};
@@ -153,6 +157,11 @@ namespace vr3dirp
 
 			while (a_intfc->GetNextRecordInfo(type, version, length))
 			{
+				if (InventoryManager::GetSingleton()->LoadRecord(
+						a_intfc, type, version, length))
+				{
+					continue;
+				}
 				if (type != kNewQuestsRecord && type != kHiddenQuestsRecord) { continue; }
 				if (version != kQuestRecordVersion)
 				{
@@ -176,6 +185,7 @@ namespace vr3dirp
 
 		void RevertQuestForms(SKSE::SerializationInterface*)
 		{
+			InventoryManager::GetSingleton()->Revert();
 			std::unique_lock lock(g_quest_state_mutex);
 			g_new_quests.clear();
 			ResetHiddenQuestsLocked();
@@ -386,6 +396,9 @@ namespace vr3dirp
 	static bool OnSecondaryDebugButton(const vrinput::ModInputEvent& e);
 
 	static void OnEquipped(const RE::TESEquipEvent* event);
+	static void OnContainerChanged(const RE::TESContainerChangedEvent* a_event);
+	static void OnHiggsDropped(bool a_is_left, RE::TESObjectREFR* a_reference);
+	static void OnHiggsStashed(bool a_is_left, RE::TESForm* a_form);
 	static void OnObjectiveStateChanged(const RE::ObjectiveState::Event* a_event);
 
 	void SummonUI(bool isLeft, UIType a_type, bool a_floating = false);
@@ -420,6 +433,8 @@ namespace vr3dirp
 		menuchecker::begin();
 
 		RegisterVRInputCallback();
+		g_higgsInterface->AddDroppedCallback(OnHiggsDropped);
+		g_higgsInterface->AddStashedCallback(OnHiggsStashed);
 
 		g_vrikInterface->addGestureAction(VrikActionSummonJournalLeft, "Journal Left");
 		g_vrikInterface->addGestureAction(VrikActionSummonJournalRight, "Journal Right");
@@ -428,6 +443,10 @@ namespace vr3dirp
 		auto equip_sink = EventSink<RE::TESEquipEvent>::GetSingleton();
 		equip_sink->AddCallback(OnEquipped);
 		RE::ScriptEventSourceHolder::GetSingleton()->AddEventSink(equip_sink);
+
+		auto* container_sink = EventSink<RE::TESContainerChangedEvent>::GetSingleton();
+		container_sink->AddCallback(OnContainerChanged);
+		RE::ScriptEventSourceHolder::GetSingleton()->AddEventSink(container_sink);
 
 		auto* objective_sink = EventSink<RE::ObjectiveState::Event>::GetSingleton();
 		objective_sink->AddCallback(OnObjectiveStateChanged);
@@ -445,8 +464,8 @@ namespace vr3dirp
 	{
 		auto* serialization = SKSE::GetSerializationInterface();
 		serialization->SetUniqueID(kSerializationID);
-		serialization->SetSaveCallback(SaveQuestForms);
-		serialization->SetLoadCallback(LoadQuestForms);
+		serialization->SetSaveCallback(SaveCosave);
+		serialization->SetLoadCallback(LoadCosave);
 		serialization->SetRevertCallback(RevertQuestForms);
 	}
 
@@ -499,8 +518,27 @@ namespace vr3dirp
 
 	void OnEquipped(const RE::TESEquipEvent* event) { equipment_checker::OnEquipEvent(event); }
 
+	void OnContainerChanged(const RE::TESContainerChangedEvent* a_event)
+	{
+		InventoryManager::GetSingleton()->OnContainerChanged(a_event);
+	}
+
+	void OnHiggsDropped(bool a_is_left, RE::TESObjectREFR* a_reference)
+	{
+		if (auto* backpack = vr_gui::Controller::GetSingleton()->FindRoot<Backpack>())
+		{
+			backpack->OnHiggsDropped(a_is_left, a_reference);
+		}
+	}
+
+	void OnHiggsStashed(bool a_is_left, RE::TESForm* a_form)
+	{
+		InventoryManager::GetSingleton()->OnHiggsStashed(a_is_left, a_form);
+	}
+
 	static void PlayerUpdate()
 	{
+		InventoryManager::GetSingleton()->Update();
 		art_addon::ArtAddonManager::GetSingleton()->Update();
 		vr_gui::Controller::GetSingleton()->Update();
 
@@ -528,6 +566,7 @@ namespace vr3dirp
 
 	void OnGameLoad()
 	{
+		InventoryManager::GetSingleton()->OnGameLoad();
 		settings::Manager::GetSingleton()->Reload();
 		ApplySettings();
 		vr_gui::Controller::GetSingleton()->Init();

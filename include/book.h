@@ -1,6 +1,5 @@
 #pragma once
 
-#include "exclusive_hover_group.h"
 #include "ni_animator.h"
 #include "vr_gui.h"
 #include "vr_gui_input_block.h"

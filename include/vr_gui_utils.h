@@ -14,7 +14,7 @@ namespace vr_gui
 	public:
 		using Widget::Widget;
 
-		virtual bool TestOverlap(Hand& a_hand) const override;
+		bool TestOverlap(Hand& a_hand) const override;
 	};
 
 	class HandInteractionMode : public Behavior
@@ -102,7 +102,7 @@ namespace vr_gui
 	class BlockInputOnHover : public Behavior
 	{
 	public:
-		BlockInputOnHover(Widget* a_parent, InputBlock a_blocks, const bool* a_left_hand_mode) :
+		BlockInputOnHover(Widget* a_parent, InputBlock a_blocks,  bool a_left_hand_mode) :
 			Behavior(a_parent),
 			blocks(a_blocks),
 			left_hand_mode(a_left_hand_mode)
@@ -115,7 +115,7 @@ namespace vr_gui
 			if (a_activate)
 			{
 				auto       hand_blocks = blocks;
-				const bool is_main_hand = a_hand.IsLeft() == *left_hand_mode;
+				const bool is_main_hand = a_hand.IsLeft() == left_hand_mode;
 				if (!is_main_hand)
 				{
 					hand_blocks = static_cast<InputBlock>(std::to_underlying(hand_blocks) &
@@ -132,7 +132,7 @@ namespace vr_gui
 
 	private:
 		InputBlock                      blocks;
-		const bool*                     left_hand_mode;
+		 bool                     left_hand_mode;
 		std::array<InputBlockHandle, 2> handles;
 	};
 

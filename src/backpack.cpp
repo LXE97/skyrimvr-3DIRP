@@ -1,5 +1,7 @@
 #include "backpack.h"
 
+#include "vr_gui_utils.h"
+
 namespace vr3dirp
 {
 	using namespace RE;
@@ -51,20 +53,134 @@ namespace vr3dirp
 				return;
 			}
 			auto container_node = a->Get3D()->GetObjectByName("Container");
+			auto grid_node = a->Get3D()->GetObjectByName("Grid");
+			auto holster1_node = a->Get3D()->GetObjectByName("Holster1");
+			auto holster2_node = a->Get3D()->GetObjectByName("Holster2");
 
 			// widget layout construction
+			auto interaction_volume =
+				AddChild<Widget>(NiTransform{}, NiPoint3(10, 24, 33), a->Get3D());
+			interaction_volume->AddBehavior<BlockInputOnHover>(InputBlock::kPrimary |
+					InputBlock::kSecondary | InputBlock::kActivatePickLength,
+				false);
+			interaction_volume->SetPriority(90);
+
 			auto grab_handle =
-				AddChild<BackpackGrabNode>(NiTransform{}, NiPoint3(5, 5, 5), grab_node);
+				AddChild<BackpackGrabNode>(NiTransform{}, NiPoint3(5, 5, 4), grab_node);
 			grab_handle->SetPriority(5);
 			grab_handle->StartGrab();
 
-			auto container = AddChild<Widget>(NiTransform{}, NiPoint3(6, 12, 22), container_node);
+			item_container =
+				AddChild<BackpackContainer>(NiTransform{}, NiPoint3(9, 19, 25), container_node);
+			item_container->SetPriority(50);
+			//item_grid = AddChild<BackpackGrid>(NiTransform{}, NiPoint3(4, 4, 10), grid_node);
+
+			auto holster = AddChild<Widget>(NiTransform{}, NiPoint3(4, 4, 10), holster1_node);
 
 			SKSE::log::trace("backpack created with radius {} and scale {}", radius, local.scale);
 		});
 	}
 
 	Backpack::~Backpack() {}
+
+	void Backpack::Update(float)
+	{
+		auto*      manager = InventoryManager::GetSingleton();
+		const auto revision = manager->GetRevision();
+		if (revision == inventory_revision || !item_container || !item_grid) { return; }
+
+		const auto items = manager->GetItems();
+		item_container->Refresh(items);
+		item_grid->Refresh(items);
+		inventory_revision = revision;
+	}
+
+	bool Backpack::OnHiggsDropped(bool a_is_left, TESObjectREFR* a_dropped_reference)
+	{ return item_container && item_container->StoreDroppedObject(a_is_left, a_dropped_reference); }
+
+	InventoryItemWidget::InventoryItemWidget(
+		Widget* a_parent, NiTransform a_local, NiPoint3 a_halfextents, ShadowItem a_item) :
+		Widget(a_parent, std::move(a_local), a_halfextents),
+		item(std::move(a_item))
+	{}
+
+	void InventoryItemWidget::OnClick(bool a_activate, Hand& a_hand, MenuAction a_action)
+	{
+		if (!a_activate || a_action != MenuAction::kSecondary || !g_higgsInterface) { return; }
+
+		auto* player = PlayerCharacter::GetSingleton();
+		auto* object = TESForm::LookupByID<TESBoundObject>(item.id);
+		if (!player || !object || item.count <= 0 ||
+			!g_higgsInterface->CanGrabObject(a_hand.IsLeft()))
+		{
+			return;
+		}
+
+		InventoryManager::GetSingleton()->ExpectRemoval(
+			item.id, 1, InventoryActionSource::kUnknown);
+		auto dropped_handle = player->DropObject(object, item.extradata, 1);
+		InventoryManager::GetSingleton()->QueueHiggsGrab(
+			std::move(dropped_handle), a_hand.IsLeft());
+	}
+
+	bool BackpackContainer::ContainsWorldPoint(const NiPoint3& a_point) const
+	{
+		const auto local_point = GetWorld().Invert() * a_point;
+		return std::abs(local_point.x) <= extents.x && std::abs(local_point.y) <= extents.y &&
+			std::abs(local_point.z) <= extents.z;
+	}
+
+	bool BackpackContainer::StoreDroppedObject(bool, TESObjectREFR* a_reference)
+	{
+		auto* player = PlayerCharacter::GetSingleton();
+		auto* object = a_reference ? a_reference->GetBaseObject() : nullptr;
+		auto* object_3d = a_reference ? a_reference->Get3D(false) : nullptr;
+		if (!player || !object || !object_3d || !ContainsWorldPoint(object_3d->world.translate))
+		{
+			return false;
+		}
+
+		const auto placement = GetWorld().Invert() * object_3d->world;
+		const auto count = std::max(1, a_reference->extraList.GetCount());
+		InventoryManager::GetSingleton()->ExpectAddition(object->GetFormID(), count,
+			InventoryActionSource::kBackpackDrop, placement, RE::ObjectRefHandle(a_reference));
+		player->AddObjectToContainer(
+			object, std::addressof(a_reference->extraList), count, a_reference);
+		return true;
+	}
+
+	void BackpackContainer::Refresh(const std::vector<ShadowItem>& a_items)
+	{
+		ClearChildren();
+		for (const auto& item : a_items)
+		{
+			if (!item.placement3d) { continue; }
+			AddChild<InventoryItemWidget>(*item.placement3d, NiPoint3{ 1.5f, 1.5f, 1.5f }, item);
+		}
+	}
+
+	void BackpackGrid::Refresh(const std::vector<ShadowItem>& a_items)
+	{
+		auto sorted_items = a_items;
+		auto category = [](const ShadowItem& a_item) {
+			if (a_item.source != InventoryActionSource::kUnknown) { return 0; }
+			if (a_item.extradata && a_item.extradata->HasType<RE::ExtraHotkey>()) { return 1; }
+			auto* form = TESForm::LookupByID(a_item.id);
+			if (form && form->As<TESObjectARMO>()) { return 2; }
+			if (a_item.extradata && a_item.extradata->HasQuestObjectAlias()) { return 3; }
+			return 4;
+		};
+		std::ranges::stable_sort(
+			sorted_items, [&category](const ShadowItem& a_left, const ShadowItem& a_right) {
+				return category(a_left) < category(a_right);
+			});
+
+		ClearChildren();
+		for (const auto& item : sorted_items)
+		{
+			AddItem<InventoryItemWidget>(NiTransform{}, NiPoint3{ 1.0f, 1.0f, 1.0f }, item);
+		}
+	}
 
 	BackpackSettingsOwner::BackpackSettingsOwner(
 		BackpackSettings a_settings, BackpackCallbacks a_callbacks) :
