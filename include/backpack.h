@@ -2,12 +2,12 @@
 
 #include "exclusive_hover_group.h"
 #include "inventory_manager.h"
+#include "inventory_view_base.h"
 #include "ni_animator.h"
 #include "vr_gui.h"
 #include "vr_gui_input_block.h"
 
 #include <concepts>
-#include <limits>
 #include <utility>
 
 namespace vr3dirp
@@ -46,8 +46,9 @@ namespace vr3dirp
 		Backpack(std::string_view a_model_path, bool a_isLeft, TESObjectREFR* a_objectReference,
 			BackpackSettings a_settings, BackpackCallbacks a_callbacks = {});
 		~Backpack() override;
-		void Update(float a_delta) override;
 		bool OnHiggsDropped(bool a_is_left, TESObjectREFR* a_dropped_reference);
+
+		void DrawExtents(bool a_show) override {}
 
 		static constexpr float kDefaultWindowRadius = 80.f;
 
@@ -57,7 +58,10 @@ namespace vr3dirp
 	private:
 		BackpackContainer* item_container{};
 		BackpackGrid*      item_grid{};
-		std::uint64_t      inventory_revision{ std::numeric_limits<std::uint64_t>::max() };
+		std::uint64_t      inventory_listener_id{};
+
+		void RefreshInventory(const std::vector<ShadowItem>& a_items);
+		void ApplyInventoryChanges(const std::vector<InventoryChange>& a_changes);
 	};
 
 	class InventoryItemWidget : public Widget
@@ -68,12 +72,15 @@ namespace vr3dirp
 
 		void OnClick(bool a_activate, Hand& a_hand, MenuAction a_action) override;
 		[[nodiscard]] const ShadowItem& GetItem() const { return item; }
+		[[nodiscard]] bool              Matches(const ShadowItem& a_item) const;
+		void                            UpdateItem(ShadowItem a_item);
+		void                            DrawExtents(bool show) override;
 
 	private:
 		ShadowItem item;
 	};
 
-	class BackpackContainer : public Container
+	class BackpackContainer : public Container, private InventoryViewBase
 	{
 	public:
 		using Container::Container;
@@ -81,9 +88,18 @@ namespace vr3dirp
 		bool ContainsWorldPoint(const NiPoint3& a_point) const;
 		bool StoreDroppedObject(bool a_is_left, TESObjectREFR* a_reference);
 		void Refresh(const std::vector<ShadowItem>& a_items);
+		void ApplyChanges(const std::vector<InventoryChange>& a_changes)
+		{ InventoryViewBase::ApplyChanges(a_changes); }
+
+	private:
+		const std::vector<std::unique_ptr<Widget>>& GetItemChildren() const override;
+		bool                 ShouldDisplay(const ShadowItem& a_item) const override;
+		InventoryItemWidget* CreateWidget(const ShadowItem& a_item) override;
+		void UpdateWidget(InventoryItemWidget& a_widget, const ShadowItem& a_item) override;
+		void DeleteWidget(InventoryItemWidget& a_widget) override;
 	};
 
-	class BackpackGrid : public GridContainer
+	class BackpackGrid : public GridContainer, private InventoryViewBase
 	{
 	public:
 		BackpackGrid(Widget* a_parent, NiTransform a_local, NiPoint3 a_halfextents) :
@@ -91,6 +107,16 @@ namespace vr3dirp
 		{}
 
 		void Refresh(const std::vector<ShadowItem>& a_items);
+		void ApplyChanges(const std::vector<InventoryChange>& a_changes)
+		{ InventoryViewBase::ApplyChanges(a_changes); }
+
+	private:
+		const std::vector<std::unique_ptr<Widget>>& GetItemChildren() const override;
+		bool                 ShouldDisplay(const ShadowItem& a_item) const override;
+		InventoryItemWidget* CreateWidget(const ShadowItem& a_item) override;
+		void UpdateWidget(InventoryItemWidget& a_widget, const ShadowItem& a_item) override;
+		void DeleteWidget(InventoryItemWidget& a_widget) override;
+		void OnChangesApplied() override;
 	};
 
 	class BackpackGrabNode : public Widget

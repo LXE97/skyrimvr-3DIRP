@@ -53,6 +53,28 @@ namespace vr3dirp
 				a_intfc->ReadRecordData(a_transform.translate.z) == sizeof(float) &&
 				a_intfc->ReadRecordData(a_transform.scale) == sizeof(float);
 		}
+
+		bool SameInventoryIdentity(const ShadowItem& a_left, const ShadowItem& a_right)
+		{
+			if (a_left.id != a_right.id) { return false; }
+			if (a_left.unique_id || a_right.unique_id)
+			{
+				return a_left.unique_id && a_left.unique_id == a_right.unique_id;
+			}
+			if (a_left.extradata && a_right.extradata)
+			{
+				return a_left.extradata == a_right.extradata;
+			}
+			return true;
+		}
+
+		bool SameInventoryValue(const ShadowItem& a_left, const ShadowItem& a_right)
+		{
+			return SameInventoryIdentity(a_left, a_right) &&
+				a_left.placement3d == a_right.placement3d &&
+				a_left.extradata == a_right.extradata && a_left.count == a_right.count &&
+				a_left.stackable == a_right.stackable && a_left.source == a_right.source;
+		}
 	}
 
 	InventoryManager* InventoryManager::GetSingleton()
@@ -264,6 +286,7 @@ namespace vr3dirp
 			ScanPlayerInventory(true);
 			if (addition) { ApplyAction(event, pending ? &*pending : nullptr, source); }
 		}
+		if (!ready_events.empty()) { NotifyInventoryChanged(); }
 
 		std::deque<PendingHiggsGrab> grabs;
 		std::uint64_t current_frame{};
@@ -298,7 +321,11 @@ namespace vr3dirp
 		}
 	}
 
-	void InventoryManager::OnGameLoad() { ScanPlayerInventory(false); }
+	void InventoryManager::OnGameLoad()
+	{
+		ScanPlayerInventory(false);
+		NotifyInventoryChanged();
+	}
 
 	void InventoryManager::ScanPlayerInventory(bool a_remove_missing)
 	{
@@ -521,23 +548,29 @@ namespace vr3dirp
 			}
 		}
 
-		std::unique_lock lock(mutex_);
-		items_ = std::move(loaded_items);
-		++revision_;
+		{
+			std::unique_lock lock(mutex_);
+			items_ = std::move(loaded_items);
+			++revision_;
+		}
+		NotifyInventoryChanged();
 		return true;
 	}
 
 	void InventoryManager::Revert()
 	{
-		std::unique_lock lock(mutex_);
-		items_.clear();
-		ignored_forms_.clear();
-		pending_actions_.clear();
-		container_events_.clear();
-		pending_grabs_.clear();
-		frame_ = 0;
-		next_sequence_ = 0;
-		++revision_;
+		{
+			std::unique_lock lock(mutex_);
+			items_.clear();
+			ignored_forms_.clear();
+			pending_actions_.clear();
+			container_events_.clear();
+			pending_grabs_.clear();
+			frame_ = 0;
+			next_sequence_ = 0;
+			++revision_;
+		}
+		NotifyInventoryChanged();
 	}
 
 	std::vector<ShadowItem> InventoryManager::GetItems() const
@@ -558,30 +591,104 @@ namespace vr3dirp
 		return revision_;
 	}
 
+	std::uint64_t InventoryManager::AddInventoryChangedListener(
+		InventoryChangedCallback a_callback)
+	{
+		if (!a_callback) { return 0; }
+		std::unique_lock lock(mutex_);
+		const auto listener_id = next_listener_id_++;
+		inventory_listeners_.emplace(listener_id, std::move(a_callback));
+		return listener_id;
+	}
+
+	void InventoryManager::RemoveInventoryChangedListener(std::uint64_t a_listener_id)
+	{
+		std::unique_lock lock(mutex_);
+		inventory_listeners_.erase(a_listener_id);
+	}
+
+	void InventoryManager::NotifyInventoryChanged()
+	{
+		std::vector<InventoryChange> changes;
+		std::vector<InventoryChangedCallback> listeners;
+		{
+			std::unique_lock lock(mutex_);
+			for (const auto& previous : last_notified_items_)
+			{
+				if (std::ranges::none_of(items_, [&previous](const ShadowItem& a_item) {
+						return SameInventoryIdentity(previous, a_item);
+					}))
+				{
+					changes.push_back({ InventoryChangeType::kRemoved, previous });
+				}
+			}
+
+			for (const auto& item : items_)
+			{
+				auto previous = std::ranges::find_if(last_notified_items_,
+					[&item](const ShadowItem& a_previous) {
+						return SameInventoryIdentity(item, a_previous);
+					});
+				if (previous == last_notified_items_.end())
+				{
+					changes.push_back({ InventoryChangeType::kAdded, item });
+				}
+				else if (!SameInventoryValue(*previous, item))
+				{
+					changes.push_back({ InventoryChangeType::kUpdated, item });
+				}
+			}
+
+			last_notified_items_ = items_;
+			if (changes.empty()) { return; }
+			listeners.reserve(inventory_listeners_.size());
+			for (const auto& [id, listener] : inventory_listeners_)
+			{
+				if (listener) { listeners.push_back(listener); }
+			}
+		}
+
+		for (const auto& listener : listeners) { listener(changes); }
+	}
+
 	bool InventoryManager::SetPlacement(
 		RE::FormID a_form_id, std::optional<RE::NiTransform> a_placement)
 	{
-		std::unique_lock lock(mutex_);
-		auto item = std::ranges::find(items_, a_form_id, &ShadowItem::id);
-		if (item == items_.end()) { return false; }
-		item->placement3d = std::move(a_placement);
-		++revision_;
+		{
+			std::unique_lock lock(mutex_);
+			auto item = std::ranges::find(items_, a_form_id, &ShadowItem::id);
+			if (item == items_.end()) { return false; }
+			if (item->placement3d == a_placement) { return true; }
+			item->placement3d = std::move(a_placement);
+			++revision_;
+		}
+		NotifyInventoryChanged();
 		return true;
 	}
 
 	void InventoryManager::IgnoreForm(RE::FormID a_form_id)
 	{
-		std::unique_lock lock(mutex_);
-		ignored_forms_.insert(a_form_id);
-		std::erase_if(items_, [a_form_id](const ShadowItem& a_item) { return a_item.id == a_form_id; });
-		++revision_;
+		bool changed{};
+		{
+			std::unique_lock lock(mutex_);
+			changed = ignored_forms_.insert(a_form_id).second;
+			const auto removed = std::erase_if(
+				items_, [a_form_id](const ShadowItem& a_item) { return a_item.id == a_form_id; });
+			changed = changed || removed > 0;
+			if (!changed) { return; }
+			++revision_;
+		}
+		NotifyInventoryChanged();
 	}
 
 	void InventoryManager::UnignoreForm(RE::FormID a_form_id)
 	{
-		std::unique_lock lock(mutex_);
-		ignored_forms_.erase(a_form_id);
-		++revision_;
+		{
+			std::unique_lock lock(mutex_);
+			if (ignored_forms_.erase(a_form_id) == 0) { return; }
+			++revision_;
+		}
+		NotifyInventoryChanged();
 	}
 
 	bool InventoryManager::IsIgnored(RE::FormID a_form_id) const

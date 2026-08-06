@@ -7,9 +7,6 @@
 
 namespace vr_gui
 {
-	static const char* kHelperModelPath = "3DIRP/vr_gui/HelperSphere.nif";
-	static const char* kDebugModelPath = "3DIRP/vr_gui/DebugSphere.nif";
-	static const char* kDebugBoxModelPath = "3DIRP/vr_gui/DrawExtents.nif";
 
 	void Controller::Cleanup()
 	{
@@ -658,8 +655,7 @@ namespace vr_gui
 					{
 						// The addon's root transform is overwritten whenever the widget moves.
 						// Scale the model's internal sphere node so the radius persists.
-						if (auto* geometry =
-								sphere->Get3D()->GetObjectByName("Z4K_OVERLAPSPHERE"))
+						if (auto* geometry = sphere->Get3D()->GetObjectByName("Z4K_OVERLAPSPHERE"))
 						{
 							geometry->local.scale *= radius;
 						}

@@ -261,7 +261,7 @@ namespace settings
 		SKSE::log::trace("Settings profile: {}", active_profile);
 		for (const auto& [key, value] : profile->second)
 		{
-			SKSE::log::trace("{} : {}", key, value);
+			//SKSE::log::trace("{} : {}", key, value);
 		}
 	}
 

@@ -1,8 +1,10 @@
 #pragma once
 
 #include <deque>
+#include <functional>
 #include <optional>
 #include <shared_mutex>
+#include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
@@ -29,9 +31,24 @@ namespace vr3dirp
 		InventoryActionSource          source{ InventoryActionSource::kUnknown };
 	};
 
+	enum class InventoryChangeType : std::uint8_t
+	{
+		kAdded,
+		kUpdated,
+		kRemoved
+	};
+
+	struct InventoryChange
+	{
+		InventoryChangeType type{ InventoryChangeType::kUpdated };
+		ShadowItem          item;
+	};
+
 	class InventoryManager
 	{
 	public:
+		using InventoryChangedCallback = std::function<void(const std::vector<InventoryChange>&)>;
+
 		static InventoryManager* GetSingleton();
 
 		void OnContainerChanged(const RE::TESContainerChangedEvent* a_event);
@@ -56,6 +73,8 @@ namespace vr3dirp
 		[[nodiscard]] std::vector<ShadowItem>        GetItems() const;
 		[[nodiscard]] std::unordered_set<RE::FormID> GetIgnoredForms() const;
 		[[nodiscard]] std::uint64_t                  GetRevision() const;
+		std::uint64_t AddInventoryChangedListener(InventoryChangedCallback a_callback);
+		void RemoveInventoryChangedListener(std::uint64_t a_listener_id);
 
 		bool SetPlacement(RE::FormID a_form_id, std::optional<RE::NiTransform> a_placement);
 		void IgnoreForm(RE::FormID a_form_id);
@@ -112,6 +131,7 @@ namespace vr3dirp
 		void QueueExpectedAction(RE::FormID a_form_id, std::int32_t a_count,
 			InventoryActionSource a_source, bool a_addition,
 			std::optional<RE::NiTransform> a_placement, RE::ObjectRefHandle a_reference);
+		void NotifyInventoryChanged();
 
 		mutable std::shared_mutex          mutex_;
 		std::vector<ShadowItem>            items_;
@@ -122,5 +142,8 @@ namespace vr3dirp
 		std::uint64_t                      frame_{};
 		std::uint64_t                      next_sequence_{};
 		std::uint64_t                      revision_{};
+		std::uint64_t                      next_listener_id_{ 1 };
+		std::unordered_map<std::uint64_t, InventoryChangedCallback> inventory_listeners_;
+		std::vector<ShadowItem>            last_notified_items_;
 	};
 }

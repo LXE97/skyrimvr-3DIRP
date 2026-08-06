@@ -15,6 +15,10 @@ namespace vr_gui
 	const RE::FormID  kActivatorID = 0xD98;
 	const RE::FormID  kMarkerModspaceID = 0xD99;
 
+	static const char* kHelperModelPath = "3DIRP/vr_gui/HelperSphere.nif";
+	static const char* kDebugModelPath = "3DIRP/vr_gui/DebugSphere.nif";
+	static const char* kDebugBoxModelPath = "3DIRP/vr_gui/DrawExtents.nif";
+
 	using namespace RE;
 	class Widget;
 	class Hand;

@@ -26,6 +26,24 @@ namespace vr3dirp
 			return { { x_axis.x, y_axis.x, z_axis.x }, { x_axis.y, y_axis.y, z_axis.y },
 				{ x_axis.z, y_axis.z, z_axis.z } };
 		}
+
+		inline void AddObjectRefToInventory(
+			RE::TESObjectREFR* a_held_object, RE::TESObjectREFR* a_new_owner)
+		{
+			if (a_held_object && a_new_owner && a_new_owner->As<RE::Actor>())
+			{
+				if (a_held_object->IsBook())
+				{  // TODO: make this work :(
+					a_new_owner->As<RE::Actor>()->PickUpObject(
+						a_held_object, a_held_object->extraList.GetCount());
+				}
+				else
+				{
+					a_held_object->ActivateRef(
+						a_new_owner, 0, 0, a_held_object->extraList.GetCount(), false);
+				}
+			}
+		}
 	}
 
 	Backpack::Backpack(std::string_view a_model_path, bool a_isLeft,
@@ -44,6 +62,11 @@ namespace vr3dirp
 			local.scale /= attachment_node->world.scale;
 		}
 
+		inventory_listener_id = InventoryManager::GetSingleton()->AddInventoryChangedListener(
+			[this](const std::vector<InventoryChange>& a_changes) {
+				ApplyInventoryChanges(a_changes);
+			});
+
 		AddModel(settings.model_path, false, [this](ArtAddon* a) {
 			// parse nif for widget attachment nodes
 			auto grab_node = a->Get3D()->GetObjectByName("GrabNode");
@@ -60,8 +83,8 @@ namespace vr3dirp
 			// widget layout construction
 			auto interaction_volume =
 				AddChild<Widget>(NiTransform{}, NiPoint3(10, 24, 33), a->Get3D());
-			interaction_volume->AddBehavior<BlockInputOnHover>(InputBlock::kPrimary |
-					InputBlock::kSecondary | InputBlock::kActivatePickLength,
+			interaction_volume->AddBehavior<BlockInputOnHover>(
+				InputBlock::kPrimary | InputBlock::kSecondary | InputBlock::kActivatePickLength,
 				false);
 			interaction_volume->SetPriority(90);
 
@@ -72,27 +95,29 @@ namespace vr3dirp
 
 			item_container =
 				AddChild<BackpackContainer>(NiTransform{}, NiPoint3(9, 19, 25), container_node);
-			item_container->SetPriority(50);
+			item_container->SetPriority(80);
 			//item_grid = AddChild<BackpackGrid>(NiTransform{}, NiPoint3(4, 4, 10), grid_node);
+			RefreshInventory(InventoryManager::GetSingleton()->GetItems());
 
-			auto holster = AddChild<Widget>(NiTransform{}, NiPoint3(4, 4, 10), holster1_node);
+			//auto holster = AddChild<Widget>(NiTransform{}, NiPoint3(4, 4, 10), holster1_node);
 
 			SKSE::log::trace("backpack created with radius {} and scale {}", radius, local.scale);
 		});
 	}
 
-	Backpack::~Backpack() {}
+	Backpack::~Backpack()
+	{ InventoryManager::GetSingleton()->RemoveInventoryChangedListener(inventory_listener_id); }
 
-	void Backpack::Update(float)
+	void Backpack::RefreshInventory(const std::vector<ShadowItem>& a_items)
 	{
-		auto*      manager = InventoryManager::GetSingleton();
-		const auto revision = manager->GetRevision();
-		if (revision == inventory_revision || !item_container || !item_grid) { return; }
+		if (item_container) { item_container->Refresh(a_items); }
+		if (item_grid) { item_grid->Refresh(a_items); }
+	}
 
-		const auto items = manager->GetItems();
-		item_container->Refresh(items);
-		item_grid->Refresh(items);
-		inventory_revision = revision;
+	void Backpack::ApplyInventoryChanges(const std::vector<InventoryChange>& a_changes)
+	{
+		if (item_container) { item_container->ApplyChanges(a_changes); }
+		if (item_grid) { item_grid->ApplyChanges(a_changes); }
 	}
 
 	bool Backpack::OnHiggsDropped(bool a_is_left, TESObjectREFR* a_dropped_reference)
@@ -102,7 +127,47 @@ namespace vr3dirp
 		Widget* a_parent, NiTransform a_local, NiPoint3 a_halfextents, ShadowItem a_item) :
 		Widget(a_parent, std::move(a_local), a_halfextents),
 		item(std::move(a_item))
-	{}
+	{
+		if (a_item.id)
+		{
+			if (auto* object = TESForm::LookupByID<TESBoundObject>(item.id))
+			{
+				if (auto path = helper::GetObjectModelPath(object))
+				{
+					AddModel(path, false, [this](ArtAddon* a) {
+						float        newradius{};
+						RE::NiPoint3 newcenter{};
+						RE::NiPoint3 newextents{};
+						helper::CalculateBoundsDirect(a->Get3D(), newradius, newcenter, newextents);
+						if (newradius > 0.f)
+						{
+							radius = newradius;
+							//local.translate = std::move(newcenter);
+							extents = std::move(newextents);
+						}
+						else
+						{
+							SKSE::log::warn(
+								"InventoryItemWidget: bounds calculation failed on {:x}", item.id);
+						}
+					});
+				}
+			}
+		}
+	}
+
+	bool InventoryItemWidget::Matches(const ShadowItem& a_item) const
+	{
+		if (item.id != a_item.id) { return false; }
+		if (item.unique_id || a_item.unique_id)
+		{
+			return item.unique_id && item.unique_id == a_item.unique_id;
+		}
+		if (item.extradata && a_item.extradata) { return item.extradata == a_item.extradata; }
+		return true;
+	}
+
+	void InventoryItemWidget::UpdateItem(ShadowItem a_item) { item = std::move(a_item); }
 
 	void InventoryItemWidget::OnClick(bool a_activate, Hand& a_hand, MenuAction a_action)
 	{
@@ -123,6 +188,30 @@ namespace vr3dirp
 			std::move(dropped_handle), a_hand.IsLeft());
 	}
 
+	void InventoryItemWidget::DrawExtents(bool show)
+	{
+		using namespace art_addon;
+		if (show)
+		{
+			AddModel(kDebugModelPath, true, [radius = this->radius](ArtAddon* sphere) {
+				if (sphere && sphere->Get3D())
+				{
+					if (auto* geometry = sphere->Get3D()->GetObjectByName("Z4K_OVERLAPSPHERE"))
+					{
+						geometry->local.scale *= radius;
+					}
+				}
+			});
+
+			AddModel(kDebugBoxModelPath, true,
+				[extents = this->extents](ArtAddon* box) { helper::DrawBox(box, extents); });
+		}
+		else
+		{
+			visual_effects.clear();
+		}
+	}
+
 	bool BackpackContainer::ContainsWorldPoint(const NiPoint3& a_point) const
 	{
 		const auto local_point = GetWorld().Invert() * a_point;
@@ -130,23 +219,27 @@ namespace vr3dirp
 			std::abs(local_point.z) <= extents.z;
 	}
 
-	bool BackpackContainer::StoreDroppedObject(bool, TESObjectREFR* a_reference)
+	/* add the grabbed object to the inventory - it will be added to the backpack View on the inventory event*/
+	bool BackpackContainer::StoreDroppedObject(bool a_is_left, TESObjectREFR* a_reference)
 	{
-		auto* player = PlayerCharacter::GetSingleton();
-		auto* object = a_reference ? a_reference->GetBaseObject() : nullptr;
-		auto* object_3d = a_reference ? a_reference->Get3D(false) : nullptr;
-		if (!player || !object || !object_3d || !ContainsWorldPoint(object_3d->world.translate))
+		SKSE::log::trace("backpackdropped");
+		if (IsHovered(a_is_left))
 		{
-			return false;
-		}
+			SKSE::log::trace("hovered true");
+			auto* player = PlayerCharacter::GetSingleton();
+			auto* object = a_reference ? a_reference->GetBaseObject() : nullptr;
+			auto* object_3d = a_reference ? a_reference->Get3D(false) : nullptr;
+			if (!player || !object || !object_3d) { return false; }
 
-		const auto placement = GetWorld().Invert() * object_3d->world;
-		const auto count = std::max(1, a_reference->extraList.GetCount());
-		InventoryManager::GetSingleton()->ExpectAddition(object->GetFormID(), count,
-			InventoryActionSource::kBackpackDrop, placement, RE::ObjectRefHandle(a_reference));
-		player->AddObjectToContainer(
-			object, std::addressof(a_reference->extraList), count, a_reference);
-		return true;
+			const auto placement = GetWorld().Invert() * object_3d->world;
+			const auto count = std::max(1, a_reference->extraList.GetCount());
+			InventoryManager::GetSingleton()->ExpectAddition(object->GetFormID(), count,
+				InventoryActionSource::kBackpackDrop, placement, RE::ObjectRefHandle(a_reference));
+
+			AddObjectRefToInventory(a_reference, player);
+			return true;
+		}
+		return false;
 	}
 
 	void BackpackContainer::Refresh(const std::vector<ShadowItem>& a_items)
@@ -158,6 +251,27 @@ namespace vr3dirp
 			AddChild<InventoryItemWidget>(*item.placement3d, NiPoint3{ 1.5f, 1.5f, 1.5f }, item);
 		}
 	}
+
+	const std::vector<std::unique_ptr<Widget>>& BackpackContainer::GetItemChildren() const
+	{ return Widget::GetChildren(); }
+
+	bool BackpackContainer::ShouldDisplay(const ShadowItem& a_item) const
+	{ return a_item.placement3d.has_value(); }
+
+	InventoryItemWidget* BackpackContainer::CreateWidget(const ShadowItem& a_item)
+	{
+		return AddChild<InventoryItemWidget>(
+			*a_item.placement3d, NiPoint3{ 1.5f, 1.5f, 1.5f }, a_item);
+	}
+
+	void BackpackContainer::UpdateWidget(InventoryItemWidget& a_widget, const ShadowItem& a_item)
+	{
+		a_widget.UpdateItem(a_item);
+		a_widget.SetTransform(*a_item.placement3d);
+	}
+
+	void BackpackContainer::DeleteWidget(InventoryItemWidget& a_widget)
+	{ RemoveChild(std::addressof(a_widget)); }
 
 	void BackpackGrid::Refresh(const std::vector<ShadowItem>& a_items)
 	{
@@ -181,6 +295,22 @@ namespace vr3dirp
 			AddItem<InventoryItemWidget>(NiTransform{}, NiPoint3{ 1.0f, 1.0f, 1.0f }, item);
 		}
 	}
+
+	const std::vector<std::unique_ptr<Widget>>& BackpackGrid::GetItemChildren() const
+	{ return Widget::GetChildren(); }
+
+	bool BackpackGrid::ShouldDisplay(const ShadowItem&) const { return true; }
+
+	InventoryItemWidget* BackpackGrid::CreateWidget(const ShadowItem& a_item)
+	{ return AddItem<InventoryItemWidget>(NiTransform{}, NiPoint3{ 1.0f, 1.0f, 1.0f }, a_item); }
+
+	void BackpackGrid::UpdateWidget(InventoryItemWidget& a_widget, const ShadowItem& a_item)
+	{ a_widget.UpdateItem(a_item); }
+
+	void BackpackGrid::DeleteWidget(InventoryItemWidget& a_widget)
+	{ RemoveGridChild(std::addressof(a_widget)); }
+
+	void BackpackGrid::OnChangesApplied() { Redraw(); }
 
 	BackpackSettingsOwner::BackpackSettingsOwner(
 		BackpackSettings a_settings, BackpackCallbacks a_callbacks) :
@@ -275,7 +405,6 @@ namespace vr3dirp
 
 	void BackpackGrabNode::OnHover(bool a_activate, Hand& a_hand)
 	{
-		SKSE::log::trace("grabnode hoevered");
 		if (a_activate && !isGrabbed)
 		{
 			hand_mode = a_hand.RequestMode(Hand::Mode::kOpen, Hand::ModePriority::kGrab);
