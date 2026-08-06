@@ -95,7 +95,9 @@ namespace vr3dirp
 
 			item_container =
 				AddChild<BackpackContainer>(NiTransform{}, NiPoint3(9, 19, 25), container_node);
-			item_container->SetPriority(80);
+			item_container->SetPriority(40);
+			item_container->AddBehavior<ExclusiveHoverGroup>();
+
 			//item_grid = AddChild<BackpackGrid>(NiTransform{}, NiPoint3(4, 4, 10), grid_node);
 			RefreshInventory(InventoryManager::GetSingleton()->GetItems());
 
@@ -128,25 +130,45 @@ namespace vr3dirp
 		Widget(a_parent, std::move(a_local), a_halfextents),
 		item(std::move(a_item))
 	{
+		// This widget remains the direct hover/click target. Its overlap test delegates
+		// to the centered child hitbox created once the model bounds are available.
+		SetHitTestEnabled(false);
+		SetPriority(50);
+		bool loading_model = false;
+
 		if (a_item.id)
 		{
 			if (auto* object = TESForm::LookupByID<TESBoundObject>(item.id))
 			{
 				if (auto path = helper::GetObjectModelPath(object))
 				{
+					loading_model = true;
 					AddModel(path, false, [this](ArtAddon* a) {
+						if (!a || !a->Get3D())
+						{
+							SetHitTestEnabled(true);
+							SKSE::log::warn(
+								"InventoryItemWidget: model unavailable for {:x}", item.id);
+							return;
+						}
 						float        newradius{};
 						RE::NiPoint3 newcenter{};
 						RE::NiPoint3 newextents{};
 						helper::CalculateBoundsDirect(a->Get3D(), newradius, newcenter, newextents);
 						if (newradius > 0.f)
 						{
-							radius = newradius;
-							//local.translate = std::move(newcenter);
-							extents = std::move(newextents);
+							NiTransform hitbox_transform{};
+							hitbox_transform.translate = newcenter;
+							hitbox = AddChild<InventoryItemHitbox>(
+								std::move(hitbox_transform), newextents);
+							// Collision traversal should report InventoryItemWidget as the target,
+							// not the implementation-only child that supplies its geometry.
+							hitbox->SetHitTestEnabled(false);
+							SetHitTestEnabled(true);
 						}
 						else
 						{
+							SetHitTestEnabled(true);
 							SKSE::log::warn(
 								"InventoryItemWidget: bounds calculation failed on {:x}", item.id);
 						}
@@ -154,6 +176,7 @@ namespace vr3dirp
 				}
 			}
 		}
+		if (!loading_model) { SetHitTestEnabled(true); }
 	}
 
 	bool InventoryItemWidget::Matches(const ShadowItem& a_item) const
@@ -171,46 +194,66 @@ namespace vr3dirp
 
 	void InventoryItemWidget::OnClick(bool a_activate, Hand& a_hand, MenuAction a_action)
 	{
-		if (!a_activate || a_action != MenuAction::kSecondary || !g_higgsInterface) { return; }
+		if (a_action != MenuAction::kSecondary) { return; }
 
+		// 3d container
+		if (auto grabber = GetBehavior<GrabAndDrag>())
+		{
+			Widget::OnClick(a_activate, a_hand, a_action);
+			if (!a_activate)
+			{
+				if (!parent->IsHovered(a_hand.IsLeft())) { DropItem(a_hand.IsLeft(), false); }
+				else
+				{
+					InventoryManager::GetSingleton()->SetPlacement(
+						item.id, GetTransform(), item.unique_id, item.extradata);
+				}
+			}
+		}
+		// grid
+		else if (!a_activate) { DropItem(a_hand.IsLeft(), true); }
+	}
+
+	void InventoryItemWidget::DropItem(bool a_isLeft, bool grab)
+	{
 		auto* player = PlayerCharacter::GetSingleton();
 		auto* object = TESForm::LookupByID<TESBoundObject>(item.id);
-		if (!player || !object || item.count <= 0 ||
-			!g_higgsInterface->CanGrabObject(a_hand.IsLeft()))
+		if (!model || !player || !object || item.count <= 0 ||
+			(grab && (!g_higgsInterface || !g_higgsInterface->CanGrabObject(a_isLeft))))
 		{
 			return;
 		}
 
 		InventoryManager::GetSingleton()->ExpectRemoval(
-			item.id, 1, InventoryActionSource::kUnknown);
-		auto dropped_handle = player->DropObject(object, item.extradata, 1);
-		InventoryManager::GetSingleton()->QueueHiggsGrab(
-			std::move(dropped_handle), a_hand.IsLeft());
-	}
+			item.id, item.count, InventoryActionSource::kUnknown);
 
-	void InventoryItemWidget::DrawExtents(bool show)
-	{
-		using namespace art_addon;
-		if (show)
-		{
-			AddModel(kDebugModelPath, true, [radius = this->radius](ArtAddon* sphere) {
-				if (sphere && sphere->Get3D())
-				{
-					if (auto* geometry = sphere->Get3D()->GetObjectByName("Z4K_OVERLAPSPHERE"))
-					{
-						geometry->local.scale *= radius;
-					}
-				}
-			});
+		RE::NiPoint3 droploc = model->Get3D()->world.translate;
+		RE::NiPoint3 droprot;
+		model->Get3D()->world.rotate.ToEulerAnglesXYZ(droprot);
 
-			AddModel(kDebugBoxModelPath, true,
-				[extents = this->extents](ArtAddon* box) { helper::DrawBox(box, extents); });
-		}
-		else
+		if (auto dropped_handle =
+				player->DropObject(object, item.extradata, item.count, &droploc, &droprot);
+			grab && dropped_handle)
 		{
-			visual_effects.clear();
+			auto reference = dropped_handle.get();
+			if (g_higgsInterface && reference && reference->Get3D() &&
+				g_higgsInterface->CanGrabObject(a_isLeft))
+			{
+				g_higgsInterface->GrabObject(reference.get(), a_isLeft);
+			}
+			else
+			{
+				InventoryManager::GetSingleton()->QueueHiggsGrab(
+					std::move(dropped_handle), a_isLeft);
+			}
 		}
 	}
+
+	bool InventoryItemWidget::TestOverlap(Hand& a_hand) const
+	{ return hitbox ? hitbox->TestOverlap(a_hand) : Widget::TestOverlap(a_hand); }
+
+	// The child hitbox draws the centered debug bounds during recursive ShowHitboxes().
+	void InventoryItemWidget::DrawExtents(bool) {}
 
 	bool BackpackContainer::ContainsWorldPoint(const NiPoint3& a_point) const
 	{
@@ -248,7 +291,9 @@ namespace vr3dirp
 		for (const auto& item : a_items)
 		{
 			if (!item.placement3d) { continue; }
-			AddChild<InventoryItemWidget>(*item.placement3d, NiPoint3{ 1.5f, 1.5f, 1.5f }, item);
+			auto* widget = AddChild<InventoryItemWidget>(
+				*item.placement3d, NiPoint3{ 1.5f, 1.5f, 1.5f }, item);
+			widget->AddBehavior<GrabAndDrag>();
 		}
 	}
 
@@ -260,8 +305,10 @@ namespace vr3dirp
 
 	InventoryItemWidget* BackpackContainer::CreateWidget(const ShadowItem& a_item)
 	{
-		return AddChild<InventoryItemWidget>(
+		auto* widget = AddChild<InventoryItemWidget>(
 			*a_item.placement3d, NiPoint3{ 1.5f, 1.5f, 1.5f }, a_item);
+		widget->AddBehavior<GrabAndDrag>();
+		return widget;
 	}
 
 	void BackpackContainer::UpdateWidget(InventoryItemWidget& a_widget, const ShadowItem& a_item)
@@ -416,6 +463,83 @@ namespace vr3dirp
 			grabHand = nullptr;
 			isGrabbed = false;
 			hand_mode.Release();
+		}
+	}
+
+	void GrabAndDrag::StartGrab(bool a_is_left)
+	{
+		if (!parent || is_grabbed) { return; }
+
+		grab_hand = Controller::GetSingleton()->GetHand(a_is_left);
+		if (!grab_hand) { return; }
+
+		hand_to_widget = grab_hand->GetTransform().Invert() * parent->GetWorld();
+		is_grabbed = true;
+		hand_mode.Release();
+		hand_mode = grab_hand->RequestMode(Hand::Mode::kFist, Hand::ModePriority::kGrab);
+		UpdateGrabTransform();
+	}
+
+	void GrabAndDrag::StopGrab()
+	{
+		is_grabbed = false;
+		grab_hand = nullptr;
+		hand_mode.Release();
+	}
+
+	void GrabAndDrag::OnClick(bool a_activate, Hand& a_hand, MenuAction a_action)
+	{
+		if (a_action != MenuAction::kSecondary) { return; }
+		if (a_activate) { StartGrab(a_hand.IsLeft()); }
+		else { StopGrab(); }
+	}
+
+	void GrabAndDrag::OnHover(bool a_activate, Hand& a_hand)
+	{
+		if (is_grabbed) { return; }
+		if (a_activate)
+		{
+			hand_mode = a_hand.RequestMode(Hand::Mode::kOpen, Hand::ModePriority::kGrab);
+		}
+		else
+		{
+			hand_mode.Release();
+		}
+	}
+
+	void GrabAndDrag::Update(float)
+	{
+		if (!is_grabbed || !grab_hand) { return; }
+
+		if (vrinput::GetButtonState(Controller::GetSingleton()->GetSettings().secondary,
+				vrinput::Hand(grab_hand->IsLeft()),
+				vrinput::ActionType::kPress) == vrinput::ButtonState::kButtonUp)
+		{
+			auto* released_hand = grab_hand;
+			if (parent) { parent->OnClick(false, *released_hand, MenuAction::kSecondary); }
+			if (is_grabbed) { StopGrab(); }
+			return;
+		}
+
+		UpdateGrabTransform();
+	}
+
+	void GrabAndDrag::UpdateGrabTransform()
+	{
+		if (!parent || !grab_hand) { return; }
+
+		const auto desired_world = grab_hand->GetTransform() * hand_to_widget;
+		if (auto* widget_parent = parent->GetParent())
+		{
+			parent->SetTransform(widget_parent->GetWorld().Invert() * desired_world);
+		}
+		else if (auto* transform_parent = parent->GetTransformParentNode())
+		{
+			parent->SetTransform(transform_parent->world.Invert() * desired_world);
+		}
+		else
+		{
+			parent->SetTransform(desired_world);
 		}
 	}
 

@@ -70,14 +70,29 @@ namespace vr3dirp
 		InventoryItemWidget(
 			Widget* a_parent, NiTransform a_local, NiPoint3 a_halfextents, ShadowItem a_item);
 
+		class InventoryItemHitbox : public Widget
+		{
+		public:
+			InventoryItemHitbox(Widget* a_parent, NiTransform a_local, NiPoint3 a_extents) :
+				Widget(a_parent, std::move(a_local), a_extents)
+			{}
+		};
+
+		void DropItem(bool a_isLeft, bool grab);
+
 		void OnClick(bool a_activate, Hand& a_hand, MenuAction a_action) override;
+		bool TestOverlap(Hand& a_hand) const override;
 		[[nodiscard]] const ShadowItem& GetItem() const { return item; }
 		[[nodiscard]] bool              Matches(const ShadowItem& a_item) const;
 		void                            UpdateItem(ShadowItem a_item);
 		void                            DrawExtents(bool show) override;
 
+		NiPoint3 GetHoverPosition() const override
+		{ return hitbox ? hitbox->GetWorld().translate : GetWorld().translate; }
+
 	private:
-		ShadowItem item;
+		ShadowItem           item;
+		InventoryItemHitbox* hitbox{};
 	};
 
 	class BackpackContainer : public Container, private InventoryViewBase
@@ -144,5 +159,28 @@ namespace vr3dirp
 		Hand* grabHand{};
 
 		ModeHandle hand_mode;
+	};
+
+	class GrabAndDrag : public Behavior
+	{
+	public:
+		using Behavior::Behavior;
+
+		void StartGrab(bool a_is_left);
+		void StopGrab();
+
+		void OnClick(bool a_activate, Hand& a_hand, MenuAction a_action) override;
+		void OnHover(bool a_activate, Hand& a_hand) override;
+		void Update(float a_delta) override;
+
+		[[nodiscard]] bool IsGrabbed() const { return is_grabbed; }
+
+	private:
+		void UpdateGrabTransform();
+
+		bool        is_grabbed{};
+		Hand*       grab_hand{};
+		NiTransform hand_to_widget{};
+		ModeHandle  hand_mode;
 	};
 }

@@ -191,6 +191,7 @@ namespace vr_gui
 
 		NiTransform&       GetTransform() { return local; }
 		const NiTransform& GetTransform() const { return local; }
+		virtual NiPoint3   GetHoverPosition() const { return GetWorld().translate; }
 		NiTransform        GetWorld(int a_depth = 0) const;
 
 		NiAVObject* Get3D() { return model ? model->Get3D() : nullptr; }

@@ -76,7 +76,8 @@ namespace vr3dirp
 		std::uint64_t AddInventoryChangedListener(InventoryChangedCallback a_callback);
 		void RemoveInventoryChangedListener(std::uint64_t a_listener_id);
 
-		bool SetPlacement(RE::FormID a_form_id, std::optional<RE::NiTransform> a_placement);
+		bool SetPlacement(RE::FormID a_form_id, std::optional<RE::NiTransform> a_placement,
+			std::uint16_t a_unique_id = 0, RE::ExtraDataList* a_extradata = nullptr);
 		void IgnoreForm(RE::FormID a_form_id);
 		void UnignoreForm(RE::FormID a_form_id);
 		[[nodiscard]] bool IsIgnored(RE::FormID a_form_id) const;

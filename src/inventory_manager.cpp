@@ -652,11 +652,17 @@ namespace vr3dirp
 	}
 
 	bool InventoryManager::SetPlacement(
-		RE::FormID a_form_id, std::optional<RE::NiTransform> a_placement)
+		RE::FormID a_form_id, std::optional<RE::NiTransform> a_placement,
+		std::uint16_t a_unique_id, RE::ExtraDataList* a_extradata)
 	{
 		{
 			std::unique_lock lock(mutex_);
-			auto item = std::ranges::find(items_, a_form_id, &ShadowItem::id);
+			auto item = std::ranges::find_if(items_, [=](const ShadowItem& a_item) {
+				if (a_item.id != a_form_id) { return false; }
+				if (a_unique_id) { return a_item.unique_id == a_unique_id; }
+				if (a_extradata) { return a_item.extradata == a_extradata; }
+				return true;
+			});
 			if (item == items_.end()) { return false; }
 			if (item->placement3d == a_placement) { return true; }
 			item->placement3d = std::move(a_placement);
