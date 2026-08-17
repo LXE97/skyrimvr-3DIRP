@@ -71,7 +71,7 @@ Event OnConfigOpen()
 	If SettingsLoaded
 		If !_3DIRP_Settings.LoadProfile(SelectedProfile)
 			SelectedProfile = "Default"
-			SettingsLoaded = _3DIRP_Settings.LoadProfile(SelectedProfile)
+			_3DIRP_Settings.LoadProfile(SelectedProfile)
 		EndIf
 	EndIf
 	RefreshProfiles()
